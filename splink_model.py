@@ -163,6 +163,23 @@ token_relative_frequency_arr = {
     "comparison_description": "Exact match vs. Col within levenshtein thresholds 1, 2 vs. anything else",
 }
 
+other_tokens_comparison = {
+    "output_column_name": "common_tokens",
+    "comparison_levels": [
+        {
+            "sql_condition": '"common_tokens_l" IS NULL OR "common_tokens_r" IS NULL or length("common_tokens_l") = 0 or length("common_tokens_r") = 0',
+            "label_for_charts": "Null",
+            "is_null_level": True,
+        },
+        {
+            "sql_condition": '2*len(list_intersect("common_tokens_l", "common_tokens_r")) - len(list_distinct(list_concat("common_tokens_l", "common_tokens_r"))) > 0',
+            "label_for_charts": "More matching tokens than non matching",
+        },
+        {"sql_condition": "ELSE", "label_for_charts": "All other comparisons"},
+    ],
+    "comparison_description": "Array intersection at minimum sizes 3, 1 vs. anything else",
+}
+
 settings = {
     "probability_two_random_records_match": 0.01,
     "link_type": "link_only",
@@ -174,7 +191,7 @@ settings = {
         num_2_comparison,
         num_3_comparison,
         token_relative_frequency_arr,
-        cl.array_intersect_at_sizes("address_end_without_numbers_tokenised", [3, 1]),
+        other_tokens_comparison,
     ],
     "retain_intermediate_calculation_columns": True,
     "source_dataset_column_name": "source_dataset",
@@ -185,10 +202,14 @@ linker = DuckDBLinker([df_pp, df_epc], settings)
 
 
 linker.estimate_u_using_random_sampling(max_pairs=1e6)
-linker.estimate_parameters_using_expectation_maximisation(block_on("postcode"))
-
-
+# linker.estimate_parameters_using_expectation_maximisation(block_on("postcode"))
 display(linker.match_weights_chart())
+
+comparisons = linker._settings_obj.comparisons
+
+
+cl.array_intersect_at_sizes("common_tokens", [3, 1]).as_dict()
+
 
 df_predict = linker.predict()
 

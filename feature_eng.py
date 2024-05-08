@@ -23,9 +23,9 @@ pd.options.display.max_colwidth = None
 
 
 df_pp = pd.read_parquet("./raw_address_data/price_paid_addresses.parquet")
-df_pp
+print(f"Number of records in price paid data: {len(df_pp):,.0f}")
 df_epc = pd.read_parquet("./raw_address_data/adur_epc.parquet")
-df_epc
+print(f"Number of records in epc data: {len(df_epc):,.0f}")
 
 where_statement = """
 where postcode = 'BN15 8HQ'
@@ -119,10 +119,12 @@ SELECT
     trim(regexp_replace(
 
             regexp_replace(
-                address_concat,
-                 '[,-]', ' ', 'g'
-            ),
-            '[^a-zA-Z0-9 ]', '', 'g'  -- Remove anything that isn't a-zA-Z0-9 or space
+                regexp_replace(
+                    address_concat,
+                    ',', ' ', 'g'
+                ),
+                '\\s*\\-\\s*', '-', 'g'),
+            '[^a-zA-Z0-9 -]', '', 'g'  -- Remove anything that isn't a-zA-Z0-9 or space
         )
 
     ) AS address_concat_cleaned,
@@ -136,7 +138,7 @@ df_all_concat_punc = duckdb.query(sql)
 
 # Simmple pattern to detect tokens with numbers in them
 
-regex_pattern = r"\b\w*\d+\w*\b"
+regex_pattern = r"\b\d*[\w\-]*\d+[\w\-]*\d*\b"
 
 
 sql = f"""
@@ -159,11 +161,11 @@ select
     unique_id,
     source_dataset,
     address_concat,
-numeric_tokens[1] as numeric_token_1,
-numeric_tokens[2] as numeric_token_2,
-numeric_tokens[3] as numeric_token_3,
-trim(regexp_replace(address_without_numbers, '\\s+', ' ', 'g'))
-    as address_without_numbers,
+    numeric_tokens[1] as numeric_token_1,
+    numeric_tokens[2] as numeric_token_2,
+    numeric_tokens[3] as numeric_token_3,
+    trim(regexp_replace(address_without_numbers, '\\s+', ' ', 'g'))
+        as address_without_numbers,
 postcode
 from df_all_numbers_in_array
 """
@@ -217,14 +219,7 @@ select
 numeric_token_1,
 numeric_token_2,
 numeric_token_3,
-list_distinct(address_without_numbers_tokenised[:5]) as address_start_without_numbers_tokenised,
-
-list_filter(
-    list_distinct(address_without_numbers_tokenised[5:]),
-    x -> not array_contains(address_without_numbers_tokenised[:5], x)
-    )
-
-      as address_end_without_numbers_tokenised,
+list_distinct(address_without_numbers_tokenised) as address_without_numbers_tokenised,
 postcode
 from df_all_numbers_as_cols_others_tokenised_2
 """
@@ -236,7 +231,7 @@ select
     count(*)  / sum(count(*)) over() as relative_frequency
 from (
     select
-        unnest(address_start_without_numbers_tokenised) as token
+        unnest(address_without_numbers_tokenised) as token
     from df_all_numbers_as_cols_others_tokenised_distinct
 )
 group by token
@@ -249,7 +244,7 @@ sql = """
 with
 addresses_exploded as (
 select
-    unique_id, unnest(address_start_without_numbers_tokenised) as token
+    unique_id, unnest(address_without_numbers_tokenised) as token
 from df_all_numbers_as_cols_others_tokenised_distinct),
 address_groups as (
 select addresses_exploded.*, token_counts.relative_frequency
@@ -269,15 +264,14 @@ adresses_with_token_relative_frequency = duckdb.sql(sql)
 
 sql = """
 select
-d.unique_id,
-d.source_dataset,
-d.address_concat,
-d.numeric_token_1,
-d.numeric_token_2,
-d.numeric_token_3,
-r.token_relative_frequency_arr,
-d.address_end_without_numbers_tokenised,
-d.postcode
+    d.unique_id,
+    d.source_dataset,
+    d.address_concat,
+    d.numeric_token_1,
+    d.numeric_token_2,
+    d.numeric_token_3,
+    r.token_relative_frequency_arr,
+    d.postcode
 from
 df_all_numbers_as_cols_others_tokenised_distinct as d
 inner join adresses_with_token_relative_frequency as r
@@ -285,9 +279,27 @@ on d.unique_id = r.unique_id
 
 """
 
+address_with_token_relative_frequency_arr = duckdb.sql(sql)
+
+sql = """
+select
+    unique_id,
+    source_dataset,
+    address_concat,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    array_filter(token_relative_frequency_arr, x -> x.relative_frequency < 0.01) as token_relative_frequency_arr,
+    array_transform(
+        array_filter(token_relative_frequency_arr, x -> x.relative_frequency >= 0.01),
+        x -> x.token
+        ) as common_tokens,
+    postcode
+from address_with_token_relative_frequency_arr
+"""
+
 final = duckdb.sql(sql)
-
-
+final.df()
 # create splink_in/ folder if not exists
 
 if not os.path.exists("splink_in"):
@@ -315,7 +327,11 @@ sql = """
 select * from
 read_parquet('splink_in/price_paid.parquet')
 where
-not regexp_matches(numeric_token_1, '[0-9]')
+(not regexp_matches(numeric_token_1, '[0-9]') or true)
+and
+(numeric_token_2 is not null)
+
+order by random()
 limit 10
 """
 duckdb.sql(sql).df()
