@@ -231,16 +231,14 @@ display(linker.match_weights_chart())
 
 df_predict = linker.predict()
 
+
+# The remainder of this script is just for inspecting the results
+
 sql = """
 select unique_id from df_epc
 where numeric_token_2 is not null or true
 """
 unique_ids = list(duckdb.sql(sql).df()["unique_id"])
-
-# counter = 0
-# uid = "1096552219302014022515255225042148"
-# counter += 1
-# uid = unique_ids[counter]
 
 uid = random.choice(unique_ids)
 
@@ -297,6 +295,8 @@ display(duckdb.sql(sql_get_pp_2).df())
 
 linker.waterfall_chart(record_pairs.to_dict(orient="records"))
 
+# Uncomment out the parts relevant to the comparison viewer to produce a
+# easily readable comparison viewer dashboard
 # linker.comparison_viewer_dashboard(
 #     df_predict, "comparison_viewer_dashboard.html", overwrite=True
 # )

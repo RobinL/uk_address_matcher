@@ -29,7 +29,7 @@ print(f"Number of records in epc data: {len(df_epc):,.0f}")
 
 
 # district, county fields exist but probably not useful
-sql = f"""
+sql = """
 select transaction_unique_identifier as unique_id,
     'price_paid' as source_dataset,
     paon, saon, street, locality, town_city,  postcode
@@ -50,7 +50,7 @@ from df_pp_address_fields
 df_pp_fields_concat = duckdb.sql(sql)
 
 # LOCAL_AUTHORITY_LABEL exists, but isn't really useful
-sql = f"""
+sql = """
 select
 LMK_KEY as unique_id,
 'epc' as source_dataset,
