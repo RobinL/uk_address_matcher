@@ -40,7 +40,7 @@ column_definitions = {
     "record_status": "VARCHAR(1)",
 }
 
-# File path to the CSV
+
 file_path = "/Users/robinlinacre/Downloads/pp-complete.csv"
 
 sql = f"""
