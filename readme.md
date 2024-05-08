@@ -46,6 +46,9 @@ But I haven't looked in any depth so your mileage may vary.
 
 See [comparison_viewer_dashboard](comparison_viewer_dashboard.html) and [match_weights](match_weights.html)
 
+![image](https://github.com/RobinL/address_matching_example/assets/2608005/7f025849-c7e2-4687-b0ae-8cabbe3977b9)
+
+
 # Applying this methodology to a different dataset
 
 The main assumption made in this methodology is that the postcode is correct.
