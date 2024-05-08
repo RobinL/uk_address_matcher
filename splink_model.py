@@ -5,11 +5,10 @@ import random
 import duckdb
 import pandas as pd
 import splink.duckdb.comparison_level_library as cll
+import splink.duckdb.comparison_library as cl
 from IPython.display import display
 from splink.duckdb.blocking_rule_library import block_on
 from splink.duckdb.linker import DuckDBLinker
-
-from sql_gen_fns import get_product_of_rel_token_freq
 
 pd.options.display.max_columns = None
 pd.options.display.max_colwidth = None
@@ -33,7 +32,6 @@ num_1_comparison = {
             "tf_adjustment_column": "numeric_token_1",
             "tf_adjustment_weight": 1.0,
         },
-        cll.levenshtein_level("numeric_token_1", 1),
         cll.else_level(),
     ],
     "comparison_description": "numeric_token_1",
@@ -56,7 +54,6 @@ num_2_comparison = {
             "tf_adjustment_column": "numeric_token_2",
             "tf_adjustment_weight": 1.0,
         },
-        cll.levenshtein_level("numeric_token_2", 1),
         cll.else_level(),
     ],
     "comparison_description": "numeric_token_2",
@@ -78,7 +75,6 @@ num_3_comparison = {
             "tf_adjustment_column": "numeric_token_3",
             "tf_adjustment_weight": 1.0,
         },
-        cll.levenshtein_level("numeric_token_3", 1),
         cll.else_level(),
     ],
     "comparison_description": "numeric_token_3",
@@ -178,6 +174,7 @@ settings = {
         num_2_comparison,
         num_3_comparison,
         token_relative_frequency_arr,
+        cl.array_intersect_at_sizes("address_end_without_numbers_tokenised", [3, 1]),
     ],
     "retain_intermediate_calculation_columns": True,
     "source_dataset_column_name": "source_dataset",
@@ -188,6 +185,7 @@ linker = DuckDBLinker([df_pp, df_epc], settings)
 
 
 linker.estimate_u_using_random_sampling(max_pairs=1e6)
+linker.estimate_parameters_using_expectation_maximisation(block_on("postcode"))
 
 
 display(linker.match_weights_chart())

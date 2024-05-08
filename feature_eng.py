@@ -6,6 +6,13 @@
 # But will separately parse out tokens that include numbers so we can build
 # more sophisticated logic for those fields
 
+
+# NOTE:  To understand each step of the transform, you can call .df() on the result
+# of duckdb.sql(sql) e.g.
+# df_pp_fields_concat = duckdb.sql(sql)
+# then add
+# display(df_pp_fields_concat.df()) to see the intermediate result
+
 import os
 
 import duckdb
@@ -47,7 +54,6 @@ select
 from df_pp_address_fields
 """
 df_pp_fields_concat = duckdb.sql(sql)
-df_pp_fields_concat.df()
 
 # LOCAL_AUTHORITY_LABEL exists, but isn't really uesful
 
@@ -99,6 +105,11 @@ from df_pp_fields_concat
 """
 df_vertical_concat = duckdb.sql(sql)
 
+# TODO: Could use more advance regex here to e.g. parse out numbers better
+# Examples that we could better deal with:
+# 'Flat 1 A' - detect that the 'number' is 1A, and this isn't two separate tokens
+# '10-20 bridge street' or '10 - 20 bridge street'  - extract the number as '10-20'
+
 
 sql = """
 SELECT
@@ -109,7 +120,7 @@ SELECT
 
             regexp_replace(
                 address_concat,
-                 '[,\\-\u2013\u2014]', ' ', 'g'
+                 '[,-]', ' ', 'g'
             ),
             '[^a-zA-Z0-9 ]', '', 'g'  -- Remove anything that isn't a-zA-Z0-9 or space
         )
@@ -123,6 +134,7 @@ FROM df_vertical_concat
 
 df_all_concat_punc = duckdb.query(sql)
 
+# Simmple pattern to detect tokens with numbers in them
 
 regex_pattern = r"\b\w*\d+\w*\b"
 
@@ -142,7 +154,7 @@ FROM df_all_concat_punc
 df_all_numbers_in_array = duckdb.query(sql)
 
 
-sql = f"""
+sql = """
 select
     unique_id,
     source_dataset,
@@ -159,7 +171,7 @@ from df_all_numbers_in_array
 df_all_numbers_as_cols = duckdb.sql(sql)
 
 
-sql = f"""
+sql = """
 select
     unique_id,
     source_dataset,
@@ -173,6 +185,29 @@ from df_all_numbers_as_cols
 """
 df_all_numbers_as_cols_others_tokenised = duckdb.sql(sql)
 
+# If no numeric tokens, make the first token a 'number' because it's likely to be a house name
+sql = """
+select
+    unique_id,
+    source_dataset,
+    address_concat,
+    case
+        when numeric_token_1 is null then address_without_numbers_tokenised[1]
+        else numeric_token_1
+        end as numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    case
+        when numeric_token_1 is null then address_without_numbers_tokenised[2:]
+        else address_without_numbers_tokenised
+    end
+    as address_without_numbers_tokenised,
+    postcode
+from df_all_numbers_as_cols_others_tokenised
+"""
+
+df_all_numbers_as_cols_others_tokenised_2 = duckdb.sql(sql)
+
 
 sql = """
 select
@@ -182,9 +217,16 @@ select
 numeric_token_1,
 numeric_token_2,
 numeric_token_3,
-list_distinct(address_without_numbers_tokenised) as address_without_numbers_tokenised,
+list_distinct(address_without_numbers_tokenised[:5]) as address_start_without_numbers_tokenised,
+
+list_filter(
+    list_distinct(address_without_numbers_tokenised[5:]),
+    x -> not array_contains(address_without_numbers_tokenised[:5], x)
+    )
+
+      as address_end_without_numbers_tokenised,
 postcode
-from df_all_numbers_as_cols_others_tokenised
+from df_all_numbers_as_cols_others_tokenised_2
 """
 df_all_numbers_as_cols_others_tokenised_distinct = duckdb.sql(sql)
 
@@ -194,7 +236,7 @@ select
     count(*)  / sum(count(*)) over() as relative_frequency
 from (
     select
-        unnest(address_without_numbers_tokenised) as token
+        unnest(address_start_without_numbers_tokenised) as token
     from df_all_numbers_as_cols_others_tokenised_distinct
 )
 group by token
@@ -207,7 +249,7 @@ sql = """
 with
 addresses_exploded as (
 select
-    unique_id, unnest(address_without_numbers_tokenised) as token
+    unique_id, unnest(address_start_without_numbers_tokenised) as token
 from df_all_numbers_as_cols_others_tokenised_distinct),
 address_groups as (
 select addresses_exploded.*, token_counts.relative_frequency
@@ -234,6 +276,7 @@ d.numeric_token_1,
 d.numeric_token_2,
 d.numeric_token_3,
 r.token_relative_frequency_arr,
+d.address_end_without_numbers_tokenised,
 d.postcode
 from
 df_all_numbers_as_cols_others_tokenised_distinct as d
@@ -267,9 +310,12 @@ where source_dataset = 'epc'
 """
 duckdb.sql(sql)
 
+# Find a record where numeric_token_1 does not contain any 0-9 using regex in duckdb
 sql = """
-select * from final
-where unique_id in
-('1096552219302014022515255225042148', '{53538A85-DAF9-436F-A770-3FE6AB56B9B9}')
+select * from
+read_parquet('splink_in/price_paid.parquet')
+where
+not regexp_matches(numeric_token_1, '[0-9]')
+limit 10
 """
 duckdb.sql(sql).df()
