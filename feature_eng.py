@@ -1,4 +1,11 @@
 # Feature engineering the the downloaded data
+
+# Going to largely follow the approach discussed here:
+# https://github.com/moj-analytical-services/splink/discussions/2022
+
+# But will separately parse out tokens that include numbers so we can build
+# more sophisticated logic for those fields
+
 import os
 
 import duckdb
@@ -8,15 +15,16 @@ pd.options.display.max_columns = None
 pd.options.display.max_colwidth = None
 
 
-df_pp = pd.read_parquet("./price_paid_addresses.parquet")
+df_pp = pd.read_parquet("./raw_address_data/price_paid_addresses.parquet")
 df_pp
-df_epc = pd.read_parquet("./adur_epc.parquet")
+df_epc = pd.read_parquet("./raw_address_data/adur_epc.parquet")
 df_epc
-where_statement = ""
+
 where_statement = """
 where postcode = 'BN15 8HQ'
 and paon = 78
 """
+where_statement = ""
 
 # district, county fields exist but probably not useful
 sql = f"""
@@ -34,7 +42,7 @@ sql = """
 select
     unique_id,
     source_dataset,
-    upper(concat(paon, ' ', saon, ' ', street, ' ', locality, ' ', town_city)) as address_concat,
+    upper(concat(saon, ' ', paon, ' ', street, ' ', locality, ' ', town_city)) as address_concat,
     postcode
 from df_pp_address_fields
 """
@@ -103,10 +111,11 @@ SELECT
                 address_concat,
                  '[,\\-\u2013\u2014]', ' ', 'g'
             ),
-            '''', ''  -- Remove apostrophes
+            '[^a-zA-Z0-9 ]', '', 'g'  -- Remove anything that isn't a-zA-Z0-9 or space
         )
 
-    ) AS address_concat,
+    ) AS address_concat_cleaned,
+    address_concat,
     postcode
 FROM df_vertical_concat
 """
@@ -122,9 +131,10 @@ sql = f"""
 SELECT
     unique_id,
     source_dataset,
-    regexp_replace(address_concat, '{regex_pattern}', '', 'g') AS address_without_numbers,
+    address_concat,
+    regexp_replace(address_concat_cleaned, '{regex_pattern}', '', 'g') AS address_without_numbers,
     postcode,
-    regexp_extract_all(address_concat, '{regex_pattern}') AS numeric_tokens
+    regexp_extract_all(address_concat_cleaned, '{regex_pattern}') AS numeric_tokens
 FROM df_all_concat_punc
 """
 
@@ -136,6 +146,7 @@ sql = f"""
 select
     unique_id,
     source_dataset,
+    address_concat,
 numeric_tokens[1] as numeric_token_1,
 numeric_tokens[2] as numeric_token_2,
 numeric_tokens[3] as numeric_token_3,
@@ -152,6 +163,7 @@ sql = f"""
 select
     unique_id,
     source_dataset,
+    address_concat,
 numeric_token_1,
 numeric_token_2,
 numeric_token_3,
@@ -166,6 +178,7 @@ sql = """
 select
     unique_id,
     source_dataset,
+    address_concat,
 numeric_token_1,
 numeric_token_2,
 numeric_token_3,
@@ -216,6 +229,7 @@ sql = """
 select
 d.unique_id,
 d.source_dataset,
+d.address_concat,
 d.numeric_token_1,
 d.numeric_token_2,
 d.numeric_token_3,
@@ -252,3 +266,10 @@ where source_dataset = 'epc'
 ) TO 'splink_in/epc.parquet' (FORMAT PARQUET);
 """
 duckdb.sql(sql)
+
+sql = """
+select * from final
+where unique_id in
+('1096552219302014022515255225042148', '{53538A85-DAF9-436F-A770-3FE6AB56B9B9}')
+"""
+duckdb.sql(sql).df()
