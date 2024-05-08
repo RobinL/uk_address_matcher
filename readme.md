@@ -42,6 +42,10 @@ From inspecting some results, this model does a fairly decent job. Where we see 
 
 But I haven't looked in any depth so your mileage may vary.
 
+## Match weights and dasbhboard
+
+See [comparison_viewer_dashboard](comparison_viewer_dashboard.html) and [match_weights](match_weights.html)
+
 # Applying this methodology to a different dataset
 
 The main assumption made in this methodology is that the postcode is correct.
