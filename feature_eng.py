@@ -1,8 +1,12 @@
+# Feature engineering the the downloaded data
+import os
+
 import duckdb
 import pandas as pd
 
 pd.options.display.max_columns = None
 pd.options.display.max_colwidth = None
+
 
 df_pp = pd.read_parquet("./price_paid_addresses.parquet")
 df_pp
@@ -225,4 +229,26 @@ on d.unique_id = r.unique_id
 """
 
 final = duckdb.sql(sql)
-final.df()
+
+
+# create splink_in/ folder if not exists
+
+if not os.path.exists("splink_in"):
+    os.makedirs("splink_in")
+
+
+sql = """
+COPY (
+select * from final
+where source_dataset = 'price_paid'
+) TO 'splink_in/price_paid.parquet' (FORMAT PARQUET);
+"""
+duckdb.sql(sql)
+
+sql = """
+COPY (
+select * from final
+where source_dataset = 'epc'
+) TO 'splink_in/epc.parquet' (FORMAT PARQUET);
+"""
+duckdb.sql(sql)
