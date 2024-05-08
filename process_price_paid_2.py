@@ -1,4 +1,24 @@
+# Two data sources.  You need an account to download the datasets.
+
+# 1. Price paid data
+# https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads
+# I'm using the complete dataset, at the time of writing this is at:
+# http://prod.publicdata.landregistry.gov.uk.s3-website-eu-west-1.amazonaws.com/pp-complete.csv
+
+
+# 2. Energy performance certificate data
+# https://epc.opendatacommunities.org/downloads/domestic
+# I'm using the Adur dataset, at the time of writing this is at:
+# https://epc.opendatacommunities.org/files/domestic-E07000223-Adur.zip
+
+
+# You need an account to download both.
+
 import duckdb
+
+# --------------------------------
+# Load the price paid data
+# --------------------------------
 
 # Define the column names and types based on the description provided
 column_definitions = {
@@ -32,7 +52,7 @@ df_price_paid = duckdb.query(sql)
 
 file_path_adur = "domestic-E07000223-Adur/certificates.csv"
 
-
+# Get the most recent EPC for each address
 df_epc_adur = duckdb.sql(
     f"""
     WITH ranked_entries AS (
@@ -43,6 +63,8 @@ df_epc_adur = duckdb.sql(
     """
 )
 
+# Filter down the price paid data to include only addresses that belong to the
+# postcodes in the EPC data
 
 sql = """
 select *
