@@ -28,7 +28,7 @@ num_1_comparison = {
         },
         {
             "sql_condition": '"numeric_token_2_l" = "numeric_token_1_r"',
-            "label_for_charts": "Exact match",
+            "label_for_charts": "Exact match inverted numbers",
             "tf_adjustment_column": "numeric_token_1",
             "tf_adjustment_weight": 1.0,
         },
@@ -50,7 +50,7 @@ num_2_comparison = {
         },
         {
             "sql_condition": '"numeric_token_1_l" = "numeric_token_2_r"',
-            "label_for_charts": "Exact match",
+            "label_for_charts": "Exact match inverted numbers",
             "tf_adjustment_column": "numeric_token_2",
             "tf_adjustment_weight": 1.0,
         },
@@ -80,7 +80,10 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-
+# This pretty gnarly SQL calculates:
+# 1. The product of the relative frequencies of matching tokens
+# 2. Then divides by the product of the relative frequencies of non-matching tokens
+# But non-matching items are weighted lower than matching (the 0.25)
 calc_tf_sql = """
 list_reduce(
     list_prepend(
@@ -192,30 +195,45 @@ settings = {
         num_3_comparison,
         token_relative_frequency_arr,
         other_tokens_comparison,
+        # This is not needed but makes a human readable form of the address appear
+        # in the comparison viewer dashboard
+        # cl.exact_match("address_concat"),
     ],
     "retain_intermediate_calculation_columns": True,
     "source_dataset_column_name": "source_dataset",
+    "additional_columns_to_retain": ["address_concat"],
 }
 
 
 linker = DuckDBLinker([df_pp, df_epc], settings)
-
+cl.exact_match("address_concat").as_dict()
 
 linker.estimate_u_using_random_sampling(max_pairs=1e6)
 # linker.estimate_parameters_using_expectation_maximisation(block_on("postcode"))
-display(linker.match_weights_chart())
+
 
 comparisons = linker._settings_obj.comparisons
 
+# Increase punishment for non-matching 'numeric' token
+comparisons[0].comparison_levels[3].m_probability = 0.001
+comparisons[0].comparison_levels[3].u_probability = 1.0
 
-cl.array_intersect_at_sizes("common_tokens", [3, 1]).as_dict()
+
+# Override the parameter estiamtes to null
+#  to make sure the 'address concat' field has no effect on the model
+# comparisons[5].comparison_levels[1].m_probability = 0.5
+# comparisons[5].comparison_levels[1].u_probability = 0.5
+
+# comparisons[5].comparison_levels[2].m_probability = 0.5
+# comparisons[5].comparison_levels[2].u_probability = 0.5
+display(linker.match_weights_chart())
 
 
 df_predict = linker.predict()
 
 sql = """
 select unique_id from df_epc
-where numeric_token_2 is not null
+where numeric_token_2 is not null or true
 """
 unique_ids = list(duckdb.sql(sql).df()["unique_id"])
 
@@ -278,3 +296,7 @@ display(duckdb.sql(sql_get_pp_2).df())
 
 
 linker.waterfall_chart(record_pairs.to_dict(orient="records"))
+
+# linker.comparison_viewer_dashboard(
+#     df_predict, "comparison_viewer_dashboard.html", overwrite=True
+# )

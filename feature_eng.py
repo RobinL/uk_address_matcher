@@ -1,9 +1,9 @@
 # Feature engineering the the downloaded data
 
-# Going to largely follow the approach discussed here:
+# This approach is informed by the discussion here
 # https://github.com/moj-analytical-services/splink/discussions/2022
 
-# But will separately parse out tokens that include numbers so we can build
+# We will separately parse out 'house number/name' tokens so that we can build
 # more sophisticated logic for those fields
 
 
@@ -27,11 +27,6 @@ print(f"Number of records in price paid data: {len(df_pp):,.0f}")
 df_epc = pd.read_parquet("./raw_address_data/adur_epc.parquet")
 print(f"Number of records in epc data: {len(df_epc):,.0f}")
 
-where_statement = """
-where postcode = 'BN15 8HQ'
-and paon = 78
-"""
-where_statement = ""
 
 # district, county fields exist but probably not useful
 sql = f"""
@@ -39,7 +34,6 @@ select transaction_unique_identifier as unique_id,
     'price_paid' as source_dataset,
     paon, saon, street, locality, town_city,  postcode
 from df_pp
-{where_statement}
 """
 
 
@@ -55,22 +49,14 @@ from df_pp_address_fields
 """
 df_pp_fields_concat = duckdb.sql(sql)
 
-# LOCAL_AUTHORITY_LABEL exists, but isn't really uesful
-
-where_statement = """
-where postcode = 'BN15 8HQ'
-and address1 like '%78%'
-"""
-where_statement = ""
-
-
+# LOCAL_AUTHORITY_LABEL exists, but isn't really useful
 sql = f"""
 select
 LMK_KEY as unique_id,
 'epc' as source_dataset,
 address1, address2, address3, POSTTOWN,  postcode
 from df_epc
-{where_statement}
+
 """
 df_epc_address_fields = duckdb.sql(sql)
 
@@ -115,18 +101,12 @@ sql = """
 SELECT
     unique_id,
     source_dataset,
-    -- Replace commas and dashes with spaces, remove apostrophes, and reduce multiple spaces to a single space
     trim(regexp_replace(
-
             regexp_replace(
-                regexp_replace(
-                    address_concat,
-                    ',', ' ', 'g'
-                ),
-                '\\s*\\-\\s*', '-', 'g'),
+                regexp_replace(address_concat,',', ' ', 'g'),
+                '\\s*\\-\\s*', '-', 'g'), -- useful for cases like '10 - 20 bridge st'
             '[^a-zA-Z0-9 -]', '', 'g'  -- Remove anything that isn't a-zA-Z0-9 or space
         )
-
     ) AS address_concat_cleaned,
     address_concat,
     postcode
@@ -136,10 +116,9 @@ FROM df_vertical_concat
 
 df_all_concat_punc = duckdb.query(sql)
 
-# Simmple pattern to detect tokens with numbers in them
+# Pattern to detect tokens with numbers in them inc e.g. 10-20
 
 regex_pattern = r"\b\d*[\w\-]*\d+[\w\-]*\d*\b"
-
 
 sql = f"""
 SELECT
@@ -210,7 +189,7 @@ from df_all_numbers_as_cols_others_tokenised
 
 df_all_numbers_as_cols_others_tokenised_2 = duckdb.sql(sql)
 
-
+# Make tokens distinct
 sql = """
 select
     unique_id,
@@ -225,6 +204,7 @@ from df_all_numbers_as_cols_others_tokenised_2
 """
 df_all_numbers_as_cols_others_tokenised_distinct = duckdb.sql(sql)
 
+# Compute relative term frequencies amongst the tokens
 sql = """
 select
     token,
@@ -239,7 +219,7 @@ order by relative_frequency desc
 """
 token_counts = duckdb.sql(sql)
 
-
+# Add relative term frequcnies to token array
 sql = """
 with
 addresses_exploded as (
@@ -281,6 +261,7 @@ on d.unique_id = r.unique_id
 
 address_with_token_relative_frequency_arr = duckdb.sql(sql)
 
+# Split into common and common tokens, retain token frequency only for uncommon
 sql = """
 select
     unique_id,
@@ -299,8 +280,7 @@ from address_with_token_relative_frequency_arr
 """
 
 final = duckdb.sql(sql)
-final.df()
-# create splink_in/ folder if not exists
+
 
 if not os.path.exists("splink_in"):
     os.makedirs("splink_in")
@@ -322,16 +302,14 @@ where source_dataset = 'epc'
 """
 duckdb.sql(sql)
 
+# Inspect results
 # Find a record where numeric_token_1 does not contain any 0-9 using regex in duckdb
-sql = """
-select * from
-read_parquet('splink_in/price_paid.parquet')
-where
-(not regexp_matches(numeric_token_1, '[0-9]') or true)
-and
-(numeric_token_2 is not null)
-
-order by random()
-limit 10
-"""
-duckdb.sql(sql).df()
+# sql = """
+# select * from
+# read_parquet('splink_in/price_paid.parquet')
+# where
+# not regexp_matches(numeric_token_1, '[0-9]')
+# order by random()
+# limit 10
+# """
+# duckdb.sql(sql).df()

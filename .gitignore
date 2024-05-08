@@ -3,6 +3,7 @@ domestic-E07000223-Adur/
 *.zip
 *.parquet
 *.csv
+*.html
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

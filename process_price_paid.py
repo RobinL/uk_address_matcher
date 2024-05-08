@@ -63,6 +63,14 @@ df_epc_adur = duckdb.sql(
     """
 )
 
+# Lowercase columns:
+select_cols = ", ".join([f"{col} as {col.lower()}" for col in df_epc_adur.columns])
+sql = f"""
+select {select_cols}
+from df_epc_adur
+"""
+df_epc_adur_lower = duckdb.sql(sql)
+
 # Filter down the price paid data to include only addresses that belong to the
 # postcodes in the EPC data
 
@@ -77,11 +85,11 @@ price_paid_addresses = duckdb.sql(sql)
 
 
 sql = """
-COPY price_paid_addresses TO 'price_paid_addresses.parquet' (FORMAT PARQUET);
+COPY price_paid_addresses TO 'raw_address_data/price_paid_addresses.parquet' (FORMAT PARQUET);
 """
 duckdb.sql(sql)
 
 sql = """
-COPY df_epc_adur TO 'adur_epc.parquet' (FORMAT PARQUET);
+COPY df_epc_adur_lower TO 'raw_address_data/adur_epc.parquet' (FORMAT PARQUET);
 """
 duckdb.sql(sql)
