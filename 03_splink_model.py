@@ -175,14 +175,17 @@ other_tokens_comparison = {
             "is_null_level": True,
         },
         {
+            "sql_condition": '2*len(list_intersect("common_tokens_l", "common_tokens_r")) - len(list_distinct(list_concat("common_tokens_l", "common_tokens_r"))) >= 2',
+            "label_for_charts": "More matching tokens than non matching > 2",
+        },
+        {
             "sql_condition": '2*len(list_intersect("common_tokens_l", "common_tokens_r")) - len(list_distinct(list_concat("common_tokens_l", "common_tokens_r"))) > 0',
             "label_for_charts": "More matching tokens than non matching",
         },
         {"sql_condition": "ELSE", "label_for_charts": "All other comparisons"},
     ],
-    "comparison_description": "Array intersection at minimum sizes 3, 1 vs. anything else",
+    "comparison_description": "Array intersection",
 }
-
 settings = {
     "probability_two_random_records_match": 0.01,
     "link_type": "link_only",
@@ -197,7 +200,7 @@ settings = {
         other_tokens_comparison,
         # This is not needed but makes a human readable form of the address appear
         # in the comparison viewer dashboard
-        # cl.exact_match("address_concat"),
+        cl.exact_match("address_concat"),
     ],
     "retain_intermediate_calculation_columns": True,
     "source_dataset_column_name": "source_dataset",
@@ -221,11 +224,11 @@ comparisons[0].comparison_levels[3].u_probability = 1.0
 
 # Override the parameter estiamtes to null
 #  to make sure the 'address concat' field has no effect on the model
-# comparisons[5].comparison_levels[1].m_probability = 0.5
-# comparisons[5].comparison_levels[1].u_probability = 0.5
+comparisons[5].comparison_levels[1].m_probability = 0.5
+comparisons[5].comparison_levels[1].u_probability = 0.5
 
-# comparisons[5].comparison_levels[2].m_probability = 0.5
-# comparisons[5].comparison_levels[2].u_probability = 0.5
+comparisons[5].comparison_levels[2].m_probability = 0.5
+comparisons[5].comparison_levels[2].u_probability = 0.5
 display(linker.match_weights_chart())
 
 
@@ -293,10 +296,10 @@ where unique_id = '{pp_uid}'
 display(duckdb.sql(sql_get_pp_2).df())
 
 
-linker.waterfall_chart(record_pairs.to_dict(orient="records"))
+display(linker.waterfall_chart(record_pairs.to_dict(orient="records")))
 
 # Uncomment out the parts relevant to the comparison viewer to produce a
 # easily readable comparison viewer dashboard
-# linker.comparison_viewer_dashboard(
-#     df_predict, "comparison_viewer_dashboard.html", overwrite=True
-# )
+linker.comparison_viewer_dashboard(
+    df_predict, "comparison_viewer_dashboard.html", overwrite=True
+)
