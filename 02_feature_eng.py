@@ -13,6 +13,8 @@
 # then add
 # display(df_pp_fields_concat.df()) to see the intermediate result
 
+# See https://github.com/ONSdigital/address-index-data/blob/fbd434bd3c3f3b08881d2ef9e2797a62ee5eae84/DataScience/ProbabilisticParser/common/tokens.py#L1
+# for some additional ideas (not implemented here) about how to tokenise
 import os
 
 import duckdb
