@@ -1,0 +1,176 @@
+{
+    "probability_two_random_records_match": 0.01,
+    "link_type": "link_only",
+    "blocking_rules_to_generate_predictions": [
+        {
+            "blocking_rule": "l.\"postcode\" = r.\"postcode\"",
+            "sql_dialect": "duckdb",
+            "salting_partitions": 10
+        }
+    ],
+    "comparisons": [
+        {
+            "output_column_name": "numeric_token_1",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"numeric_token_1_l\" IS NULL OR \"numeric_token_1_r\" IS NULL",
+                    "label_for_charts": "Null",
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"numeric_token_1_l\" = \"numeric_token_1_r\"",
+                    "label_for_charts": "Exact match",
+                    "u_probability": 0.015078189024403024,
+                    "tf_adjustment_column": "numeric_token_1",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "\"numeric_token_2_l\" = \"numeric_token_1_r\"",
+                    "label_for_charts": "Exact match inverted numbers",
+                    "u_probability": 0.00046739451660298504,
+                    "tf_adjustment_column": "numeric_token_1",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.001,
+                    "u_probability": 1.0
+                }
+            ],
+            "comparison_description": "numeric_token_1"
+        },
+        {
+            "output_column_name": "numeric_token_2",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"numeric_token_2_l\" IS NULL OR \"numeric_token_2_r\" IS NULL",
+                    "label_for_charts": "Null",
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"numeric_token_2_l\" = \"numeric_token_2_r\"",
+                    "label_for_charts": "Exact match",
+                    "u_probability": 0.015488215488215488,
+                    "tf_adjustment_column": "numeric_token_2",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "\"numeric_token_1_l\" = \"numeric_token_2_r\"",
+                    "label_for_charts": "Exact match inverted numbers",
+                    "u_probability": 0.011447811447811448,
+                    "tf_adjustment_column": "numeric_token_2",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "u_probability": 0.9730639730639731
+                }
+            ],
+            "comparison_description": "numeric_token_2"
+        },
+        {
+            "output_column_name": "numeric_token_3",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"numeric_token_3_l\" IS NULL OR \"numeric_token_3_r\" IS NULL",
+                    "label_for_charts": "Null",
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"numeric_token_3_l\" = \"numeric_token_3_r\"",
+                    "label_for_charts": "Exact match",
+                    "tf_adjustment_column": "numeric_token_3",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "\"numeric_token_2_l\" = \"numeric_token_3_r\"",
+                    "label_for_charts": "Exact match 2",
+                    "tf_adjustment_column": "numeric_token_3",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons"
+                }
+            ],
+            "comparison_description": "numeric_token_3"
+        },
+        {
+            "output_column_name": "token_relative_frequency_arr",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"token_relative_frequency_arr_l\" IS NULL OR \"token_relative_frequency_arr_r\" IS NULL",
+                    "label_for_charts": "Null",
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1e-10",
+                    "label_for_charts": "<1e-10",
+                    "u_probability": 3.2487062813211964e-05
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1e-8",
+                    "label_for_charts": "<1e-8",
+                    "u_probability": 5.449442794474265e-05
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1e-6",
+                    "label_for_charts": "<1e-6",
+                    "u_probability": 9.326930936696338e-05
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1e-4",
+                    "label_for_charts": "<1e-4",
+                    "u_probability": 0.0009515565494966601
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1e-2",
+                    "label_for_charts": "<1e-2",
+                    "u_probability": 0.0021378583270629807
+                },
+                {
+                    "sql_condition": "\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            array_filter(\n                token_relative_frequency_arr_l,\n                y -> array_contains(\n                    array_intersect(\n                        list_transform(token_relative_frequency_arr_l, x -> x.token),\n                        list_transform(token_relative_frequency_arr_r, x -> x.token)\n                    ),\n                    y.token\n                )\n            ),\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p * q\n)\n*\nlist_reduce(\n    list_prepend(\n        1.0,\n        list_transform(\n            list_concat(\n                array_filter(\n                    token_relative_frequency_arr_l,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_r, x -> x.token),\n                                y.token\n                            )\n                ),\n                array_filter(\n                    token_relative_frequency_arr_r,\n                        y -> not array_contains(\n                                list_transform(token_relative_frequency_arr_l, x -> x.token),\n                                y.token\n                            )\n                )\n            ),\n\n            x -> x.relative_frequency\n        )\n    ),\n    (p, q) -> p / q^0.25\n)\n < 1",
+                    "label_for_charts": "<1e-2",
+                    "u_probability": 0.005559479620131918
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "u_probability": 0.9911708547031836
+                }
+            ],
+            "comparison_description": "Exact match vs. Col within levenshtein thresholds 1, 2 vs. anything else"
+        },
+        {
+            "output_column_name": "common_tokens",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"common_tokens_l\" IS NULL OR \"common_tokens_r\" IS NULL or length(\"common_tokens_l\") = 0 or length(\"common_tokens_r\") = 0",
+                    "label_for_charts": "Null",
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "2*len(list_intersect(\"common_tokens_l\", \"common_tokens_r\")) - len(list_distinct(list_concat(\"common_tokens_l\", \"common_tokens_r\"))) > 0",
+                    "label_for_charts": "More matching tokens than non matching",
+                    "u_probability": 0.08141048347037284
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "u_probability": 0.9185895165296272
+                }
+            ],
+            "comparison_description": "Array intersection at minimum sizes 3, 1 vs. anything else"
+        }
+    ],
+    "retain_intermediate_calculation_columns": true,
+    "source_dataset_column_name": "source_dataset",
+    "additional_columns_to_retain": [
+        "address_concat",
+        "postcode"
+    ],
+    "sql_dialect": "duckdb",
+    "linker_uid": "06blym6h"
+}
