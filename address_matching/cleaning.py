@@ -89,3 +89,48 @@ def clean_address_string_second_pass(table_name: str) -> DuckDBPyRelation:
     """
 
     return duckdb.sql(sql)
+
+
+def split_numeric_tokens_to_cols(table_name: str) -> DuckDBPyRelation:
+    sql = f"""
+    select
+        * exclude (numeric_tokens),
+        numeric_tokens[1] as numeric_token_1,
+        numeric_tokens[2] as numeric_token_2,
+        numeric_tokens[3] as numeric_token_3
+    from {table_name}
+    """
+
+    return duckdb.sql(sql)
+
+
+def tokenise_address_without_numbers(table_name: str) -> DuckDBPyRelation:
+    sql = f"""
+    select
+        * exclude (address_without_numbers),
+        regexp_split_to_array(trim(address_without_numbers), '\\s')
+            AS address_without_numbers_tokenised
+    from {table_name}
+    """
+
+    return duckdb.sql(sql)
+
+
+def house_name_to_number_if_no_numbers(table_name: str) -> DuckDBPyRelation:
+    sql = f"""
+    select
+        * exclude (numeric_token_1, address_without_numbers_tokenised),
+        case
+            when numeric_token_1 is null then address_without_numbers_tokenised[1]
+            else numeric_token_1
+            end as numeric_token_1,
+
+    case
+        when numeric_token_1 is null then address_without_numbers_tokenised[2:]
+        else address_without_numbers_tokenised
+    end
+    as address_without_numbers_tokenised
+    from {table_name}
+    """
+
+    return duckdb.sql(sql)

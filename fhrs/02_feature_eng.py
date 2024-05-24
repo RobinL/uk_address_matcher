@@ -107,7 +107,8 @@ SELECT
     unique_id,
     source_dataset,
     address_concat,
-    regexp_replace(address_concat_cleaned, '{regex_pattern}', '', 'g') AS address_without_numbers,
+    regexp_replace(address_concat_cleaned, '{regex_pattern}', '', 'g')
+        AS address_without_numbers,
     postcode,
     regexp_extract_all(address_concat_cleaned, '{regex_pattern}') AS numeric_tokens
 FROM df_all_concat_punc
@@ -139,10 +140,11 @@ select
     unique_id,
     source_dataset,
     address_concat,
-numeric_token_1,
-numeric_token_2,
-numeric_token_3,
-regexp_split_to_array(trim(address_without_numbers), '\\s') as address_without_numbers_tokenised,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    regexp_split_to_array(trim(address_without_numbers), '\\s')
+        AS address_without_numbers_tokenised,
 postcode
 from df_all_numbers_as_cols
 """
