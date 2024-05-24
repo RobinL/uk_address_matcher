@@ -3,6 +3,7 @@ from duckdb import DuckDBPyRelation
 
 from .regexes import (
     construct_nested_call,
+    move_flat_to_front,
     remove_commas_periods,
     remove_multiple_spaces,
     remove_repeated_tokens,
@@ -44,6 +45,7 @@ def clean_address_string_first_pass(table_name: str) -> DuckDBPyRelation:
             remove_multiple_spaces,
             replace_fwd_slash_with_dash,
             standarise_num_dash_num,
+            move_flat_to_front,
             remove_repeated_tokens,
             trim,
         ],
@@ -129,11 +131,12 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
             FROM {table_name}
         )
         GROUP BY token
-        ORDER BY rel_freq DESC
     ),
     addresses_exploded AS (
         SELECT
-            unique_id, unnest(address_without_numbers_tokenised) as token
+            unique_id,
+            unnest(address_without_numbers_tokenised) as token,
+            row_number() OVER (PARTITION BY unique_id ORDER BY (SELECT NULL)) as token_order
         FROM {table_name}
     ),
     address_groups AS (
@@ -141,52 +144,59 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
         FROM addresses_exploded
         LEFT JOIN token_counts
         ON addresses_exploded.token = token_counts.token
+
     ),
     token_freq_lookup AS (
-    SELECT
-        unique_id,
-        -- list(struct_pack(token := token, rel_freq := rel_freq)) as token_rel_freq_arr
-        list_zip(list(token), list(rel_freq))  as token_rel_freq_arr
-    FROM address_groups
-    GROUP BY unique_id)
-    SELECT
-        d.* exclude (address_without_numbers_tokenised), r.token_rel_freq_arr
-    from
-    {table_name} as d
-    inner join token_freq_lookup as r
-    on d.unique_id = r.unique_id
+        SELECT
+            unique_id,
+            list_zip(array_agg(token order by unique_id, token_order), array_agg(rel_freq order by unique_id, token_order)) as token_rel_freq_arr
+        FROM address_groups
+        GROUP BY unique_id
 
+
+    )
+    SELECT
+        d.* EXCLUDE (address_without_numbers_tokenised),
+        r.token_rel_freq_arr
+    FROM
+        {table_name} as d
+    INNER JOIN token_freq_lookup as r
+    ON d.unique_id = r.unique_id
     """
 
     return duckdb.sql(sql)
 
 
-def house_name_to_number_if_no_numbers(table_name: str) -> DuckDBPyRelation:
+def first_unusual_token(table_name: str) -> DuckDBPyRelation:
 
     # Get first below freq
-    first_token = "list_filter(token_rel_freq_arr, x -> x.rel_freq < 0.01)"
+    first_token = "list_any_value(list_filter(token_rel_freq_arr, x -> x[2] < 0.01))"
 
     sql = f"""
     select
-    list_any_value({first_token}) as first_token,
+    {first_token} as first_unusual_token,
     *
     from {table_name}
     """
+    return duckdb.sql(sql)
 
-    # sql = f"""
-    # select
-    #     * exclude (numeric_token_1, address_without_numbers_tokenised),
-    #     case
-    #         when numeric_token_1 is null then address_without_numbers_tokenised[1]
-    #         else numeric_token_1
-    #         end as numeric_token_1,
 
-    # case
-    #     when numeric_token_1 is null then address_without_numbers_tokenised[2:]
-    #     else address_without_numbers_tokenised
-    # end
-    # as address_without_numbers_tokenised
-    # from {table_name}
-    # """
+def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRelation:
+    sql = f"""
+    select
+        * exclude (numeric_token_1, token_rel_freq_arr, first_unusual_token),
+        case
+            when numeric_token_1 is null then first_unusual_token[1]
+            else numeric_token_1
+            end as numeric_token_1,
+
+    case
+        when numeric_token_1 is null
+        then list_filter(token_rel_freq_arr, x -> x[1] != first_unusual_token[1])
+        else token_rel_freq_arr
+    end
+    as token_rel_freq_arr
+    from {table_name}
+    """
 
     return duckdb.sql(sql)

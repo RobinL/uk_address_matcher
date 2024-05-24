@@ -29,6 +29,14 @@ def trim(input: str):
     return f"trim({input})"
 
 
+def move_flat_to_front(input: str):
+    # Move reference to a 'flat + number' to the front of the string address string
+    # e.g. FLAT 1
+    # FLAT 1A
+
+    return f"regexp_replace({input}, '^(FLAT \\d+[A-Z]?)\\s+(.*)$', '\\1 \\2', 'g')"
+
+
 def construct_nested_call(col_name: str, fns: List[Callable]) -> str:
     input_str = col_name
     for f in fns:
