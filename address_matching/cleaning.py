@@ -140,7 +140,7 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
         SELECT
             unique_id,
             unnest(address_without_numbers_tokenised) as token,
-            row_number() OVER (PARTITION BY unique_id ORDER BY (SELECT NULL)) as token_order
+            generate_subscripts(address_without_numbers_tokenised, 1) AS token_order
         FROM {table_name}
     ),
     address_groups AS (
@@ -148,6 +148,7 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
         FROM addresses_exploded
         LEFT JOIN token_counts
         ON addresses_exploded.token = token_counts.token
+
 
     ),
     token_freq_lookup AS (
@@ -157,8 +158,8 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
             -- list(struct_pack(token := token, rel_freq := rel_freq))
             list_transform(
                 list_zip(
-                    array_agg(token order by unique_id, token_order),
-                    array_agg(rel_freq order by unique_id, token_order)
+                    array_agg(token order by unique_id, token_order asc),
+                    array_agg(rel_freq order by unique_id, token_order asc)
                     ),
                 x-> struct_pack(tok:= x[1], rel_freq:= x[2])
             )
