@@ -1,3 +1,5 @@
+import random
+import string
 from typing import Callable, List, Optional
 
 import duckdb
@@ -5,6 +7,7 @@ from duckdb import DuckDBPyRelation
 
 
 def run_pipeline(
+    df: DuckDBPyRelation,
     cleaning_queue: List[Callable],
     print_intermediate: bool = False,
     filter_sql: Optional[str] = None,
@@ -20,6 +23,8 @@ def run_pipeline(
     If filter_sql is not provided, the entire data frame will be printed.
 
     Args:
+        df (DuckDBPyRelation): The input data frame to which the SQL transforms are
+            applied.
         cleaning_queue (List[Callable]): A list of functions that implement SQL
             transforms.
         print_intermediate (bool, optional): Whether to print the data frame after each
@@ -31,16 +36,19 @@ def run_pipeline(
         DuckDBPyRelation: The data frame after all transforms have been applied.
     """
 
-    table_name = "initial_table_name"
+    def generate_random_hash(length: int = 8) -> str:
+        return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
-    # Have to register name to avoid recursion error
-    # of repeatedly assigning the result of a query to a df
-    # of the same name
+    random_hash = generate_random_hash()
+    table_name = f"initial_table_{random_hash}"
+    duckdb.register(table_name, df)
+
     for i, cleaning_function in enumerate(cleaning_queue):
         df = cleaning_function(table_name)
-        table_name = f"df_{i}"
+        table_name = f"df_{i}_{random_hash}"
         duckdb.register(table_name, df)
         if print_intermediate:
+            print(f"{'-'*20}\nApplying function: {cleaning_function.__name__}, result:")
             df_filtered = df.filter(filter_sql) if filter_sql else df
             df_filtered.show(max_rows=10, max_width=10000, max_col_width=10000)
 

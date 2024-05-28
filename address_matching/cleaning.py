@@ -200,3 +200,23 @@ def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRela
     """
 
     return duckdb.sql(sql)
+
+
+def final_column_order(table_name: str) -> DuckDBPyRelation:
+
+    sql = f"""
+    select
+        unique_id,
+        source_dataset,
+        original_address_concat,
+        numeric_token_1,
+        numeric_token_2,
+        numeric_token_3,
+        list_transform(
+            token_rel_freq_arr, x-> struct_pack(t:= x[1], v:= x[2])
+        ) as token_rel_freq_arr,
+        postcode
+    from {table_name}
+    """
+
+    return duckdb.sql(sql)
