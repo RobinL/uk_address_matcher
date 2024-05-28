@@ -4,6 +4,7 @@ from duckdb import DuckDBPyRelation
 from .regexes import (
     construct_nested_call,
     move_flat_to_front,
+    remove_apostrophes,
     remove_commas_periods,
     remove_multiple_spaces,
     remove_repeated_tokens,
@@ -42,6 +43,7 @@ def clean_address_string_first_pass(table_name: str) -> DuckDBPyRelation:
         "address_concat",
         [
             remove_commas_periods,
+            remove_apostrophes,
             remove_multiple_spaces,
             replace_fwd_slash_with_dash,
             standarise_num_dash_num,
@@ -110,7 +112,7 @@ def tokenise_address_without_numbers(table_name: str) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (address_without_numbers),
-        regexp_split_to_array(trim(address_without_numbers), '\\s')
+        regexp_split_to_array(trim(address_without_numbers), '\\s+')
             AS address_without_numbers_tokenised
     from {table_name}
     """
@@ -217,6 +219,61 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
         ) as token_rel_freq_arr,
         postcode
     from {table_name}
+    """
+
+    return duckdb.sql(sql)
+
+
+def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
+    # Want to put common tokens towards the end of the address
+    # into their own field.  These tokens (e.g. SOMERSET or LONDON)
+    # are often ommitted from so 'punishing' lack of agreement is probably
+    # not necessary
+
+    sql = """
+    select array_agg(token) as end_tokens_to_remove
+    from read_csv_auto("./common_tokens.csv")
+    where token_count > 3000
+    """
+    common_end_tokens = duckdb.sql(sql)
+    duckdb.register("common_end_tokens", common_end_tokens)
+
+    penultimate_token_in_common_end_tokens = """
+    list_contains(end_tokens_to_remove, address_without_numbers_tokenised[-2])
+    """
+
+    last_token_in_common_end_tokens = """
+    list_contains(end_tokens_to_remove, address_without_numbers_tokenised[-1])
+    """
+
+    sql = f"""
+    with joined as
+    (
+        select *
+    from {table_name}
+    cross join common_end_tokens
+    )
+    select
+    * exclude (address_without_numbers_tokenised, end_tokens_to_remove),
+    original_address_concat,
+    case
+    when
+        ({penultimate_token_in_common_end_tokens} and {last_token_in_common_end_tokens})
+        then address_without_numbers_tokenised[:-3]
+    when {last_token_in_common_end_tokens}
+        then address_without_numbers_tokenised[:-2]
+    else address_without_numbers_tokenised
+    end
+    as address_without_numbers_tokenised,
+    case
+    when
+        ({penultimate_token_in_common_end_tokens} and {last_token_in_common_end_tokens})
+        then address_without_numbers_tokenised[-2:]
+    when {last_token_in_common_end_tokens}
+        then address_without_numbers_tokenised[-1:]
+    else address_without_numbers_tokenised[0:0]
+    end as common_end_tokens
+    from joined
     """
 
     return duckdb.sql(sql)

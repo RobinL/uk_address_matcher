@@ -5,6 +5,10 @@ def remove_commas_periods(input: str):
     return f"regexp_replace({input}, '[,.]', ' ', 'g')"
 
 
+def remove_apostrophes(input: str):
+    return f"regexp_replace({input}, e'\\'', '', 'g')"
+
+
 def remove_multiple_spaces(input: str):
     return f"regexp_replace({input}, '\\s+', ' ', 'g')"
 
