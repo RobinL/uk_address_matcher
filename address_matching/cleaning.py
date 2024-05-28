@@ -153,11 +153,18 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
     token_freq_lookup AS (
         SELECT
             unique_id,
-            list_zip(array_agg(token order by unique_id, token_order), array_agg(rel_freq order by unique_id, token_order)) as token_rel_freq_arr
+            -- This guarantees preservation of token order vs.
+            -- list(struct_pack(token := token, rel_freq := rel_freq))
+            list_transform(
+                list_zip(
+                    array_agg(token order by unique_id, token_order),
+                    array_agg(rel_freq order by unique_id, token_order)
+                    ),
+                x-> struct_pack(tok:= x[1], rel_freq:= x[2])
+            )
+            as token_rel_freq_arr
         FROM address_groups
         GROUP BY unique_id
-
-
     )
     SELECT
         d.* EXCLUDE (address_without_numbers_tokenised),
@@ -174,7 +181,9 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
 def first_unusual_token(table_name: str) -> DuckDBPyRelation:
 
     # Get first below freq
-    first_token = "list_any_value(list_filter(token_rel_freq_arr, x -> x[2] < 0.01))"
+    first_token = (
+        "list_any_value(list_filter(token_rel_freq_arr, x -> x.rel_freq < 0.01))"
+    )
 
     sql = f"""
     select
@@ -190,13 +199,13 @@ def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRela
     select
         * exclude (numeric_token_1, token_rel_freq_arr, first_unusual_token),
         case
-            when numeric_token_1 is null then first_unusual_token[1]
+            when numeric_token_1 is null then first_unusual_token.tok
             else numeric_token_1
             end as numeric_token_1,
 
     case
         when numeric_token_1 is null
-        then list_filter(token_rel_freq_arr, x -> x[1] != first_unusual_token[1])
+        then list_filter(token_rel_freq_arr, x -> x.tok != first_unusual_token.tok)
         else token_rel_freq_arr
     end
     as token_rel_freq_arr
@@ -216,9 +225,7 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
-        list_transform(
-            token_rel_freq_arr, x-> struct_pack(t:= x[1], v:= x[2])
-        ) as token_rel_freq_arr,
+        token_rel_freq_arr,
         common_end_tokens,
         postcode
     from {table_name}
