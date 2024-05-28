@@ -1,4 +1,8 @@
 import duckdb
+import pandas as pd
+
+pd.options.display.max_colwidth = 1000
+
 
 from address_matching.cleaning import (
     add_term_frequencies_to_address_tokens,
@@ -6,6 +10,7 @@ from address_matching.cleaning import (
     clean_address_string_second_pass,
     final_column_order,
     first_unusual_token,
+    move_common_end_tokens_to_field,
     parse_out_numbers,
     split_numeric_tokens_to_cols,
     tokenise_address_without_numbers,
@@ -14,7 +19,6 @@ from address_matching.cleaning import (
     use_first_unusual_token_if_no_numeric_token,
 )
 from address_matching.run_pipeline import run_pipeline
-from address_matching.splink_model import train_splink_model
 
 d1 = "companies_house_addresess_postcode_overlap"
 d2 = "fhrs_addresses_sample"
@@ -24,7 +28,6 @@ from read_parquet('./example_data/{d1}.parquet')
 UNION ALL
 select *, address_concat as original_address_concat
 from read_parquet('./example_data/{d2}.parquet')
-
 """
 df_fhrs = duckdb.sql(sql)
 
@@ -37,6 +40,7 @@ cleaning_queue = [
     clean_address_string_second_pass,
     split_numeric_tokens_to_cols,
     tokenise_address_without_numbers,
+    move_common_end_tokens_to_field,
     add_term_frequencies_to_address_tokens,
     first_unusual_token,
     use_first_unusual_token_if_no_numeric_token,
@@ -44,22 +48,9 @@ cleaning_queue = [
 ]
 
 
-df_cleaned = run_pipeline(df_fhrs, cleaning_queue)
-df_cleaned.show()
+df_cleaned = run_pipeline(df_fhrs, cleaning_queue, print_intermediate=False)
+pddf = df_cleaned.filter("unique_id = '724231'").df()
 
-# sql = f"""
-# select
-#     unique_id,
-#     source_dataset,
-#     original_address_concat,
-#     numeric_token_1,
-#     numeric_token_2,
-#     numeric_token_3,
-#     list_transform(
-#         token_rel_freq_arr, x-> struct_pack(t:= x[1], v:= x[2])
-#     ) as token_rel_freq_arr,
-#     postcode
-# from {table_name}
 
 # """
 # # duckdb.sql(sql).show(max_rows=100, max_width=10000, max_col_width=100)
