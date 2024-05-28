@@ -1,3 +1,5 @@
+import importlib.resources as pkg_resources
+
 import duckdb
 from duckdb import DuckDBPyRelation
 
@@ -217,6 +219,7 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
         list_transform(
             token_rel_freq_arr, x-> struct_pack(t:= x[1], v:= x[2])
         ) as token_rel_freq_arr,
+        common_end_tokens,
         postcode
     from {table_name}
     """
@@ -230,11 +233,15 @@ def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
     # are often ommitted from so 'punishing' lack of agreement is probably
     # not necessary
 
-    sql = """
-    select array_agg(token) as end_tokens_to_remove
-    from read_csv_auto("./common_tokens.csv")
-    where token_count > 3000
-    """
+    with pkg_resources.path(
+        "address_matching.data", "common_end_tokens.csv"
+    ) as csv_path:
+
+        sql = f"""
+        select array_agg(token) as end_tokens_to_remove
+        from read_csv_auto("{csv_path}")
+        where token_count > 3000
+        """
     common_end_tokens = duckdb.sql(sql)
     duckdb.register("common_end_tokens", common_end_tokens)
 

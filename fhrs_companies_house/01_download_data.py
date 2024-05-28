@@ -61,10 +61,11 @@ select
     postcode
 
 from df_fhrs
+limit 5000
 
 
 """
-fhrs_addresses = duckdb.sql(sql)
+fhrs_addresses_sample = duckdb.sql(sql)
 
 
 sql = """
@@ -73,3 +74,15 @@ from companies_house_addresess
 where postcode in
 (select postcode from fhrs_addresses)
 """
+companies_house_addresess_postcode_overlap = duckdb.sql(sql).df()
+
+
+sql = """
+COPY fhrs_addresses_sample TO '../example_data/fhrs_addresses_sample.parquet' (FORMAT PARQUET);
+"""
+duckdb.sql(sql)
+
+sql = """
+COPY companies_house_addresess_postcode_overlap TO '../example_data/companies_house_addresess_postcode_overlap.parquet' (FORMAT PARQUET);
+"""
+duckdb.sql(sql)

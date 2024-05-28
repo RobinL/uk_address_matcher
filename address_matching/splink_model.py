@@ -1,9 +1,6 @@
 # Going to largely follow
 # https://github.com/moj-analytical-services/splink/discussions/2022
-import random
 
-import duckdb
-import pandas as pd
 import splink.duckdb.comparison_level_library as cll
 import splink.duckdb.comparison_library as cl
 from IPython.display import display

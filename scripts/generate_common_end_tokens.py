@@ -61,12 +61,12 @@ having count(*) > 100
 order by count(*) desc
 
 """
-common_tokens = duckdb.sql(sql)
-common_tokens.df()
+common_end_tokens = duckdb.sql(sql)
+common_end_tokens.df()
 
 sql = """
 COPY common_tokens
-TO './common_tokens.csv' (FORMAT CSV);
+TO './common_end_tokens.csv' (FORMAT CSV);
 
 """
 duckdb.sql(sql)
