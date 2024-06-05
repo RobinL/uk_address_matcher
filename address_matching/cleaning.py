@@ -183,7 +183,7 @@ def first_unusual_token(table_name: str) -> DuckDBPyRelation:
 
     # Get first below freq
     first_token = (
-        "list_any_value(list_filter(token_rel_freq_arr, x -> x.rel_freq < 0.01))"
+        "list_any_value(list_filter(token_rel_freq_arr, x -> x.rel_freq < 0.001))"
     )
 
     sql = f"""
@@ -206,7 +206,7 @@ def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRela
 
     case
         when numeric_token_1 is null
-        then list_filter(token_rel_freq_arr, x -> x.tok != first_unusual_token.tok)
+        then list_filter(token_rel_freq_arr, x -> coalesce(x.tok != first_unusual_token.tok, true))
         else token_rel_freq_arr
     end
     as token_rel_freq_arr
@@ -226,9 +226,14 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
+        list_transform(token_rel_freq_arr, x -> x.tok) as token_rel_freq_arr_readable,
+        list_transform(common_end_tokens, x -> x.tok) as common_end_tokens_readable,
         token_rel_freq_arr,
         common_end_tokens,
-        postcode
+        postcode,
+
+
+
     from {table_name}
     """
 
@@ -253,42 +258,47 @@ def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
     common_end_tokens = duckdb.sql(sql)
     duckdb.register("common_end_tokens", common_end_tokens)
 
-    penultimate_token_in_common_end_tokens = """
-    list_contains(end_tokens_to_remove, address_without_numbers_tokenised[-2])
+    end_tokens_as_array = """
+    list_transform(common_end_tokens, x -> x.tok)
     """
 
-    last_token_in_common_end_tokens = """
-    list_contains(end_tokens_to_remove, address_without_numbers_tokenised[-1])
+    remove_end_tokens = f"""
+    list_filter(token_rel_freq_arr,
+        (x,i) ->
+            not
+            (
+            i > len(token_rel_freq_arr) - 2
+            and
+            list_contains({end_tokens_as_array}, x.tok)
+            )
+    )
     """
 
     sql = f"""
-    with joined as
-    (
+    with
+
+    joined as (
         select *
     from {table_name}
     cross join common_end_tokens
-    )
+    ),
+
+    end_tokens_included as (
     select
-    * exclude (address_without_numbers_tokenised, end_tokens_to_remove),
+    * exclude (end_tokens_to_remove),
     original_address_concat,
-    case
-    when
-        ({penultimate_token_in_common_end_tokens} and {last_token_in_common_end_tokens})
-        then address_without_numbers_tokenised[:-3]
-    when {last_token_in_common_end_tokens}
-        then address_without_numbers_tokenised[:-2]
-    else address_without_numbers_tokenised
-    end
-    as address_without_numbers_tokenised,
-    case
-    when
-        ({penultimate_token_in_common_end_tokens} and {last_token_in_common_end_tokens})
-        then address_without_numbers_tokenised[-2:]
-    when {last_token_in_common_end_tokens}
-        then address_without_numbers_tokenised[-1:]
-    else address_without_numbers_tokenised[0:0]
-    end as common_end_tokens
+    list_filter(token_rel_freq_arr[-3:],
+        x ->  list_contains(end_tokens_to_remove, x.tok)
+    )
+    as common_end_tokens
     from joined
+    )
+
+    select
+        * exclude (token_rel_freq_arr),
+        {remove_end_tokens} as token_rel_freq_arr
+    from end_tokens_included
+
     """
 
     return duckdb.sql(sql)
