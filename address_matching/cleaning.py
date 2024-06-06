@@ -232,8 +232,6 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
         common_end_tokens,
         postcode,
 
-
-
     from {table_name}
     """
 

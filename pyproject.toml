@@ -9,7 +9,8 @@ include = ["address_matching/data/*.csv"]
 [tool.poetry.dependencies]
 python = "^3.10"
 setuptools = "^70.0.0"
-duckdb = "^0.10.3"
+duckdb = ">=0.10.3"
+splink = "^3.9.14"
 
 
 [tool.poetry.group.dev.dependencies]
