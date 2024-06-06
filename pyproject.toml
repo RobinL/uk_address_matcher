@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "address-matching"
+version = "0.0.1"
+description = ""
+authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
+readme = "README.md"
+include = ["address_matching/data/*.csv"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+setuptools = "^70.0.0"
+duckdb = ">=0.10.3"
+splink = "^3.9.14"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
