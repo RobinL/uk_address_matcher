@@ -112,7 +112,7 @@ def train_splink_model(df_1, df_2):
         "comparison_description": "Token relative frequency array",
     }
 
-    arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.0)
+    arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
 
     common_end_tokens_comparison = {
         "output_column_name": "common_end_tokens",
@@ -123,12 +123,12 @@ def train_splink_model(df_1, df_2):
                 "is_null_level": True,
             },
             {
-                "sql_condition": f"{arr_red_sql} < 1e-5",
-                "label_for_charts": "<1e-10",
+                "sql_condition": f"{arr_red_sql} < 1e-2",
+                "label_for_charts": "<1e-2",
             },
             {
-                "sql_condition": f"{arr_red_sql} < 1e-2",
-                "label_for_charts": "<1e-8",
+                "sql_condition": f"{arr_red_sql} < 0.5",
+                "label_for_charts": "<1e-2",
             },
             {"sql_condition": "ELSE", "label_for_charts": "All other comparisons"},
         ],
@@ -153,7 +153,6 @@ def train_splink_model(df_1, df_2):
         ],
         "retain_intermediate_calculation_columns": True,
         "source_dataset_column_name": "source_dataset",
-        # "additional_columns_to_retain": ["original_address_concat"],
     }
 
     linker = DuckDBLinker([df_1, df_2], settings)
@@ -166,16 +165,31 @@ def train_splink_model(df_1, df_2):
     comparisons = linker._settings_obj.comparisons
 
     # # Increase punishment for non-matching 'numeric' token
-    comparisons[0].comparison_levels[3].m_probability = 0.001
-    comparisons[0].comparison_levels[3].u_probability = 1.0
+    c = [c for c in comparisons if c._output_column_name == "common_end_tokens"][0]
+    c.comparison_levels[1].m_probability = 1.0
+    c.comparison_levels[1].u_probability = 0.2
+
+    c.comparison_levels[2].m_probability = 1.0
+    c.comparison_levels[2].u_probability = 0.5
+
+    c.comparison_levels[3].m_probability = 0.5
+    c.comparison_levels[3].u_probability = 1.0
+
+    # Reduce weights for common end tokens
+    c = [c for c in comparisons if c._output_column_name == "numeric_token_1"][0]
+    c.comparison_levels[3].m_probability = 0.001
+    c.comparison_levels[3].u_probability = 1.0
 
     # # Override the parameter estiamtes to null
     # #  to make sure the 'address concat' field has no effect on the model
-    comparisons[5].comparison_levels[1].m_probability = 0.5
-    comparisons[5].comparison_levels[1].u_probability = 0.5
+    c = [c for c in comparisons if c._output_column_name == "original_address_concat"][
+        0
+    ]
+    c.comparison_levels[1].m_probability = 0.5
+    c.comparison_levels[1].u_probability = 0.5
 
-    comparisons[5].comparison_levels[2].m_probability = 0.5
-    comparisons[5].comparison_levels[2].u_probability = 0.5
+    c.comparison_levels[2].m_probability = 0.5
+    c.comparison_levels[2].u_probability = 0.5
     display(linker.match_weights_chart())
 
     return linker
