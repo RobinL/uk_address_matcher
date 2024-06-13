@@ -1,0 +1,1 @@
+See https://www.openstreetmap.org/copyright
