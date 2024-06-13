@@ -1,7 +1,12 @@
 # Going to largely follow
 # https://github.com/moj-analytical-services/splink/discussions/2022
+import importlib.resources as pkg_resources
+import json
+
+import duckdb
 import splink.duckdb.comparison_level_library as cll
 import splink.duckdb.comparison_library as cl
+from duckdb import DuckDBPyRelation
 from splink.duckdb.blocking_rule_library import block_on
 from splink.duckdb.linker import DuckDBLinker
 
@@ -161,36 +166,35 @@ def train_splink_model(
         "comparison_description": "Array intersection",
     }
 
+    comparisons = [
+        num_1_comparison,
+        num_2_comparison,
+        num_3_comparison,
+        token_rel_freq_arr_comparison,
+        common_end_tokens_comparison,
+    ]
+
+    if retain_original_address_concat:
+        comparisons.append(cl.exact_match("original_address_concat"))
+
     settings = {
         "probability_two_random_records_match": 0.01,
         "link_type": "link_only",
         "blocking_rules_to_generate_predictions": [
             block_on(["postcode"], salting_partitions=10),
         ],
-        "comparisons": [
-            num_1_comparison,
-            num_2_comparison,
-            num_3_comparison,
-            token_rel_freq_arr_comparison,
-            common_end_tokens_comparison,
-            # This is not needed but makes a human readable form of the address appear
-            # in the comparison viewer dashboard
-        ],
+        "comparisons": comparisons,
         "retain_intermediate_calculation_columns": True,
         "source_dataset_column_name": "source_dataset",
         "additional_columns_to_retain": additional_columns_to_retain,
     }
 
-    if retain_original_address_concat:
-        settings["comparisons"].append(cl.exact_match("original_address_concat"))
-
     linker = DuckDBLinker([df_1, df_2], settings)
-    # cl.exact_match("original_address_concat").as_dict()
 
-    # Increase max_pairs to 1e7 or above for higher accuracy
     linker.estimate_u_using_random_sampling(max_pairs=max_pairs)
 
-    linker.estimate_m_from_label_column(label_colname)
+    if label_colname is not None:
+        linker.estimate_m_from_label_column(label_colname)
 
     comparisons = linker._settings_obj.comparisons
 
@@ -221,5 +225,31 @@ def train_splink_model(
 
         c.comparison_levels[2].m_probability = 0.5
         c.comparison_levels[2].u_probability = 0.5
+
+    return linker
+
+
+def get_pretrained_linker(dfs, precomputed_numeric_tf_table: DuckDBPyRelation = None):
+
+    with pkg_resources.path(
+        "address_matching.data", "splink_model.json"
+    ) as settings_path:
+
+        settings_as_dict = json.load(open(settings_path))
+
+        linker = DuckDBLinker(dfs, settings_dict=settings_as_dict)
+
+    if precomputed_numeric_tf_table is not None:
+        duckdb.register("numeric_token_freq", precomputed_numeric_tf_table)
+        for i in range(1, 4):
+
+            df_sql = f"""
+                select
+                    numeric_token as numeric_token_{i},
+                    tf_numeric_token as tf_numeric_token_{i}
+                from numeric_token_freq"""
+
+            df = duckdb.sql(df_sql).df()
+            linker.register_term_frequency_lookup(df, f"numeric_token_{i}")
 
     return linker
