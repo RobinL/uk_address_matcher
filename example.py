@@ -1,56 +1,65 @@
 import duckdb
 from IPython.display import display
 
-from address_matching.cleaning import (
-    add_term_frequencies_to_address_tokens,
-    clean_address_string_first_pass,
-    clean_address_string_second_pass,
-    final_column_order,
-    first_unusual_token,
-    move_common_end_tokens_to_field,
-    parse_out_numbers,
-    split_numeric_tokens_to_cols,
-    tokenise_address_without_numbers,
-    trim_whitespace_address_and_postcode,
-    upper_case_address_and_postcode,
-    use_first_unusual_token_if_no_numeric_token,
+from address_matching.cleaning_pipelines import (
+    clean_data_using_precomputed_rel_tok_freq,
 )
-from address_matching.run_pipeline import run_pipeline
-from address_matching.splink_model import train_splink_model
+from address_matching.splink_model import get_pretrained_linker, train_splink_model
 
-sql = f"""
-select *, address_concat as original_address_concat
-from read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
+# Address tables for cleaning
+sql = """
+SELECT *, address_concat AS original_address_concat
+FROM (
+    SELECT *, address_concat AS original_address_concat
+    FROM read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
+    order by postcode
+    LIMIT 100
+) AS companies_house
 UNION ALL
-select *, address_concat as original_address_concat
-from read_parquet('./example_data/fhrs_addresses_sample.parquet')
+SELECT *, address_concat AS original_address_concat
+FROM (
+    SELECT *, address_concat AS original_address_concat
+    FROM read_parquet('./example_data/fhrs_addresses_sample.parquet')
+    order by postcode
+    LIMIT 100
+) AS fhrs
+
 """
-df_unioned = duckdb.sql(sql)
-df_unioned.df()
-cleaning_queue = [
-    trim_whitespace_address_and_postcode,
-    upper_case_address_and_postcode,
-    clean_address_string_first_pass,
-    parse_out_numbers,
-    clean_address_string_second_pass,
-    split_numeric_tokens_to_cols,
-    tokenise_address_without_numbers,
-    add_term_frequencies_to_address_tokens,
-    move_common_end_tokens_to_field,
-    first_unusual_token,
-    use_first_unusual_token_if_no_numeric_token,
-    final_column_order,
-]
 
+address_table = duckdb.sql(sql)
 
-df_cleaned = run_pipeline(df_unioned, cleaning_queue, print_intermediate=False)
+# Load in pre-computed token frequencies.  This allows the model to operatre
+# even if your dataset is small/unrepresentative
+# Created using
+# .token_and_term_frequencies.get_address_token_frequencies_from_address_table
+path = "./rel_tok_freq.parquet"
+rel_tok_freq = duckdb.sql(f"SELECT token, rel_freq FROM read_parquet('{path}')")
 
-df_1 = df_cleaned.filter("source_dataset == 'companies_house'").df()
-df_2 = df_cleaned.filter("source_dataset == 'fhrs'").df()
+ddb_df = clean_data_using_precomputed_rel_tok_freq(
+    address_table, rel_tok_freq_table=rel_tok_freq
+)
 
-linker = train_splink_model(df_1, df_2)
+df_1 = ddb_df.filter("source_dataset == 'companies_house'").df()
+df_2 = ddb_df.filter("source_dataset == 'fhrs'").df()
 
-df_predict = linker.predict(threshold_match_probability=0.5)
+# Created using
+# .token_and_term_frequenciesget_numeric_term_frequencies_from_address_table
+path = "./numeric_token_tf_table.parquet"
+sql = f"""
+SELECT *
+FROM read_parquet('{path}')
+"""
+numeric_token_freq = duckdb.sql(sql)
+
+# If you want to train a model you can do this instead
+# linker = train_splink_model(df_1, df_2, retain_original_address_concat=True)
+
+linker = get_pretrained_linker(
+    [df_1, df_2], precomputed_numeric_tf_table=numeric_token_freq
+)
+linker.match_weights_chart()
+df_predict = linker.predict(threshold_match_probability=0.9)
+
 
 sql = f"""
 select
@@ -86,5 +95,7 @@ for rec in recs:
     print(rec["unique_id_r"], rec["original_address_concat_r"])
     display(linker.waterfall_chart([rec]))
 
-linker.comparison_viewer_dashboard("comparison_viewer_dashboard.html", overwrite=True)
+linker.comparison_viewer_dashboard(
+    df_predict, overwrite=True, out_path="comparison_viewer_dashboard.html"
+)
 linker.match_weights_chart().save("match_weights_chart.html")
