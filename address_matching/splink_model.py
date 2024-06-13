@@ -1,19 +1,34 @@
 # Going to largely follow
 # https://github.com/moj-analytical-services/splink/discussions/2022
+import importlib.resources as pkg_resources
+import json
+
+import duckdb
 import splink.duckdb.comparison_level_library as cll
 import splink.duckdb.comparison_library as cl
-from IPython.display import display
+from duckdb import DuckDBPyRelation
 from splink.duckdb.blocking_rule_library import block_on
 from splink.duckdb.linker import DuckDBLinker
 
 from .arr_comparisons import array_reduce_by_freq
 
 
-def train_splink_model(df_1, df_2):
+def train_splink_model(
+    df_1,
+    df_2,
+    additional_columns_to_retain=[],
+    label_colname=None,
+    max_pairs=1e6,
+    retain_original_address_concat=False,
+):
     num_1_comparison = {
         "output_column_name": "numeric_token_1",
         "comparison_levels": [
-            cll.null_level("numeric_token_1"),
+            {
+                "sql_condition": '"numeric_token_1_l" IS NULL AND "numeric_token_1_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
             {
                 "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
                 "label_for_charts": "Exact match",
@@ -23,8 +38,10 @@ def train_splink_model(df_1, df_2):
             {
                 "sql_condition": '"numeric_token_2_l" = "numeric_token_1_r"',
                 "label_for_charts": "Exact match inverted numbers",
-                "tf_adjustment_column": "numeric_token_1",
-                "tf_adjustment_weight": 1.0,
+            },
+            {
+                "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
+                "label_for_charts": "One null",
             },
             cll.else_level(),
         ],
@@ -34,7 +51,11 @@ def train_splink_model(df_1, df_2):
     num_2_comparison = {
         "output_column_name": "numeric_token_2",
         "comparison_levels": [
-            cll.null_level("numeric_token_2"),
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL AND "numeric_token_2_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
             {
                 "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
                 "label_for_charts": "Exact match",
@@ -44,8 +65,10 @@ def train_splink_model(df_1, df_2):
             {
                 "sql_condition": '"numeric_token_1_l" = "numeric_token_2_r"',
                 "label_for_charts": "Exact match inverted numbers",
-                "tf_adjustment_column": "numeric_token_2",
-                "tf_adjustment_weight": 1.0,
+            },
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
+                "label_for_charts": "One null",
             },
             cll.else_level(),
         ],
@@ -55,7 +78,11 @@ def train_splink_model(df_1, df_2):
     num_3_comparison = {
         "output_column_name": "numeric_token_3",
         "comparison_levels": [
-            cll.null_level("numeric_token_3"),
+            {
+                "sql_condition": '"numeric_token_3_l" IS NULL AND "numeric_token_3_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
             {
                 "sql_condition": '"numeric_token_3_l" = "numeric_token_3_r"',
                 "label_for_charts": "Exact match",
@@ -64,9 +91,13 @@ def train_splink_model(df_1, df_2):
             },
             {
                 "sql_condition": '"numeric_token_2_l" = "numeric_token_3_r"',
-                "label_for_charts": "Exact match 2",
+                "label_for_charts": "Exact match inverted",
                 "tf_adjustment_column": "numeric_token_3",
                 "tf_adjustment_weight": 1.0,
+            },
+            {
+                "sql_condition": '"numeric_token_3_l" IS NULL OR "numeric_token_3_r" IS NULL',
+                "label_for_charts": "One null",
             },
             cll.else_level(),
         ],
@@ -135,32 +166,35 @@ def train_splink_model(df_1, df_2):
         "comparison_description": "Array intersection",
     }
 
+    comparisons = [
+        num_1_comparison,
+        num_2_comparison,
+        num_3_comparison,
+        token_rel_freq_arr_comparison,
+        common_end_tokens_comparison,
+    ]
+
+    if retain_original_address_concat:
+        comparisons.append(cl.exact_match("original_address_concat"))
+
     settings = {
         "probability_two_random_records_match": 0.01,
         "link_type": "link_only",
         "blocking_rules_to_generate_predictions": [
             block_on(["postcode"], salting_partitions=10),
         ],
-        "comparisons": [
-            num_1_comparison,
-            num_2_comparison,
-            num_3_comparison,
-            token_rel_freq_arr_comparison,
-            common_end_tokens_comparison,
-            # This is not needed but makes a human readable form of the address appear
-            # in the comparison viewer dashboard
-            cl.exact_match("original_address_concat"),
-        ],
+        "comparisons": comparisons,
         "retain_intermediate_calculation_columns": True,
         "source_dataset_column_name": "source_dataset",
+        "additional_columns_to_retain": additional_columns_to_retain,
     }
 
     linker = DuckDBLinker([df_1, df_2], settings)
-    # cl.exact_match("original_address_concat").as_dict()
 
-    # Increase max_pairs to 1e7 or above for higher accuracy
-    linker.estimate_u_using_random_sampling(max_pairs=1e6)
-    # linker.estimate_parameters_using_expectation_maximisation(block_on("postcode"))
+    linker.estimate_u_using_random_sampling(max_pairs=max_pairs)
+
+    if label_colname is not None:
+        linker.estimate_m_from_label_column(label_colname)
 
     comparisons = linker._settings_obj.comparisons
 
@@ -180,16 +214,42 @@ def train_splink_model(df_1, df_2):
     c.comparison_levels[3].m_probability = 0.001
     c.comparison_levels[3].u_probability = 1.0
 
-    # # Override the parameter estiamtes to null
-    # #  to make sure the 'address concat' field has no effect on the model
-    c = [c for c in comparisons if c._output_column_name == "original_address_concat"][
-        0
-    ]
-    c.comparison_levels[1].m_probability = 0.5
-    c.comparison_levels[1].u_probability = 0.5
+    if retain_original_address_concat:
+        # # Override the parameter estiamtes to null
+        # #  to make sure the 'address concat' field has no effect on the model
+        c = [
+            c for c in comparisons if c._output_column_name == "original_address_concat"
+        ][0]
+        c.comparison_levels[1].m_probability = 0.5
+        c.comparison_levels[1].u_probability = 0.5
 
-    c.comparison_levels[2].m_probability = 0.5
-    c.comparison_levels[2].u_probability = 0.5
-    display(linker.match_weights_chart())
+        c.comparison_levels[2].m_probability = 0.5
+        c.comparison_levels[2].u_probability = 0.5
+
+    return linker
+
+
+def get_pretrained_linker(dfs, precomputed_numeric_tf_table: DuckDBPyRelation = None):
+
+    with pkg_resources.path(
+        "address_matching.data", "splink_model.json"
+    ) as settings_path:
+
+        settings_as_dict = json.load(open(settings_path))
+
+        linker = DuckDBLinker(dfs, settings_dict=settings_as_dict)
+
+    if precomputed_numeric_tf_table is not None:
+        duckdb.register("numeric_token_freq", precomputed_numeric_tf_table)
+        for i in range(1, 4):
+
+            df_sql = f"""
+                select
+                    numeric_token as numeric_token_{i},
+                    tf_numeric_token as tf_numeric_token_{i}
+                from numeric_token_freq"""
+
+            df = duckdb.sql(df_sql).df()
+            linker.register_term_frequency_lookup(df, f"numeric_token_{i}")
 
     return linker

@@ -12,6 +12,7 @@ from .regexes import (
     remove_repeated_tokens,
     replace_fwd_slash_with_dash,
     standarise_num_dash_num,
+    standarise_num_letter,
     trim,
 )
 
@@ -49,6 +50,7 @@ def clean_address_string_first_pass(table_name: str) -> DuckDBPyRelation:
             remove_multiple_spaces,
             replace_fwd_slash_with_dash,
             standarise_num_dash_num,
+            standarise_num_letter,
             move_flat_to_front,
             remove_repeated_tokens,
             trim,
@@ -122,21 +124,46 @@ def tokenise_address_without_numbers(table_name: str) -> DuckDBPyRelation:
     return duckdb.sql(sql)
 
 
-def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
-    # Compute relative term frequencies amongst the tokens
+def get_token_frequeny_table(table_name: str) -> DuckDBPyRelation:
     sql = f"""
-    WITH token_counts AS (
+    WITH concatenated_tokens AS (
+        SELECT
+            unique_id,
+            list_concat(
+                array_filter(
+                    [numeric_token_1, numeric_token_2, numeric_token_3],
+                    x -> x IS NOT NULL
+                ),
+                address_without_numbers_tokenised
+            ) AS all_tokens
+        FROM {table_name}
+    ),
+    unnested as (
+    SELECT
+            unnest(all_tokens) AS token
+            FROM concatenated_tokens
+    ),
+    token_counts AS (
         SELECT
             token,
-            count(*)  / sum(count(*)) OVER() as rel_freq
-        FROM (
-            SELECT
-                unnest(address_without_numbers_tokenised) as token
-            FROM {table_name}
-        )
+            count(*) AS count,
+             count(*)  / (select count(*) from unnested) rel_freq
+        from unnested
         GROUP BY token
-    ),
-    addresses_exploded AS (
+    )
+    SELECT
+        token, rel_freq
+    FROM token_counts
+    ORDER BY count DESC
+    """
+    return duckdb.sql(sql)
+
+
+def _tokens_with_freq_sql(
+    table_name: str, rel_tok_freq_name: str = "rel_tok_freq"
+) -> str:
+    return f"""
+     addresses_exploded AS (
         SELECT
             unique_id,
             unnest(address_without_numbers_tokenised) as token,
@@ -144,12 +171,11 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
         FROM {table_name}
     ),
     address_groups AS (
-        SELECT addresses_exploded.*, token_counts.rel_freq
+        SELECT addresses_exploded.*,
+        COALESCE({rel_tok_freq_name}.rel_freq, 0.001) AS rel_freq
         FROM addresses_exploded
-        LEFT JOIN token_counts
-        ON addresses_exploded.token = token_counts.token
-
-
+        LEFT JOIN {rel_tok_freq_name}
+        ON addresses_exploded.token = {rel_tok_freq_name}.token
     ),
     token_freq_lookup AS (
         SELECT
@@ -174,6 +200,37 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
         {table_name} as d
     INNER JOIN token_freq_lookup as r
     ON d.unique_id = r.unique_id
+    """
+
+
+def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
+    # Compute relative term frequencies amongst the tokens
+    sql = f"""
+    WITH rel_tok_freq_cte AS (
+        SELECT
+            token,
+            count(*)  / sum(count(*)) OVER() as rel_freq
+        FROM (
+            SELECT
+                unnest(address_without_numbers_tokenised) as token
+            FROM {table_name}
+        )
+        GROUP BY token
+    ),
+    {_tokens_with_freq_sql(table_name, rel_tok_freq_name="rel_tok_freq_cte")}
+    """
+
+    return duckdb.sql(sql)
+
+
+def add_term_frequencies_to_address_tokens_using_registered_df(
+    table_name: str,
+) -> DuckDBPyRelation:
+
+    sql = f"""
+    WITH
+
+    {_tokens_with_freq_sql(table_name)}
     """
 
     return duckdb.sql(sql)

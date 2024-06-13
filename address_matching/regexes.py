@@ -33,6 +33,12 @@ def trim(input: str):
     return f"trim({input})"
 
 
+def standarise_num_letter(input: str):
+    # Matches: number (1 to 4 digits) followed by any punctuation or space followed by a single letter (A-Z or a-z) and a space
+    # and replaces it with number followed directly by the letter and the space
+    return f"regexp_replace({input}, '(\\d{{1,4}})[\\s\\.,/-]([A-Za-z])\\s', '\\1\\2 ', 'g')"
+
+
 def move_flat_to_front(input: str):
     # Move reference to a 'flat + number' to the front of the string address string
     # e.g. FLAT 1
