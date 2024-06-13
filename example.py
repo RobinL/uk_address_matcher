@@ -32,7 +32,7 @@ address_table = duckdb.sql(sql)
 # even if your dataset is small/unrepresentative
 # Created using
 # .token_and_term_frequencies.get_address_token_frequencies_from_address_table
-path = "./rel_tok_freq.parquet"
+path = "./example_data/rel_tok_freq.parquet"
 rel_tok_freq = duckdb.sql(f"SELECT token, rel_freq FROM read_parquet('{path}')")
 
 ddb_df = clean_data_using_precomputed_rel_tok_freq(
@@ -44,7 +44,7 @@ df_2 = ddb_df.filter("source_dataset == 'fhrs'").df()
 
 # Created using
 # .token_and_term_frequenciesget_numeric_term_frequencies_from_address_table
-path = "./numeric_token_tf_table.parquet"
+path = "./example_data/numeric_token_tf_table.parquet"
 sql = f"""
 SELECT *
 FROM read_parquet('{path}')

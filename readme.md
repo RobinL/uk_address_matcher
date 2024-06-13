@@ -22,46 +22,52 @@ This step by step guide annotates the code in [the example](example.py).
 
 ## Step 1: Concat
 
-We first concat the two datasets:
+We first concat the two datasets.  We'll only take the first 100 records to make everything run fast
 
 ```
 sql = f"""
-select *, address_concat as original_address_concat
-from read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
+SELECT *, address_concat AS original_address_concat
+FROM (
+    SELECT *, address_concat AS original_address_concat
+    FROM read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
+    order by postcode
+    LIMIT 100
+) AS companies_house
 UNION ALL
-select *, address_concat as original_address_concat
-from read_parquet('./example_data/fhrs_addresses_sample.parquet')
+SELECT *, address_concat AS original_address_concat
+FROM (
+    SELECT *, address_concat AS original_address_concat
+    FROM read_parquet('./example_data/fhrs_addresses_sample.parquet')
+    order by postcode
+    LIMIT 100
+) AS fhrs
+
 """
 df_unioned = duckdb.sql(sql)
 ```
 
-The reason for this is because we're going to want to gather term frequcnies for each of the tokens in the address, and we want this to be based on the full dataset
-
 ## Step 1: Clean
 
-Next, we use `address_matching.cleaning` functions in a pipeline to clean up and standarise the data:
+Next, we use `address_matching.cleaning` functions in a pipeline to clean up and standarise the data.
+
+In this case, we're going to use a precomputed table of token frequencies.  There are two reasons you may wish to do this:
+1. You have a small dataset for matching, so token frequencies in your small sample are not representative of the global dataset
+2. You want to make the pipeline run faster
+
+You can use `address_matching.cleaning_pipelines.clean_data_on_the_fly` instead if you want to compute everything on the fly
 
 ```python
-cleaning_queue = [
-    trim_whitespace_address_and_postcode,
-    upper_case_address_and_postcode,
-    clean_address_string_first_pass,
-    parse_out_numbers,
-    clean_address_string_second_pass,
-    split_numeric_tokens_to_cols,
-    tokenise_address_without_numbers,
-    add_term_frequencies_to_address_tokens,
-    move_common_end_tokens_to_field,
-    first_unusual_token,
-    use_first_unusual_token_if_no_numeric_token,
-    final_column_order,
-]
+# Load in pre-computed token frequencies.  This allows the model to operatre
+# even if your dataset is small/unrepresentative
+# Created using
+# .token_and_term_frequencies.get_address_token_frequencies_from_address_table
+path = "./example_data/rel_tok_freq.parquet"
+rel_tok_freq = duckdb.sql(f"SELECT token, rel_freq FROM read_parquet('{path}')")
 
-
-df_cleaned = run_pipeline(df_unioned, cleaning_queue, print_intermediate=False)
+ddb_df = clean_data_using_precomputed_rel_tok_freq(
+    address_table, rel_tok_freq_table=rel_tok_freq
+)
 ```
-
-`run_pipeline` runs each function in a big CTE SQL query, so it's quite efficient.
 
 # Step 2: Split back into two dataset to put into splink
 
@@ -70,16 +76,37 @@ df_1 = df_cleaned.filter("source_dataset == 'companies_house'").df()
 df_2 = df_cleaned.filter("source_dataset == 'fhrs'").df()
 ```
 
-# Step 3: Train model
+# Step 3: Load in pretrained splink model
+
+First we're going to load in a precomputed table of token frequencies, for the same reason as above.
+
+```
+# Created using
+# .token_and_term_frequenciesget_numeric_term_frequencies_from_address_table
+path = "./example_data/numeric_token_tf_table.parquet"
+sql = f"""
+SELECT *
+FROM read_parquet('{path}')
+"""
+numeric_token_freq = duckdb.sql(sql)
+```
+
 
 ```python
-linker = train_splink_model(df_1, df_2)
+linker = get_pretrained_linker(
+    [df_1, df_2], precomputed_numeric_tf_table=numeric_token_freq
+)
 ```
+
+You can omit `precomputed_numeric_tf_table` if you want to compute on the fly.
+
+The linker object is a splink.linker object.  Refer to the [splink documentation](https://moj-analytical-services.github.io/splink/) for more information.
 
 # Step 4: Investigate results
 
+We now use Splink to predict matches and investigate results
+
 ```python
-linker = train_splink_model(df_1, df_2)
 
 df_predict = linker.predict(threshold_match_probability=0.5)
 
