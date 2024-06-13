@@ -152,7 +152,7 @@ def get_token_frequeny_table(table_name: str) -> DuckDBPyRelation:
         GROUP BY token
     )
     SELECT
-        token, count, rel_freq
+        token, rel_freq
     FROM token_counts
     ORDER BY count DESC
     """
