@@ -3,11 +3,13 @@ import string
 from typing import Callable, List, Optional
 
 import duckdb
-from duckdb import DuckDBPyRelation
+from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 
 def run_pipeline(
     df: DuckDBPyRelation,
+    *,
+    con: DuckDBPyConnection,
     cleaning_queue: List[Callable],
     print_intermediate: bool = False,
     filter_sql: Optional[str] = None,
@@ -41,12 +43,12 @@ def run_pipeline(
 
     random_hash = generate_random_hash()
     table_name = f"initial_table_{random_hash}"
-    duckdb.register(table_name, df)
+    con.register(table_name, df)
 
     for i, cleaning_function in enumerate(cleaning_queue):
-        df = cleaning_function(table_name)
+        df = cleaning_function(table_name, con)
         table_name = f"df_{i}_{random_hash}"
-        duckdb.register(table_name, df)
+        con.register(table_name, df)
         if print_intermediate:
             print(f"{'-'*20}\nApplying function: {cleaning_function.__name__}, result:")
             df_filtered = df.filter(filter_sql) if filter_sql else df

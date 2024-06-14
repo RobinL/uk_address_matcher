@@ -1,7 +1,7 @@
 import importlib.resources as pkg_resources
 
 import duckdb
-from duckdb import DuckDBPyRelation
+from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 from .regexes import (
     construct_nested_call,
@@ -17,7 +17,9 @@ from .regexes import (
 )
 
 
-def upper_case_address_and_postcode(table_name: str) -> DuckDBPyRelation:
+def upper_case_address_and_postcode(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (address_concat, postcode),
@@ -26,10 +28,12 @@ def upper_case_address_and_postcode(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def trim_whitespace_address_and_postcode(table_name: str) -> DuckDBPyRelation:
+def trim_whitespace_address_and_postcode(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (address_concat, postcode),
@@ -38,10 +42,12 @@ def trim_whitespace_address_and_postcode(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def clean_address_string_first_pass(table_name: str) -> DuckDBPyRelation:
+def clean_address_string_first_pass(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     fn_call = construct_nested_call(
         "address_concat",
         [
@@ -64,10 +70,10 @@ def clean_address_string_first_pass(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def parse_out_numbers(table_name: str) -> DuckDBPyRelation:
+def parse_out_numbers(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRelation:
     # Pattern to detect tokens with numbers in them inc e.g. 10A-20
 
     regex_pattern = r"\b(?:\d*[\w\-]*\d+[\w\-]*|\w(?:-\w)?)\b"
@@ -80,10 +86,12 @@ def parse_out_numbers(table_name: str) -> DuckDBPyRelation:
             AS numeric_tokens
         from {table_name}
         """
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def clean_address_string_second_pass(table_name: str) -> DuckDBPyRelation:
+def clean_address_string_second_pass(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     fn_call = construct_nested_call(
         "address_without_numbers",
         [remove_multiple_spaces, trim],
@@ -96,10 +104,12 @@ def clean_address_string_second_pass(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def split_numeric_tokens_to_cols(table_name: str) -> DuckDBPyRelation:
+def split_numeric_tokens_to_cols(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (numeric_tokens),
@@ -109,10 +119,12 @@ def split_numeric_tokens_to_cols(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def tokenise_address_without_numbers(table_name: str) -> DuckDBPyRelation:
+def tokenise_address_without_numbers(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (address_without_numbers),
@@ -121,10 +133,12 @@ def tokenise_address_without_numbers(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def get_token_frequeny_table(table_name: str) -> DuckDBPyRelation:
+def get_token_frequeny_table(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     WITH concatenated_tokens AS (
         SELECT
@@ -156,7 +170,7 @@ def get_token_frequeny_table(table_name: str) -> DuckDBPyRelation:
     FROM token_counts
     ORDER BY count DESC
     """
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
 def _tokens_with_freq_sql(
@@ -203,7 +217,9 @@ def _tokens_with_freq_sql(
     """
 
 
-def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
+def add_term_frequencies_to_address_tokens(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     # Compute relative term frequencies amongst the tokens
     sql = f"""
     WITH rel_tok_freq_cte AS (
@@ -220,11 +236,11 @@ def add_term_frequencies_to_address_tokens(table_name: str) -> DuckDBPyRelation:
     {_tokens_with_freq_sql(table_name, rel_tok_freq_name="rel_tok_freq_cte")}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
 def add_term_frequencies_to_address_tokens_using_registered_df(
-    table_name: str,
+    table_name: str, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
 
     sql = f"""
@@ -233,10 +249,10 @@ def add_term_frequencies_to_address_tokens_using_registered_df(
     {_tokens_with_freq_sql(table_name)}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def first_unusual_token(table_name: str) -> DuckDBPyRelation:
+def first_unusual_token(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRelation:
 
     # Get first below freq
     first_token = (
@@ -249,10 +265,12 @@ def first_unusual_token(table_name: str) -> DuckDBPyRelation:
     *
     from {table_name}
     """
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRelation:
+def use_first_unusual_token_if_no_numeric_token(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     sql = f"""
     select
         * exclude (numeric_token_1, token_rel_freq_arr, first_unusual_token),
@@ -270,10 +288,10 @@ def use_first_unusual_token_if_no_numeric_token(table_name: str) -> DuckDBPyRela
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def final_column_order(table_name: str) -> DuckDBPyRelation:
+def final_column_order(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRelation:
 
     sql = f"""
     select
@@ -292,10 +310,12 @@ def final_column_order(table_name: str) -> DuckDBPyRelation:
     from {table_name}
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
-def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
+def move_common_end_tokens_to_field(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
     # Want to put common tokens towards the end of the address
     # into their own field.  These tokens (e.g. SOMERSET or LONDON)
     # are often ommitted from so 'punishing' lack of agreement is probably
@@ -310,8 +330,8 @@ def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
         from read_csv_auto("{csv_path}")
         where token_count > 3000
         """
-    common_end_tokens = duckdb.sql(sql)
-    duckdb.register("common_end_tokens", common_end_tokens)
+    common_end_tokens = con.sql(sql)
+    con.register("common_end_tokens", common_end_tokens)
 
     end_tokens_as_array = """
     list_transform(common_end_tokens, x -> x.tok)
@@ -356,4 +376,4 @@ def move_common_end_tokens_to_field(table_name: str) -> DuckDBPyRelation:
 
     """
 
-    return duckdb.sql(sql)
+    return con.sql(sql)

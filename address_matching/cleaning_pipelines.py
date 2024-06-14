@@ -1,5 +1,5 @@
 import duckdb
-from duckdb import DuckDBPyRelation
+from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 from address_matching.cleaning import (
     add_term_frequencies_to_address_tokens,
@@ -19,7 +19,10 @@ from address_matching.cleaning import (
 from address_matching.run_pipeline import run_pipeline
 
 
-def clean_data_on_the_fly(address_table: DuckDBPyRelation) -> DuckDBPyRelation:
+def clean_data_on_the_fly(
+    address_table: DuckDBPyRelation,
+    con: DuckDBPyConnection,
+) -> DuckDBPyRelation:
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
         upper_case_address_and_postcode,
@@ -34,16 +37,18 @@ def clean_data_on_the_fly(address_table: DuckDBPyRelation) -> DuckDBPyRelation:
         use_first_unusual_token_if_no_numeric_token,
         final_column_order,
     ]
-    run_pipeline(address_table, cleaning_queue, print_intermediate=False)
+    run_pipeline(
+        address_table, con=con, cleaning_queue=cleaning_queue, print_intermediate=False
+    )
 
 
 def clean_data_using_precomputed_rel_tok_freq(
     address_table: DuckDBPyRelation,
+    con: DuckDBPyConnection,
     rel_tok_freq_table: DuckDBPyRelation,
 ) -> DuckDBPyRelation:
 
-    duckdb.register("rel_tok_freq", rel_tok_freq_table)
-
+    con.register("rel_tok_freq", rel_tok_freq_table)
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
         upper_case_address_and_postcode,
@@ -59,4 +64,6 @@ def clean_data_using_precomputed_rel_tok_freq(
         final_column_order,
     ]
 
-    return run_pipeline(address_table, cleaning_queue, print_intermediate=False)
+    return run_pipeline(
+        address_table, con=con, cleaning_queue=cleaning_queue, print_intermediate=False
+    )
