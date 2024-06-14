@@ -199,20 +199,21 @@ def train_splink_model(
     comparisons = linker._settings_obj.comparisons
 
     # # Increase punishment for non-matching 'numeric' token
-    c = [c for c in comparisons if c._output_column_name == "common_end_tokens"][0]
-    c.comparison_levels[1].m_probability = 1.0
-    c.comparison_levels[1].u_probability = 0.2
+    if label_colname is None:
+        c = [c for c in comparisons if c._output_column_name == "common_end_tokens"][0]
+        c.comparison_levels[1].m_probability = 1.0
+        c.comparison_levels[1].u_probability = 0.2
 
-    c.comparison_levels[2].m_probability = 1.0
-    c.comparison_levels[2].u_probability = 0.5
+        c.comparison_levels[2].m_probability = 1.0
+        c.comparison_levels[2].u_probability = 0.5
 
-    c.comparison_levels[3].m_probability = 0.5
-    c.comparison_levels[3].u_probability = 1.0
+        c.comparison_levels[3].m_probability = 0.5
+        c.comparison_levels[3].u_probability = 1.0
 
-    # Reduce weights for common end tokens
-    c = [c for c in comparisons if c._output_column_name == "numeric_token_1"][0]
-    c.comparison_levels[3].m_probability = 0.001
-    c.comparison_levels[3].u_probability = 1.0
+        # Reduce weights for common end tokens
+        c = [c for c in comparisons if c._output_column_name == "numeric_token_1"][0]
+        c.comparison_levels[3].m_probability = 0.001
+        c.comparison_levels[3].u_probability = 1.0
 
     if retain_original_address_concat:
         # # Override the parameter estiamtes to null

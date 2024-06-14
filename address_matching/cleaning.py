@@ -307,6 +307,18 @@ def final_column_order(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRela
         common_end_tokens,
         postcode,
 
+        * exclude (
+            unique_id,
+            source_dataset,
+            original_address_concat,
+            numeric_token_1,
+            numeric_token_2,
+            numeric_token_3,
+            token_rel_freq_arr,
+            common_end_tokens,
+            postcode
+                )
+
     from {table_name}
     """
 
@@ -361,7 +373,6 @@ def move_common_end_tokens_to_field(
     end_tokens_included as (
     select
     * exclude (end_tokens_to_remove),
-    original_address_concat,
     list_filter(token_rel_freq_arr[-3:],
         x ->  list_contains(end_tokens_to_remove, x.tok)
     )
