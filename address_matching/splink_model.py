@@ -19,7 +19,6 @@ def train_splink_model(
     additional_columns_to_retain=[],
     label_colname=None,
     max_pairs=1e6,
-    retain_original_address_concat=False,
 ):
     num_1_comparison = {
         "output_column_name": "numeric_token_1",
@@ -115,6 +114,26 @@ def train_splink_model(
                 "is_null_level": True,
             },
             {
+                "sql_condition": f"{arr_red_sql} < 1e-20",
+                "label_for_charts": "<1e-20",
+            },
+            {
+                "sql_condition": f"{arr_red_sql} < 1e-18",
+                "label_for_charts": "<1e-18",
+            },
+            {
+                "sql_condition": f"{arr_red_sql} < 1e-16",
+                "label_for_charts": "<1e-16",
+            },
+            {
+                "sql_condition": f"{arr_red_sql} < 1e-14",
+                "label_for_charts": "<1e-14",
+            },
+            {
+                "sql_condition": f"{arr_red_sql} < 1e-12",
+                "label_for_charts": "<1e-12",
+            },
+            {
                 "sql_condition": f"{arr_red_sql} < 1e-10",
                 "label_for_charts": "<1e-10",
             },
@@ -141,6 +160,31 @@ def train_splink_model(
             {"sql_condition": "ELSE", "label_for_charts": "All other comparisons"},
         ],
         "comparison_description": "Token relative frequency array",
+    }
+
+    tie_breaker = {
+        "output_column_name": "original_address_concat",
+        "comparison_levels": [
+            {
+                "sql_condition": '"original_address_concat_l" IS NULL OR "original_address_concat_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
+            {
+                "sql_condition": "original_address_concat_l = original_address_concat_r",
+                "label_for_charts": "Exact match",
+            },
+            {
+                "sql_condition": "levenshtein(original_address_concat_l, original_address_concat_r) < 3",
+                "label_for_charts": "Lev < 3",
+            },
+            {
+                "sql_condition": "levenshtein(original_address_concat_l, original_address_concat_r) < 10",
+                "label_for_charts": "Lev < 10",
+            },
+            cll.else_level(),
+        ],
+        "comparison_description": "numeric_token_3",
     }
 
     arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
@@ -172,10 +216,8 @@ def train_splink_model(
         num_3_comparison,
         token_rel_freq_arr_comparison,
         common_end_tokens_comparison,
+        tie_breaker,
     ]
-
-    if retain_original_address_concat:
-        comparisons.append(cl.exact_match("original_address_concat"))
 
     settings = {
         "probability_two_random_records_match": 0.01,
@@ -215,17 +257,25 @@ def train_splink_model(
         c.comparison_levels[3].m_probability = 0.001
         c.comparison_levels[3].u_probability = 1.0
 
-    if retain_original_address_concat:
-        # # Override the parameter estiamtes to null
-        # #  to make sure the 'address concat' field has no effect on the model
-        c = [
-            c for c in comparisons if c._output_column_name == "original_address_concat"
-        ][0]
-        c.comparison_levels[1].m_probability = 0.5
-        c.comparison_levels[1].u_probability = 0.5
+    # Tie breaker - small adjustments to match weights if there's nothing to distinguish
+    # except for leve distance in full adddress
+    c = [c for c in comparisons if c._output_column_name == "original_address_concat"][
+        0
+    ]
+    c.comparison_levels[1].m_probability = 0.9
+    c.comparison_levels[1].u_probability = 0.45
 
-        c.comparison_levels[2].m_probability = 0.5
-        c.comparison_levels[2].u_probability = 0.5
+    c.comparison_levels[2].m_probability = 0.9
+    c.comparison_levels[2].u_probability = 0.6
+
+    c.comparison_levels[3].m_probability = 0.9
+    c.comparison_levels[3].u_probability = 0.8
+
+    c.comparison_levels[3].m_probability = 0.9
+    c.comparison_levels[3].u_probability = 0.9
+
+    c.comparison_levels[4].m_probability = 0.45
+    c.comparison_levels[4].u_probability = 0.9
 
     return linker
 
