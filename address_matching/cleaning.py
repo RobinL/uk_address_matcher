@@ -297,7 +297,6 @@ def final_column_order(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRela
     select
         unique_id,
         source_dataset,
-        original_address_concat,
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
@@ -310,7 +309,6 @@ def final_column_order(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRela
         * exclude (
             unique_id,
             source_dataset,
-            original_address_concat,
             numeric_token_1,
             numeric_token_2,
             numeric_token_3,

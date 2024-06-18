@@ -37,7 +37,7 @@ def clean_data_on_the_fly(
         use_first_unusual_token_if_no_numeric_token,
         final_column_order,
     ]
-    run_pipeline(
+    return run_pipeline(
         address_table, con=con, cleaning_queue=cleaning_queue, print_intermediate=False
     )
 
