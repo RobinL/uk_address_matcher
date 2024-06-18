@@ -63,7 +63,6 @@ address_table = con.sql(sql)
 cleaned_addresses = clean_data_on_the_fly(address_table, con=con)
 
 
-# Convert to pandas dataframes to pass to Splink
 df_1 = cleaned_addresses.filter("source_dataset == 'companies_house'")
 df_2 = cleaned_addresses.filter("source_dataset == 'fhrs'")
 
@@ -130,6 +129,10 @@ cleaned_address_2 = clean_data_using_precomputed_rel_tok_freq(
     address_table, rel_tok_freq_table=rel_tok_freq, con=con
 )
 
+df_1_b = cleaned_address_2.filter("source_dataset == 'companies_house'")
+df_2_b = cleaned_address_2.filter("source_dataset == 'fhrs'")
+
+
 # Use pre-computed numeric token frequencies
 # Created using .token_and_term_frequenciesget_numeric_term_frequencies_from_address_table
 path = "./example_data/numeric_token_tf_table.parquet"
@@ -139,4 +142,7 @@ FROM read_parquet('{path}')
 """
 numeric_token_freq = duckdb.sql(sql)
 
-get_pretrained_linker([df_1, df_2], precomputed_numeric_tf_table=numeric_token_freq)
+linker2 = get_pretrained_linker(
+    [df_1_b, df_2_b], precomputed_numeric_tf_table=numeric_token_freq
+)
+linker2.predict(threshold_match_probability=0.9)
