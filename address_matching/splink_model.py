@@ -2,6 +2,7 @@
 # https://github.com/moj-analytical-services/splink/discussions/2022
 import importlib.resources as pkg_resources
 import json
+from typing import List
 
 import duckdb
 import splink.duckdb.comparison_level_library as cll
@@ -280,7 +281,9 @@ def train_splink_model(
     return linker
 
 
-def get_pretrained_linker(dfs, precomputed_numeric_tf_table: DuckDBPyRelation = None):
+def get_pretrained_linker(
+    dfs: List[DuckDBPyRelation], precomputed_numeric_tf_table: DuckDBPyRelation = None
+):
 
     with pkg_resources.path(
         "address_matching.data", "splink_model.json"
@@ -288,7 +291,9 @@ def get_pretrained_linker(dfs, precomputed_numeric_tf_table: DuckDBPyRelation = 
 
         settings_as_dict = json.load(open(settings_path))
 
-        linker = DuckDBLinker(dfs, settings_dict=settings_as_dict)
+        dfs_pd = [d.df() for d in dfs]
+
+        linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict)
 
     if precomputed_numeric_tf_table is not None:
         duckdb.register("numeric_token_freq", precomputed_numeric_tf_table)
