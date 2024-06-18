@@ -3,7 +3,6 @@ name = "address-matching"
 version = "0.0.1"
 description = ""
 authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
-readme = "README.md"
 include = ["address_matching/data/*.csv"]
 
 [tool.poetry.dependencies]
