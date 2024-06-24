@@ -257,7 +257,7 @@
                     "is_null_level": true
                 },
                 {
-                    "sql_condition": "regexp_replace(regexp_replace(original_address_concat_l, '[[:punct:]]', '', 'g'), '\\s+', ' ', 'g') = regexp_replace(regexp_replace(original_address_concat_l, '[[:punct:]]', '', 'g'), '\\s+', ' ', 'g')",
+                    "sql_condition": "regexp_replace(regexp_replace(original_address_concat_l, '[[:punct:]]', '', 'g'), '\\s+', ' ', 'g') = regexp_replace(regexp_replace(original_address_concat_r, '[[:punct:]]', '', 'g'), '\\s+', ' ', 'g')",
                     "label_for_charts": "Exact match",
                     "m_probability": 3,
                     "u_probability": 1

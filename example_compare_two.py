@@ -5,7 +5,7 @@ from IPython.display import display
 from address_matching.cleaning_pipelines import (
     clean_data_using_precomputed_rel_tok_freq,
 )
-from address_matching.display_results import display_columns, display_token_rel_freq
+from address_matching.display_results import display_l_r, display_token_rel_freq
 from address_matching.splink_model import get_pretrained_linker
 
 con = duckdb.connect(database=":memory:")
@@ -85,8 +85,7 @@ linker.query_sql(sql)
 for index, row in df_predict_pd.iterrows():
     row_as_df = pd.DataFrame([row])
 
-    display(display_columns(row_as_df, "_l"))
-    display(display_columns(row_as_df, "_r"))
+    display(display_l_r(row_as_df))
 
     display(display_token_rel_freq(row_as_df, "token_rel_freq_arr_l"))
     display(display_token_rel_freq(row_as_df, "token_rel_freq_arr_r"))
