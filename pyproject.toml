@@ -3,14 +3,12 @@ name = "address-matching"
 version = "0.0.1"
 description = ""
 authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
-include = ["address_matching/data/*.csv"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 setuptools = "^70.0.0"
 duckdb = ">=1.0.0"
 splink = "^3.9.15"
-
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.4"
@@ -19,3 +17,8 @@ ipykernel = "^6.29.4"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+include = [
+    "address_matching/data/address_token_frequencies.parquet",
+    "address_matching/data/numeric_token_frequencies.parquet",
+    "address_matching/data/common_end_tokens.csv.csv"
+]

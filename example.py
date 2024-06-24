@@ -2,8 +2,9 @@ import duckdb
 from IPython.display import display
 
 from address_matching.cleaning_pipelines import (
-    clean_data_on_the_fly,
+    clean_data_using_precomputed_rel_tok_freq,
 )
+from address_matching.display_results import distinguishability
 from address_matching.splink_model import get_pretrained_linker
 
 # -----------------------------------------------------------------------------
@@ -37,7 +38,6 @@ FROM (
     SELECT *
     FROM read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
     order by postcode
-    LIMIT 100
 ) AS companies_house
 UNION ALL
 SELECT *
@@ -45,7 +45,6 @@ FROM (
     SELECT *
     FROM read_parquet('./example_data/fhrs_addresses_sample.parquet')
     order by postcode
-    LIMIT 100
 ) AS fhrs
 
 """
@@ -59,19 +58,22 @@ address_table = con.sql(sql)
 
 
 # See notes at the end re:using precomputed term frequencies
-cleaned_addresses = clean_data_on_the_fly(address_table, con=con)
+cleaned_addresses = clean_data_using_precomputed_rel_tok_freq(address_table, con=con)
 
 
 df_1 = cleaned_addresses.filter("source_dataset == 'companies_house'")
 df_2 = cleaned_addresses.filter("source_dataset == 'fhrs'")
 
+print(df_1.count("*"))
+print(df_2.count("*"))
 
 # All dfs going in here are of type DuckDBPyRelation
 # See note at end re: using precomputed term frequencies
-linker = get_pretrained_linker([df_1, df_2])
+linker = get_pretrained_linker([df_1, df_2], con=con)
+linker.cumulative_num_comparisons_from_blocking_rules_chart()
 
-df_predict = linker.predict(threshold_match_probability=0.9)
-
+df_predict = linker.predict(threshold_match_probability=0.01)
+df_predict.as_pandas_dataframe(limit=2)
 
 # ------------------------------------------------------------------------------------
 # Step 3: Inspect the results:
@@ -97,11 +99,14 @@ res = linker.query_sql(sql)
 display(res)
 
 sql = f"""
-select * from {df_predict.physical_name}
-where match_weight > 0.5
-order by random()
-limit 3
+SELECT *
+FROM {df_predict.physical_name}
+WHERE match_weight > 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) = 1
+ORDER BY random()
+LIMIT 3
 """
+
 recs = linker.query_sql(sql).to_dict(orient="records")
 
 
@@ -111,12 +116,22 @@ for rec in recs:
     print(rec["unique_id_r"], rec["original_address_concat_r"])
     display(linker.waterfall_chart([rec]))
 
-# ------------------------------------------------------------------------------------
-# Alternative step 2: Using precomputed term frequency tables
-# ------------------------------------------------------------------------------------
 
-# Note that you have the option of passing in precomputed term frequcnies.
-# This is particularly important if you have a small dataset where toekn frequencies
-# will not be representative of the population
+# ------------------------------------------------------------------------------------
+# Step 4: Categorise
+# ------------------------------------------------------------------------------------
+offset = 0
+limit = 20
+distinguishability(linker, df_predict, human_readable=True).iloc[
+    offset : offset + limit
+]
 
-# See the example_precomputed_tf.py for an example of how to do this
+
+sql = f"""
+select * from {df_predict.physical_name}
+where match_weight > 0.0
+and postcode_l != postcode_r
+limit 3
+"""
+recs = linker.query_sql(sql).to_dict(orient="records")
+display(linker.waterfall_chart(recs))

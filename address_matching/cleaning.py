@@ -272,7 +272,7 @@ def _tokens_with_freq_sql(
     ),
     address_groups AS (
         SELECT addresses_exploded.*,
-        COALESCE({rel_tok_freq_name}.rel_freq, 0.001) AS rel_freq
+        COALESCE({rel_tok_freq_name}.rel_freq, 5e-5) AS rel_freq
         FROM addresses_exploded
         LEFT JOIN {rel_tok_freq_name}
         ON addresses_exploded.token = {rel_tok_freq_name}.token

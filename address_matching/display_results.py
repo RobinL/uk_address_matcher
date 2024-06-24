@@ -50,7 +50,7 @@ def distinguishability(
         distinguishability as (
             SELECT
                 *,
-                match_weight - coalesce(previous_match_weight, 1000) as disting
+                match_weight - coalesce(previous_match_weight, null) as disting
                 from second_place_match_weight
         )
         select
@@ -58,6 +58,7 @@ def distinguishability(
 
         from distinguishability
         {where_condition}
+        order by unique_id_l
 
     """
     return linker.query_sql(sql)

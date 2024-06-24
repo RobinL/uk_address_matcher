@@ -35,35 +35,29 @@ dataset_2_dict = [
         "address_concat": "11 spitfire court 243 high street birmingham",
         "postcode": "B12 0AB",
     },
+    {
+        "unique_id": "4",
+        "source_dataset": "dataset 2",
+        "address_concat": "flat A, 11 243 high street birmingham",
+        "postcode": "B12 1CD",
+    },
 ]
 
 dataset_2 = pd.DataFrame(dataset_2_dict)
 con.register("dataset_2", dataset_2)
 
-path = "./example_data/rel_tok_freq.parquet"
-rel_tok_freq = con.sql(f"SELECT token, rel_freq FROM read_parquet('{path}')")
+
+cleaned_1 = clean_data_using_precomputed_rel_tok_freq(dataset_1, con=con)
+cleaned_2 = clean_data_using_precomputed_rel_tok_freq(dataset_2, con=con)
 
 
-cleaned_1 = clean_data_using_precomputed_rel_tok_freq(
-    dataset_1, rel_tok_freq_table=rel_tok_freq, con=con
-)
-cleaned_2 = clean_data_using_precomputed_rel_tok_freq(
-    dataset_2, rel_tok_freq_table=rel_tok_freq, con=con
-)
+linker = get_pretrained_linker([cleaned_1, cleaned_2], con=con)
 
-
-path = "./example_data/numeric_token_tf_table.parquet"
-sql = f" SELECT * FROM read_parquet('{path}')"
-numeric_token_freq = con.sql(sql)
-
-linker = get_pretrained_linker(
-    [cleaned_1, cleaned_2], precomputed_numeric_tf_table=numeric_token_freq, con=con
-)
 
 df_predict = linker.predict()
 df_predict_pd = df_predict.as_pandas_dataframe()
 df_predict_pd = df_predict_pd.sort_values("match_probability", ascending=False)
-
+df_predict_pd
 sql_expr = (
     linker._settings_obj.comparisons[4]
     .comparison_levels[2]
