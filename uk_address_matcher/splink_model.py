@@ -12,6 +12,8 @@ def get_pretrained_linker(
     con: DuckDBPyConnection,
     precomputed_numeric_tf_table: DuckDBPyRelation = None,
     additional_columns_to_retain: List[str] = None,
+    salting_multiplier: int = None,
+    include_full_postcode_block=False,
 ):
     # Load the settings file
     with pkg_resources.path(
@@ -21,7 +23,29 @@ def get_pretrained_linker(
 
     if additional_columns_to_retain is not None:
         settings_as_dict["additional_columns_to_retain"] = additional_columns_to_retain
-    # Convert DuckDBPyRelations to pandas DataFrames
+
+    new_rules = []
+    for rule in settings_as_dict["blocking_rules_to_generate_predictions"]:
+        if not include_full_postcode_block:
+            if (
+                isinstance(rule, dict)
+                and rule["blocking_rule"] == "l.postcode = r.postcode"
+            ):
+                continue
+        if isinstance(rule, str):
+            new_rules.append(
+                {"blocking_rule": rule, "salting_partitions": salting_multiplier}
+            )
+        if isinstance(rule, dict):
+            new_rules.append(
+                {
+                    "blocking_rule": rule["blocking_rule"],
+                    "salting_partitions": rule["salting_partitions"]
+                    * salting_multiplier,
+                }
+            )
+        settings_as_dict["blocking_rules_to_generate_predictions"] = new_rules
+
     dfs_pd = [d.df() for d in dfs]
 
     # Initialize the linker
