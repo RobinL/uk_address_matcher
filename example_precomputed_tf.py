@@ -2,7 +2,7 @@ import duckdb
 from IPython.display import display
 
 from address_matching.cleaning_pipelines import (
-    clean_data_on_the_fly,
+    clean_data_using_precomputed_rel_tok_freq,
 )
 from address_matching.splink_model import get_pretrained_linker
 
@@ -58,24 +58,45 @@ address_table = con.sql(sql)
 # -----------------------------------------------------------------------------
 
 
-# See notes at the end re:using precomputed term frequencies
-cleaned_addresses = clean_data_on_the_fly(address_table, con=con)
+# You have the option of passing in precomputed term frequcnies.
+# This is particularly important if you have a small dataset where toekn frequencies
+# will not be representative of the population
+# This tf table is created using
+# .token_and_term_frequencies.get_address_token_frequencies_from_address_table
+path = "./example_data/rel_tok_freq.parquet"
+rel_tok_freq = con.sql(f"SELECT token, rel_freq FROM read_parquet('{path}')")
+
+# This is how you'd run data cleaning:
+cleaned_address_2 = clean_data_using_precomputed_rel_tok_freq(
+    address_table, rel_tok_freq_table=rel_tok_freq, con=con
+)
+
+df_1 = cleaned_address_2.filter("source_dataset == 'companies_house'")
+df_2 = cleaned_address_2.filter("source_dataset == 'fhrs'")
 
 
-df_1 = cleaned_addresses.filter("source_dataset == 'companies_house'")
-df_2 = cleaned_addresses.filter("source_dataset == 'fhrs'")
+# Use pre-computed numeric token frequencies
+# This tf table created using
+# .token_and_term_frequenciesget_numeric_term_frequencies_from_address_table
+path = "./example_data/numeric_token_tf_table.parquet"
+sql = f"""
+SELECT *
+FROM read_parquet('{path}')
+"""
+numeric_token_freq = con.sql(sql)
 
 
 # All dfs going in here are of type DuckDBPyRelation
 # See note at end re: using precomputed term frequencies
-linker = get_pretrained_linker([df_1, df_2])
-
+linker = get_pretrained_linker(
+    [df_1, df_2], precomputed_numeric_tf_table=numeric_token_freq, con=con
+)
 df_predict = linker.predict(threshold_match_probability=0.9)
-
 
 # ------------------------------------------------------------------------------------
 # Step 3: Inspect the results:
 # ------------------------------------------------------------------------------------
+
 
 sql = f"""
 select
@@ -110,13 +131,3 @@ for rec in recs:
     print(rec["unique_id_l"], rec["original_address_concat_l"])
     print(rec["unique_id_r"], rec["original_address_concat_r"])
     display(linker.waterfall_chart([rec]))
-
-# ------------------------------------------------------------------------------------
-# Alternative step 2: Using precomputed term frequency tables
-# ------------------------------------------------------------------------------------
-
-# Note that you have the option of passing in precomputed term frequcnies.
-# This is particularly important if you have a small dataset where toekn frequencies
-# will not be representative of the population
-
-# See the example_precomputed_tf.py for an example of how to do this
