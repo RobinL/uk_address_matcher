@@ -1,4 +1,4 @@
-# A first stab at address matching using Splink
+# Matching UK addresses using Splink
 
 This repo contains generic code for address matching using a pre-trained Splink model.
 
