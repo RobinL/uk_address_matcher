@@ -31,6 +31,19 @@ def upper_case_address_and_postcode(
     return con.sql(sql)
 
 
+def derive_original_address_concat(
+    table_name: str, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    sql = f"""
+    SELECT
+        *,
+        address_concat AS original_address_concat
+    FROM {table_name}
+    """
+
+    return con.sql(sql)
+
+
 def trim_whitespace_address_and_postcode(
     table_name: str, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
@@ -95,7 +108,7 @@ def parse_out_flat_positional(
     sql = f"""
     SELECT
         *,
-        regexp_extract(address_concat, '{regex_pattern}', 1) AS flat_positional
+        NULLIF(regexp_extract(address_concat, '{regex_pattern}', 1),'') AS flat_positional
     FROM {table_name}
     """
     return con.sql(sql)

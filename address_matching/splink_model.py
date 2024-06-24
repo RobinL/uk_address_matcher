@@ -282,7 +282,9 @@ def train_splink_model(
 
 
 def get_pretrained_linker(
-    dfs: List[DuckDBPyRelation], precomputed_numeric_tf_table: DuckDBPyRelation = None
+    dfs: List[DuckDBPyRelation],
+    precomputed_numeric_tf_table: DuckDBPyRelation = None,
+    con: duckdb.DuckDBPyConnection = None,
 ):
 
     with pkg_resources.path(
@@ -293,10 +295,15 @@ def get_pretrained_linker(
 
         dfs_pd = [d.df() for d in dfs]
 
-        linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict)
+        if con:
+            linker = DuckDBLinker(
+                dfs_pd, settings_dict=settings_as_dict, connection=con
+            )
+        else:
+            linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict)
 
     if precomputed_numeric_tf_table is not None:
-        duckdb.register("numeric_token_freq", precomputed_numeric_tf_table)
+
         for i in range(1, 4):
 
             df_sql = f"""
@@ -305,7 +312,9 @@ def get_pretrained_linker(
                     tf_numeric_token as tf_numeric_token_{i}
                 from numeric_token_freq"""
 
-            df = duckdb.sql(df_sql).df()
-            linker.register_term_frequency_lookup(df, f"numeric_token_{i}")
+            df = con.sql(df_sql).df()
+            linker.register_term_frequency_lookup(
+                df, f"numeric_token_{i}", overwrite=True
+            )
 
     return linker
