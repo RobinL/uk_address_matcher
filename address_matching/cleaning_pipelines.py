@@ -1,4 +1,3 @@
-import duckdb
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 from address_matching.cleaning import (
@@ -6,10 +5,14 @@ from address_matching.cleaning import (
     add_term_frequencies_to_address_tokens_using_registered_df,
     clean_address_string_first_pass,
     clean_address_string_second_pass,
+    derive_original_address_concat,
+    extract_numeric_1_alt,
     final_column_order,
     first_unusual_token,
     move_common_end_tokens_to_field,
+    parse_out_flat_positional,
     parse_out_numbers,
+    separate_unusual_tokens,
     split_numeric_tokens_to_cols,
     tokenise_address_without_numbers,
     trim_whitespace_address_and_postcode,
@@ -27,6 +30,9 @@ def clean_data_on_the_fly(
         trim_whitespace_address_and_postcode,
         upper_case_address_and_postcode,
         clean_address_string_first_pass,
+        derive_original_address_concat,
+        parse_out_flat_positional,
+        extract_numeric_1_alt,
         parse_out_numbers,
         clean_address_string_second_pass,
         split_numeric_tokens_to_cols,
@@ -35,6 +41,7 @@ def clean_data_on_the_fly(
         move_common_end_tokens_to_field,
         first_unusual_token,
         use_first_unusual_token_if_no_numeric_token,
+        separate_unusual_tokens,
         final_column_order,
     ]
     return run_pipeline(
@@ -53,6 +60,9 @@ def clean_data_using_precomputed_rel_tok_freq(
         trim_whitespace_address_and_postcode,
         upper_case_address_and_postcode,
         clean_address_string_first_pass,
+        derive_original_address_concat,
+        parse_out_flat_positional,
+        extract_numeric_1_alt,
         parse_out_numbers,
         clean_address_string_second_pass,
         split_numeric_tokens_to_cols,
@@ -61,6 +71,7 @@ def clean_data_using_precomputed_rel_tok_freq(
         move_common_end_tokens_to_field,
         first_unusual_token,
         use_first_unusual_token_if_no_numeric_token,
+        separate_unusual_tokens,
         final_column_order,
     ]
 
