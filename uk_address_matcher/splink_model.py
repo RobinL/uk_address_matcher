@@ -11,6 +11,7 @@ def get_pretrained_linker(
     *,
     con: DuckDBPyConnection,
     precomputed_numeric_tf_table: DuckDBPyRelation = None,
+    additional_columns_to_retain: List[str] = None,
 ):
     # Load the settings file
     with pkg_resources.path(
@@ -18,6 +19,8 @@ def get_pretrained_linker(
     ) as settings_path:
         settings_as_dict = json.load(open(settings_path))
 
+    if additional_columns_to_retain is not None:
+        settings_as_dict["additional_columns_to_retain"] = additional_columns_to_retain
     # Convert DuckDBPyRelations to pandas DataFrames
     dfs_pd = [d.df() for d in dfs]
 
