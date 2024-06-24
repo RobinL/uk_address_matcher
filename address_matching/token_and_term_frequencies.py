@@ -1,5 +1,5 @@
 import duckdb
-from duckdb import DuckDBPyRelation
+from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 from address_matching.cleaning import (
     clean_address_string_first_pass,
@@ -16,6 +16,7 @@ from address_matching.run_pipeline import run_pipeline
 
 def get_numeric_term_frequencies_from_address_table(
     df_address_table: DuckDBPyRelation,
+    con: duckdb.DuckDBPyConnection,
 ) -> DuckDBPyRelation:
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
@@ -25,9 +26,12 @@ def get_numeric_term_frequencies_from_address_table(
     ]
 
     numeric_tokens_df = run_pipeline(
-        df_address_table, cleaning_queue, print_intermediate=False
+        df_address_table,
+        cleaning_queue=cleaning_queue,
+        print_intermediate=False,
+        con=con,
     )
-    duckdb.register("numeric_tokens_df", numeric_tokens_df)
+    con.register("numeric_tokens_df", numeric_tokens_df)
 
     # For splink, table needs to be in the format
     # numeric_token__2, tf_numeric_token_2_l
@@ -44,11 +48,11 @@ def get_numeric_term_frequencies_from_address_table(
     order by 2 desc
 
     """
-    return duckdb.sql(sql)
+    return con.sql(sql)
 
 
 def get_address_token_frequencies_from_address_table(
-    df_address_table: DuckDBPyRelation,
+    df_address_table: DuckDBPyRelation, con: duckdb.DuckDBPyConnection
 ):
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
@@ -61,4 +65,9 @@ def get_address_token_frequencies_from_address_table(
         get_token_frequeny_table,
     ]
 
-    return run_pipeline(df_address_table, cleaning_queue, print_intermediate=False)
+    return run_pipeline(
+        df_address_table,
+        cleaning_queue=cleaning_queue,
+        print_intermediate=False,
+        con=con,
+    )
