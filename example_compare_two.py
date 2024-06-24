@@ -64,12 +64,22 @@ df_predict = linker.predict()
 df_predict_pd = df_predict.as_pandas_dataframe()
 df_predict_pd = df_predict_pd.sort_values("match_probability", ascending=False)
 
-sql = (
+sql_expr = (
     linker._settings_obj.comparisons[4]
     .comparison_levels[2]
     .sql_condition.replace(" < 1e-18", "")
 )
 
+sql = f"""
+select {sql_expr} as token_rel_product,
+array_transform(token_rel_freq_arr_l, x -> x.tok) as toks_l,
+array_transform(token_rel_freq_arr_r, x -> x.tok) as toks_r,
+original_address_concat_l as ad_l,
+original_address_concat_r as ad_r
+
+from {df_predict.physical_name}
+"""
+linker.query_sql(sql)
 
 # Assuming df_predict_pd is your DataFrame and linker is your object with waterfall_chart method
 for index, row in df_predict_pd.iterrows():
