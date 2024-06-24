@@ -38,6 +38,7 @@ FROM (
     SELECT *
     FROM read_parquet('./example_data/companies_house_addresess_postcode_overlap.parquet')
     order by postcode
+    limit 100
 ) AS companies_house
 UNION ALL
 SELECT *
@@ -45,6 +46,7 @@ FROM (
     SELECT *
     FROM read_parquet('./example_data/fhrs_addresses_sample.parquet')
     order by postcode
+    limit 100
 ) AS fhrs
 
 """
