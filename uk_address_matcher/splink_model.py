@@ -14,7 +14,7 @@ def get_pretrained_linker(
 ):
     # Load the settings file
     with pkg_resources.path(
-        "address_matching.data", "splink_model.json"
+        "uk_address_matcher.data", "splink_model.json"
     ) as settings_path:
         settings_as_dict = json.load(open(settings_path))
 
@@ -27,7 +27,7 @@ def get_pretrained_linker(
     # Load the default term frequency table if none is provided
     if precomputed_numeric_tf_table is None:
         with pkg_resources.path(
-            "address_matching.data", "numeric_token_frequencies.parquet"
+            "uk_address_matcher.data", "numeric_token_frequencies.parquet"
         ) as default_tf_path:
             precomputed_numeric_tf_table = con.read_parquet(str(default_tf_path))
 

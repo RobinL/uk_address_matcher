@@ -1,4 +1,4 @@
-# add one directory up to cwd so we can see the address_matching package
+# add one directory up to cwd so we can see the uk_address_matcher package
 import sys
 
 import duckdb
@@ -6,7 +6,7 @@ import duckdb
 sys.path.append("..")
 
 
-from address_matching.cleaning import (
+from uk_address_matcher.cleaning import (
     clean_address_string_first_pass,
     clean_address_string_second_pass,
     parse_out_numbers,
@@ -15,7 +15,7 @@ from address_matching.cleaning import (
     trim_whitespace_address_and_postcode,
     upper_case_address_and_postcode,
 )
-from address_matching.run_pipeline import run_pipeline
+from uk_address_matcher.run_pipeline import run_pipeline
 
 path = "../fhrs_companies_house/BasicCompanyDataAsOneFile-2024-05-01.csv"
 sql = f"""

@@ -10,7 +10,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from IPython.display import display
 
-from address_matching.token_and_term_frequencies import (
+from uk_address_matcher.token_and_term_frequencies import (
     get_address_token_frequencies_from_address_table,
     get_numeric_term_frequencies_from_address_table,
 )

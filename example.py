@@ -1,11 +1,11 @@
 import duckdb
 from IPython.display import display
 
-from address_matching.cleaning_pipelines import (
+from uk_address_matcher.cleaning_pipelines import (
     clean_data_using_precomputed_rel_tok_freq,
 )
-from address_matching.display_results import distinguishability
-from address_matching.splink_model import get_pretrained_linker
+from uk_address_matcher.display_results import distinguishability
+from uk_address_matcher.splink_model import get_pretrained_linker
 
 # -----------------------------------------------------------------------------
 # Step 1: Load in some example data

@@ -2,7 +2,7 @@ import importlib.resources as pkg_resources
 
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
-from address_matching.cleaning import (
+from uk_address_matcher.cleaning import (
     add_term_frequencies_to_address_tokens,
     add_term_frequencies_to_address_tokens_using_registered_df,
     clean_address_string_first_pass,
@@ -21,7 +21,7 @@ from address_matching.cleaning import (
     upper_case_address_and_postcode,
     use_first_unusual_token_if_no_numeric_token,
 )
-from address_matching.run_pipeline import run_pipeline
+from uk_address_matcher.run_pipeline import run_pipeline
 
 
 def clean_data_on_the_fly(
@@ -60,7 +60,7 @@ def clean_data_using_precomputed_rel_tok_freq(
     # Load the default term frequency table if none is provided
     if rel_tok_freq_table is None:
         with pkg_resources.path(
-            "address_matching.data", "address_token_frequencies.parquet"
+            "uk_address_matcher.data", "address_token_frequencies.parquet"
         ) as default_tf_path:
             rel_tok_freq_table = con.read_parquet(str(default_tf_path))
 

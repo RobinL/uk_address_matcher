@@ -1,7 +1,7 @@
 import duckdb
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
-from address_matching.cleaning import (
+from uk_address_matcher.cleaning import (
     clean_address_string_first_pass,
     clean_address_string_second_pass,
     get_token_frequeny_table,
@@ -11,7 +11,7 @@ from address_matching.cleaning import (
     trim_whitespace_address_and_postcode,
     upper_case_address_and_postcode,
 )
-from address_matching.run_pipeline import run_pipeline
+from uk_address_matcher.run_pipeline import run_pipeline
 
 
 def get_numeric_term_frequencies_from_address_table(

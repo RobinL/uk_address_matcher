@@ -415,7 +415,7 @@ def move_common_end_tokens_to_field(
     # not necessary
 
     with pkg_resources.path(
-        "address_matching.data", "common_end_tokens.csv"
+        "uk_address_matcher.data", "common_end_tokens.csv"
     ) as csv_path:
         sql = f"""
         select array_agg(token) as end_tokens_to_remove

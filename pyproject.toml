@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "uk_address_matcher"
-version = "0.0.1.dev"
+version = "0.0.1.dev2"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
 license = "MIT"
@@ -20,7 +20,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 include = [
-    "address_matching/data/address_token_frequencies.parquet",
-    "address_matching/data/numeric_token_frequencies.parquet",
-    "address_matching/data/common_end_tokens.csv"
+    "uk_address_matcher/data/address_token_frequencies.parquet",
+    "uk_address_matcher/data/numeric_token_frequencies.parquet",
+    "uk_address_matcher/data/common_end_tokens.csv"
 ]
