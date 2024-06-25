@@ -1,5 +1,6 @@
 import importlib.resources as pkg_resources
 import json
+import re
 import time
 from typing import List
 
@@ -84,6 +85,7 @@ def _performance_predict(
     additional_columns_to_retain: List[str] = None,
     output_all_cols: bool = True,
     include_full_postcode_block=True,
+    full_block=False,
 ):
     # Load the settings file
     with pkg_resources.path(
@@ -152,6 +154,7 @@ def _performance_predict(
                 (select max(source_dataset) from {tf_table.physical_name})
             ),
     __splink__df_blocked as (
+            -- start_blocking
             select
             "l"."source_dataset" AS "source_dataset_l", "r"."source_dataset" AS "source_dataset_r", "l"."unique_id" AS "unique_id_l", "r"."unique_id" AS "unique_id_r"
             , '0' as match_key
@@ -416,11 +419,29 @@ def _performance_predict(
              where 1=1
             AND NOT (coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and list_extract(l.unusual_tokens_arr, 2) = list_extract(r.unusual_tokens_arr, 2) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 2) and list_extract(l.unusual_tokens_arr, 2) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 2) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and l.postcode = r.postcode),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and l.postcode = r.postcode),false) OR coalesce((list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 2) and l.postcode = r.postcode),false) OR coalesce((list_extract(l.very_unusual_tokens_arr, 1) = list_extract(r.very_unusual_tokens_arr, 1) and l.numeric_token_1 = r.numeric_token_1),false) OR coalesce((list_extract(l.very_unusual_tokens_arr, 1) = list_extract(r.very_unusual_tokens_arr, 2) and l.numeric_token_1 = r.numeric_token_1),false) OR coalesce((l.numeric_token_2 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_token_2 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = list_extract(r.unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_token_2 = r.numeric_token_2 and l.postcode = r.postcode),false) OR coalesce((l.numeric_token_1 = r.numeric_1_alt and l.postcode = r.postcode),false) OR coalesce((l.numeric_1_alt = r.numeric_token_1 and l.postcode = r.postcode),false) OR coalesce((l.numeric_token_1 = r.numeric_1_alt and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_1_alt = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_1_alt and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_1_alt = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)),false) OR coalesce((list_extract(l.extremely_unusual_tokens_arr, 1) = list_extract(r.extremely_unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)),false))
             {pc_blocking_rule}
+            -- end_blocking
             )
 
     select *, ceiling(random() * 8) as _salt_block from __splink__df_blocked)
     """
+    if full_block:
+        # replace text between the -- start_blocking  line and the -- end_blocking line
+        # with 1=1
+        replace = """
 
+        select
+            "l"."source_dataset" AS "source_dataset_l", "r"."source_dataset" AS "source_dataset_r", "l"."unique_id" AS "unique_id_l", "r"."unique_id" AS "unique_id_r"
+            , '1' as match_key
+
+            from __splink__df_concat_with_tf_left as l
+            inner join __splink__df_concat_with_tf_right as r
+            on 1=1
+        """
+        sql = re.sub(
+            r"(?s)-- start_blocking.*?-- end_blocking",
+            replace,
+            sql,
+        )
     start_time = time.time()
     linker._con.sql(sql)
     end_time = time.time()
