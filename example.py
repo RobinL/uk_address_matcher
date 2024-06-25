@@ -52,7 +52,7 @@ df_2_c = clean_data_using_precomputed_rel_tok_freq(df_2, con=con)
 # All dfs going in here are of type DuckDBPyRelation
 # See note at end re: using precomputed term frequencies
 linker = get_pretrained_linker(
-    [df_1_c, df_2_c], con=con, include_full_postcode_block=True
+    [df_1_c, df_2_c], con=con, include_full_postcode_block=True, salting_multiplier=2
 )
 linker.cumulative_num_comparisons_from_blocking_rules_chart()
 
