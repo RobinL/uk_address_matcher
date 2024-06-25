@@ -15,7 +15,9 @@ Refer to [the example](example.py), which has detailed comments, for how to matc
 See [an example of comparing two addresses](example_compare_two.py) to get a sense of what it does/how it scores
 
 Run an interactive example in your browser:
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RobinL/uk_address_matcher/blob/main/match_example_data.ipynb):  Match 5,000 FHRS records to 21,952 companies house records in < 10 seconds.
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RobinL/uk_address_matcher/blob/main/interactive_comparison.ipynb): Investigate and understand how the model works
 
 
