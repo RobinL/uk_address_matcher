@@ -435,17 +435,32 @@ def _performance_predict(
     if additional_columns_to_retain:
         additional_cols_expr = ", ".join(
             [
-                f"l.{col} as {col}_l, r.col as {col}_r"
+                f"l.{col} as {col}_l, r.{col} as {col}_r"
                 for col in additional_columns_to_retain
             ]
         )
+        additional_cols_expr_2 = ", ".join(
+            [f"{col}_l, {col}_r" for col in additional_columns_to_retain]
+        )
     else:
         additional_cols_expr = ""
+        additional_cols_expr_2 = ""
 
     if output_all_cols:
         final_select_expr = "*"
     else:
         final_select_expr = "match_probability, match_weight, concat_ws(' ', original_address_concat_l, postcode_l) as address_l, concat_ws(' ', original_address_concat_r, postcode_r) as address_r, unique_id_l, unique_id_r,  source_dataset_l, source_dataset_r"
+
+    if match_weight_threshold:
+        qualify_expr = f"""
+
+        QUALIFY
+        rank() OVER (PARTITION BY unique_id_l ORDER BY CASE WHEN {match_weight_condition} THEN match_weight ELSE NULL END DESC) <= 1
+        and  max(match_weight) over (partition by unique_id_l) > {match_weight_threshold}
+        """
+    else:
+        qualify_expr = ""
+
     sql = f"""
     create or replace table predictions as (
     WITH __splink__df_concat_with_tf as (select * from {tf_table.physical_name}),
@@ -594,7 +609,8 @@ def _performance_predict(
             ),
             (p, q) -> p * q
         )
-        < 1e-2 THEN 1 ELSE 0 END as gamma_common_end_tokens,"original_address_concat_l","original_address_concat_r",CASE WHEN "original_address_concat_l" IS NULL OR "original_address_concat_r" IS NULL THEN -1 WHEN regexp_replace(regexp_replace(original_address_concat_l, '[[:punct:]]', '', 'g'), '\s+', ' ', 'g') = regexp_replace(regexp_replace(original_address_concat_r, '[[:punct:]]', '', 'g'), '\s+', ' ', 'g') THEN 3 WHEN levenshtein(original_address_concat_l, original_address_concat_r) < 3 THEN 2 WHEN levenshtein(original_address_concat_l, original_address_concat_r) < 10 THEN 1 ELSE 0 END as gamma_original_address_concat,"postcode_l","postcode_r",CASE WHEN "postcode_l" IS NULL AND "postcode_r" IS NULL THEN -1 WHEN postcode_l = postcode_r THEN 5 WHEN levenshtein(postcode_l, postcode_r) <= 1 THEN 4 WHEN levenshtein(postcode_l, postcode_r) <= 2 THEN 3 WHEN split_part(postcode_l, ' ', 1) = split_part(postcode_l, ' ', 1) THEN 2 WHEN split_part(postcode_l, ' ', 2) = split_part(postcode_l, ' ', 2) THEN 1 ELSE 0 END as gamma_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key
+        < 1e-2 THEN 1 ELSE 0 END as gamma_common_end_tokens,"original_address_concat_l","original_address_concat_r",CASE WHEN "original_address_concat_l" IS NULL OR "original_address_concat_r" IS NULL THEN -1 WHEN regexp_replace(regexp_replace(original_address_concat_l, '[[:punct:]]', '', 'g'), '\s+', ' ', 'g') = regexp_replace(regexp_replace(original_address_concat_r, '[[:punct:]]', '', 'g'), '\s+', ' ', 'g') THEN 3 WHEN levenshtein(original_address_concat_l, original_address_concat_r) < 3 THEN 2 WHEN levenshtein(original_address_concat_l, original_address_concat_r) < 10 THEN 1 ELSE 0 END as gamma_original_address_concat,"postcode_l","postcode_r",CASE WHEN "postcode_l" IS NULL AND "postcode_r" IS NULL THEN -1 WHEN postcode_l = postcode_r THEN 5 WHEN levenshtein(postcode_l, postcode_r) <= 1 THEN 4 WHEN levenshtein(postcode_l, postcode_r) <= 2 THEN 3 WHEN split_part(postcode_l, ' ', 1) = split_part(postcode_l, ' ', 1) THEN 2 WHEN split_part(postcode_l, ' ', 2) = split_part(postcode_l, ' ', 2) THEN 1 ELSE 0 END as gamma_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key,
+        {additional_cols_expr_2}
         from __reusable
         ),
     __splink__df_match_weight_parts as (
@@ -852,23 +868,23 @@ def _performance_predict(
     WHEN
     gamma_postcode = 0
     THEN cast(0.015625 as float8)
-    END as bf_postcode ,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key
+    END as bf_postcode ,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key,
+    {additional_cols_expr_2}
         from __splink__df_comparison_vectors
         ),
         s_predictions as (
         select
         log2(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode) as match_weight,
         (cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)/(1+(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)) as match_probability,
-        "source_dataset_l","source_dataset_r","unique_id_l","unique_id_r","flat_positional_l","flat_positional_r",gamma_flat_positional,bf_flat_positional,"numeric_token_1_l","numeric_token_1_r","numeric_1_alt_l","numeric_1_alt_r","numeric_token_2_l","numeric_token_2_r",gamma_numeric_token_1,"tf_numeric_token_1_l","tf_numeric_token_1_r",bf_numeric_token_1,bf_tf_adj_numeric_token_1,gamma_numeric_token_2,"tf_numeric_token_2_l","tf_numeric_token_2_r",bf_numeric_token_2,bf_tf_adj_numeric_token_2,"numeric_token_3_l","numeric_token_3_r",gamma_numeric_token_3,"tf_numeric_token_3_l","tf_numeric_token_3_r",bf_numeric_token_3,bf_tf_adj_numeric_token_3,"token_rel_freq_arr_l","token_rel_freq_arr_r",gamma_token_rel_freq_arr,bf_token_rel_freq_arr,"common_end_tokens_l","common_end_tokens_r",gamma_common_end_tokens,bf_common_end_tokens,"original_address_concat_l","original_address_concat_r",gamma_original_address_concat,bf_original_address_concat,"postcode_l","postcode_r",gamma_postcode,bf_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key
+        "source_dataset_l","source_dataset_r","unique_id_l","unique_id_r","flat_positional_l","flat_positional_r",gamma_flat_positional,bf_flat_positional,"numeric_token_1_l","numeric_token_1_r","numeric_1_alt_l","numeric_1_alt_r","numeric_token_2_l","numeric_token_2_r",gamma_numeric_token_1,"tf_numeric_token_1_l","tf_numeric_token_1_r",bf_numeric_token_1,bf_tf_adj_numeric_token_1,gamma_numeric_token_2,"tf_numeric_token_2_l","tf_numeric_token_2_r",bf_numeric_token_2,bf_tf_adj_numeric_token_2,"numeric_token_3_l","numeric_token_3_r",gamma_numeric_token_3,"tf_numeric_token_3_l","tf_numeric_token_3_r",bf_numeric_token_3,bf_tf_adj_numeric_token_3,"token_rel_freq_arr_l","token_rel_freq_arr_r",gamma_token_rel_freq_arr,bf_token_rel_freq_arr,"common_end_tokens_l","common_end_tokens_r",gamma_common_end_tokens,bf_common_end_tokens,"original_address_concat_l","original_address_concat_r",gamma_original_address_concat,bf_original_address_concat,"postcode_l","postcode_r",gamma_postcode,bf_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key,
+        {additional_cols_expr_2}
         from __splink__df_match_weight_parts
 
     )
     SELECT
-        {final_select_expr},
-        rank() OVER (PARTITION BY unique_id_l ORDER BY CASE WHEN {match_weight_condition} THEN match_weight ELSE NULL END DESC) AS rn,
-        max(match_weight) over (partition by unique_id_l) as max_mw
+        {final_select_expr}
     FROM s_predictions
-    QUALIFY rn <= 1 and  max_mw > {match_weight_threshold}
+    {qualify_expr}
 
 
     )
