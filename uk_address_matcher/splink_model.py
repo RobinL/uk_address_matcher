@@ -77,8 +77,9 @@ def get_pretrained_linker(
 
 
 def _performance_predict(
-    dfs: List[DuckDBPyRelation],
     *,
+    df_addresses_to_match: DuckDBPyRelation,
+    df_addresses_to_search_within: DuckDBPyRelation,
     con: DuckDBPyConnection,
     precomputed_numeric_tf_table: DuckDBPyRelation = None,
     match_weight_threshold: None,
@@ -93,7 +94,9 @@ def _performance_predict(
     ) as settings_path:
         settings_as_dict = json.load(open(settings_path))
 
-    dfs_pd = [d.df() for d in dfs]
+    dfs_pd = [df_addresses_to_match.df(), df_addresses_to_search_within.df()]
+    left_source_dataset = dfs_pd[0].iloc[0]["source_dataset"]
+    right_source_dataset = dfs_pd[1].iloc[0]["source_dataset"]
 
     # Initialize the linker
     linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict, connection=con)
@@ -145,13 +148,11 @@ def _performance_predict(
     WITH __splink__df_concat_with_tf as (select * from {tf_table.physical_name}),
     __splink__df_concat_with_tf_left as (
             select * from __splink__df_concat_with_tf
-            where source_dataset =
-                (select min(source_dataset) from {tf_table.physical_name})
+            where source_dataset = '{left_source_dataset}'
             ),
     __splink__df_concat_with_tf_right as (
             select * from __splink__df_concat_with_tf
-            where source_dataset =
-                (select max(source_dataset) from {tf_table.physical_name})
+            where source_dataset = '{right_source_dataset}'
             ),
     __splink__df_blocked as (
             -- start_blocking
@@ -448,11 +449,6 @@ def _performance_predict(
     elapsed_time = end_time - start_time
     print(f"Time taken to block: {elapsed_time:.2f} seconds")
 
-    if match_weight_threshold:
-        match_weight_condition = f"match_weight > {match_weight_threshold}"
-    else:
-        match_weight_condition = "1=1"
-
     if additional_columns_to_retain:
         additional_cols_expr = ", ".join(
             [
@@ -473,10 +469,15 @@ def _performance_predict(
         final_select_expr = "match_probability, match_weight, concat_ws(' ', original_address_concat_l, postcode_l) as address_l, concat_ws(' ', original_address_concat_r, postcode_r) as address_r, unique_id_l, unique_id_r,  source_dataset_l, source_dataset_r"
 
     if match_weight_threshold:
+        match_weight_condition = f"case when match_weight > {match_weight_threshold} then 1 else 0 end as match_weight_cond"
+    else:
+        match_weight_condition = "1 as match_weight_cond"
+
+    if match_weight_threshold:
         qualify_expr = f"""
 
         QUALIFY
-        rank() OVER (PARTITION BY unique_id_l ORDER BY CASE WHEN {match_weight_condition} THEN match_weight ELSE NULL END DESC) <= 1
+        rank() OVER (PARTITION BY unique_id_l ORDER BY match_weight_cond desc) <= 1
         and  max(match_weight) over (partition by unique_id_l) > {match_weight_threshold}
         """
     else:
@@ -487,13 +488,13 @@ def _performance_predict(
     WITH __splink__df_concat_with_tf as (select * from {tf_table.physical_name}),
     __splink__df_concat_with_tf_left as (
             select * from __splink__df_concat_with_tf
-            where source_dataset =
-                (select min(source_dataset) from {tf_table.physical_name})
+            where source_dataset = '{left_source_dataset}'
+
             ),
     __splink__df_concat_with_tf_right as (
             select * from __splink__df_concat_with_tf
-            where source_dataset =
-                (select max(source_dataset) from {tf_table.physical_name})
+            where source_dataset = '{right_source_dataset}'
+
             ),
     __splink__df_blocked as (
     select  "l"."source_dataset" AS "source_dataset_l", "r"."source_dataset" AS "source_dataset_r", "l"."unique_id" AS "unique_id_l", "r"."unique_id" AS "unique_id_r", "l"."flat_positional" AS "flat_positional_l", "r"."flat_positional" AS "flat_positional_r", "l"."numeric_token_1" AS "numeric_token_1_l", "r"."numeric_token_1" AS "numeric_token_1_r", "l"."tf_numeric_token_1" AS "tf_numeric_token_1_l", "r"."tf_numeric_token_1" AS "tf_numeric_token_1_r", "l"."numeric_1_alt" AS "numeric_1_alt_l", "r"."numeric_1_alt" AS "numeric_1_alt_r", "l"."numeric_token_2" AS "numeric_token_2_l", "r"."numeric_token_2" AS "numeric_token_2_r", "l"."tf_numeric_token_2" AS "tf_numeric_token_2_l", "r"."tf_numeric_token_2" AS "tf_numeric_token_2_r", "l"."numeric_token_3" AS "numeric_token_3_l", "r"."numeric_token_3" AS "numeric_token_3_r", "l"."tf_numeric_token_3" AS "tf_numeric_token_3_l", "r"."tf_numeric_token_3" AS "tf_numeric_token_3_r", "l"."token_rel_freq_arr" AS "token_rel_freq_arr_l", "r"."token_rel_freq_arr" AS "token_rel_freq_arr_r", "l"."common_end_tokens" AS "common_end_tokens_l", "r"."common_end_tokens" AS "common_end_tokens_r", "l"."original_address_concat" AS "original_address_concat_l", "r"."original_address_concat" AS "original_address_concat_r", "l"."postcode" AS "postcode_l", "r"."postcode" AS "postcode_r", "l"."extremely_unusual_tokens_arr" AS "extremely_unusual_tokens_arr_l", "r"."extremely_unusual_tokens_arr" AS "extremely_unusual_tokens_arr_r", "l"."very_unusual_tokens_arr" AS "very_unusual_tokens_arr_l", "r"."very_unusual_tokens_arr" AS "very_unusual_tokens_arr_r", "l"."unusual_tokens_arr" AS "unusual_tokens_arr_l", "r"."unusual_tokens_arr" AS "unusual_tokens_arr_r", b.match_key as match_key,
@@ -893,24 +894,27 @@ def _performance_predict(
     {additional_cols_expr_2}
         from __splink__df_comparison_vectors
         ),
-        s_predictions as (
-        select
-        log2(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode) as match_weight,
-        (cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)/(1+(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)) as match_probability,
-        "source_dataset_l","source_dataset_r","unique_id_l","unique_id_r","flat_positional_l","flat_positional_r",gamma_flat_positional,bf_flat_positional,"numeric_token_1_l","numeric_token_1_r","numeric_1_alt_l","numeric_1_alt_r","numeric_token_2_l","numeric_token_2_r",gamma_numeric_token_1,"tf_numeric_token_1_l","tf_numeric_token_1_r",bf_numeric_token_1,bf_tf_adj_numeric_token_1,gamma_numeric_token_2,"tf_numeric_token_2_l","tf_numeric_token_2_r",bf_numeric_token_2,bf_tf_adj_numeric_token_2,"numeric_token_3_l","numeric_token_3_r",gamma_numeric_token_3,"tf_numeric_token_3_l","tf_numeric_token_3_r",bf_numeric_token_3,bf_tf_adj_numeric_token_3,"token_rel_freq_arr_l","token_rel_freq_arr_r",gamma_token_rel_freq_arr,bf_token_rel_freq_arr,"common_end_tokens_l","common_end_tokens_r",gamma_common_end_tokens,bf_common_end_tokens,"original_address_concat_l","original_address_concat_r",gamma_original_address_concat,bf_original_address_concat,"postcode_l","postcode_r",gamma_postcode,bf_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key,
-        {additional_cols_expr_2}
-        from __splink__df_match_weight_parts
+    s_predictions as (
+    select
+    log2(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode) as match_weight,
+    (cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)/(1+(cast(3.0000000900000026e-08 as float8) * bf_flat_positional * bf_numeric_token_1 * bf_tf_adj_numeric_token_1 * bf_numeric_token_2 * bf_tf_adj_numeric_token_2 * bf_numeric_token_3 * bf_tf_adj_numeric_token_3 * bf_token_rel_freq_arr * bf_common_end_tokens * bf_original_address_concat * bf_postcode)) as match_probability,
+    "source_dataset_l","source_dataset_r","unique_id_l","unique_id_r","flat_positional_l","flat_positional_r",gamma_flat_positional,bf_flat_positional,"numeric_token_1_l","numeric_token_1_r","numeric_1_alt_l","numeric_1_alt_r","numeric_token_2_l","numeric_token_2_r",gamma_numeric_token_1,"tf_numeric_token_1_l","tf_numeric_token_1_r",bf_numeric_token_1,bf_tf_adj_numeric_token_1,gamma_numeric_token_2,"tf_numeric_token_2_l","tf_numeric_token_2_r",bf_numeric_token_2,bf_tf_adj_numeric_token_2,"numeric_token_3_l","numeric_token_3_r",gamma_numeric_token_3,"tf_numeric_token_3_l","tf_numeric_token_3_r",bf_numeric_token_3,bf_tf_adj_numeric_token_3,"token_rel_freq_arr_l","token_rel_freq_arr_r",gamma_token_rel_freq_arr,bf_token_rel_freq_arr,"common_end_tokens_l","common_end_tokens_r",gamma_common_end_tokens,bf_common_end_tokens,"original_address_concat_l","original_address_concat_r",gamma_original_address_concat,bf_original_address_concat,"postcode_l","postcode_r",gamma_postcode,bf_postcode,"extremely_unusual_tokens_arr_l","extremely_unusual_tokens_arr_r","very_unusual_tokens_arr_l","very_unusual_tokens_arr_r","unusual_tokens_arr_l","unusual_tokens_arr_r",match_key,
+    {additional_cols_expr_2}
+    from __splink__df_match_weight_parts
 
-    )
+    ),
+    __splink__df_predictions as (
+     select *, {match_weight_condition} from s_predictions
+     )
     SELECT
         {final_select_expr}
-    FROM s_predictions
+    FROM __splink__df_predictions
     {qualify_expr}
 
 
     )
         """
-
+    print(match_weight_condition)
     start_time = time.time()
     linker._con.sql(sql)
     end_time = time.time()

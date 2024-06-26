@@ -1,7 +1,11 @@
 import duckdb
 import pandas as pd
-from IPython.display import display
 
+from uk_address_matcher.analyse_results import (
+    distinguishability_by_id,
+    distinguishability_summary,
+    distinguishability_table,
+)
 from uk_address_matcher.cleaning_pipelines import (
     clean_data_using_precomputed_rel_tok_freq,
 )
@@ -35,9 +39,13 @@ pd.options.display.max_colwidth = 1000
 # the example
 p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
 p_fhrs = "./example_data/fhrs_addresses_sample.parquet"
+
+
 con = duckdb.connect(database=":memory:")
-df_1 = con.read_parquet(p_ch).order("postcode")
-df_2 = con.read_parquet(p_fhrs).order("postcode")
+
+
+df_ch = con.read_parquet(p_ch).order("postcode")
+df_fhrs = con.read_parquet(p_fhrs).order("postcode")
 
 
 # -----------------------------------------------------------------------------
@@ -45,61 +53,27 @@ df_2 = con.read_parquet(p_fhrs).order("postcode")
 # -----------------------------------------------------------------------------
 
 
-# See notes at the end re:using precomputed term frequencies
-df_1_c = clean_data_using_precomputed_rel_tok_freq(df_1, con=con)
-df_2_c = clean_data_using_precomputed_rel_tok_freq(df_2, con=con)
+df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
+df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
 
 
 linker, predictions = _performance_predict(
-    [df_1_c, df_2_c],
+    df_addresses_to_match=df_fhrs_clean,
+    df_addresses_to_search_within=df_ch_clean,
     con=con,
-    match_weight_threshold=-10,
+    match_weight_threshold=2,
     output_all_cols=True,
     include_full_postcode_block=True,
 )
 
-# ------------------------------------------------------------------------------------
-# Step 3: Inspect the results:
-# ------------------------------------------------------------------------------------
 
-sql = """
-SELECT
-    match_probability,
-    match_weight,
-    concat_ws(' ', original_address_concat_l, postcode_l) AS address_l,
-    concat_ws(' ', original_address_concat_r, postcode_r) AS address_r,
-    unique_id_l,
-    unique_id_r,
-    source_dataset_l,
-    source_dataset_r
-FROM
-    predictions
-WHERE
-    match_weight > 0
-QUALIFY
-    row_number() OVER (
-        PARTITION BY unique_id_l ORDER BY match_weight DESC
-    ) = 1
-
-"""
-
-top_predict = con.sql(sql).df()
-
-display(top_predict.head())
+dbyid = distinguishability_by_id(predictions, df_fhrs_clean, con).df()
 
 
-sql = """
-SELECT * FROM predictions WHERE match_weight > 0
-QUALIFY row_number() OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) = 1
-order by random()
-limit 3
-"""
+distinguishability_summary(
+    df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
+)
 
-recs = con.sql(sql).df().to_dict(orient="records")
-
-
-for rec in recs:
-    print("-" * 80)
-    print(rec["unique_id_l"], rec["original_address_concat_l"])
-    print(rec["unique_id_r"], rec["original_address_concat_r"])
-    display(linker.waterfall_chart([rec]))
+distinguishability_table(
+    df_predict=predictions, human_readable=True, best_match_only=False
+)
