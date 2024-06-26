@@ -49,18 +49,25 @@ def get_pretrained_linker(
             )
         settings_as_dict["blocking_rules_to_generate_predictions"] = new_rules
 
-    df_addresses_to_match_pd = df_addresses_to_match.df()
-    df_addresses_to_match_pd["source_dataset"] = (
-        "0_" + df_addresses_to_match_pd["source_dataset"]
-    )
-    df_addresses_to_search_within_pd = df_addresses_to_search_within.df()
-    df_addresses_to_search_within_pd["source_dataset"] = (
-        "_1" + df_addresses_to_search_within_pd["source_dataset"]
-    )
+    sql = f"""
+    select * exclude (source_dataset),
+    '0_' || source_dataset as source_dataset
+    from df_addresses_to_match
+    """
+    df_addresses_to_match_fix = con.sql(sql)
+    con.register("df_addresses_to_match_fix", df_addresses_to_match_fix)
+
+    sql = f"""
+    select * exclude (source_dataset),
+    '1_' || source_dataset as source_dataset
+    from df_addresses_to_search_within
+    """
+    df_addresses_to_search_within_fix = con.sql(sql)
+    con.register("df_addresses_to_search_within_fix", df_addresses_to_search_within_fix)
 
     # Initialize the linker
     linker = DuckDBLinker(
-        [df_addresses_to_match_pd, df_addresses_to_search_within_pd],
+        ["df_addresses_to_match_fix", "df_addresses_to_search_within_fix"],
         settings_dict=settings_as_dict,
         connection=con,
     )
