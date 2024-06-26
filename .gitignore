@@ -1,3 +1,4 @@
+*.wal
 *.ddb
 uk_address_matcher/splink_model_os.py
 del_*
