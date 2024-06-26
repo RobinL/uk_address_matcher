@@ -1,3 +1,5 @@
+*.ddb
+uk_address_matcher/splink_model_os.py
 del_*
 train_bu.py
 domestic-E07000223-Adur/

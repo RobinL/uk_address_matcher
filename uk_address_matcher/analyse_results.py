@@ -76,7 +76,6 @@ def distinguishability_table(
         when distinguishability = 0 then '{next_label_value}: Distinguishability = 0'
         else '99: error, uncategorised'
         end as distinguishability_category
-
         from distinguishability
 
         )
