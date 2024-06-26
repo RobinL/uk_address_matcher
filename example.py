@@ -1,10 +1,12 @@
 import duckdb
 from IPython.display import display
 
+from uk_address_matcher.analyse_results import (
+    distinguishability_summary,
+)
 from uk_address_matcher.cleaning_pipelines import (
     clean_data_using_precomputed_rel_tok_freq,
 )
-from uk_address_matcher.display_results import distinguishability
 from uk_address_matcher.splink_model import get_pretrained_linker
 
 # -----------------------------------------------------------------------------
@@ -32,11 +34,12 @@ from uk_address_matcher.splink_model import get_pretrained_linker
 # Remove the limit statements to run the full dataset, the limit is just to speed up
 # the example
 con = duckdb.connect(database=":memory:")
-p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
 p_fhrs = "./example_data/fhrs_addresses_sample.parquet"
-con = duckdb.connect(database=":memory:")
-df_1 = con.read_parquet(p_ch).order("postcode").limit(100)
-df_2 = con.read_parquet(p_fhrs).order("postcode").limit(100)
+p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
+
+
+df_fhrs = con.read_parquet(p_fhrs).order("postcode").limit(100)
+df_ch = con.read_parquet(p_ch).order("postcode").limit(100)
 
 
 # -----------------------------------------------------------------------------
@@ -45,14 +48,18 @@ df_2 = con.read_parquet(p_fhrs).order("postcode").limit(100)
 
 
 # See notes at the end re:using precomputed term frequencies
-df_1_c = clean_data_using_precomputed_rel_tok_freq(df_1, con=con)
-df_2_c = clean_data_using_precomputed_rel_tok_freq(df_2, con=con)
+df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con).limit(100)
+df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con).limit(100)
 
 
 # All dfs going in here are of type DuckDBPyRelation
 # See note at end re: using precomputed term frequencies
 linker = get_pretrained_linker(
-    [df_1_c, df_2_c], con=con, include_full_postcode_block=True, salting_multiplier=2
+    df_addresses_to_match=df_fhrs_clean,
+    df_addresses_to_search_within=df_ch_clean,
+    con=con,
+    include_full_postcode_block=True,
+    salting_multiplier=2,
 )
 linker.cumulative_num_comparisons_from_blocking_rules_chart()
 
@@ -104,8 +111,8 @@ for rec in recs:
 # ------------------------------------------------------------------------------------
 # Step 4: Categorise by distinguishability
 # ------------------------------------------------------------------------------------
-offset = 0
-limit = 20
-distinguishability(linker, df_predict, human_readable=True).iloc[
-    offset : offset + limit
-]
+predictions_as_ddb = con.table(df_predict.physical_name)
+
+distinguishability_summary(
+    df_predict=predictions_as_ddb, df_addresses_to_match=df_fhrs_clean, con=con
+)

@@ -40,7 +40,8 @@ cleaned_1 = clean_data_using_precomputed_rel_tok_freq(dataset_1, con=con)
 cleaned_2 = clean_data_using_precomputed_rel_tok_freq(dataset_2, con=con)
 
 linker, predictions = _performance_predict(
-    [cleaned_1, cleaned_2],
+    df_addresses_to_match=cleaned_1,
+    df_addresses_to_search_within=cleaned_2,
     con=con,
     match_weight_threshold=-10,
     output_all_cols=True,

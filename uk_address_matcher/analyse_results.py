@@ -194,6 +194,7 @@ def distinguishability_summary(
     df_addresses_to_match: DuckDBPyRelation,
     con: DuckDBPyConnection,
     disinguishability_thresholds=[1, 5, 10],
+    group_by_match_weight_bins=False,
 ):
     d_list_cat = distinguishability_by_id(
         df_predict, df_addresses_to_match, con, disinguishability_thresholds
@@ -201,14 +202,40 @@ def distinguishability_summary(
     con.register("d_list_cat", d_list_cat)
 
     sql = """
-
     select
         distinguishability_category,
         count(*) as count,
-        count(*)/sum(count(*)) over() as proportion
-
+        printf('%.2f%%', 100*count(*)/sum(count(*)) over()) as percentage
     from d_list_cat
     group by distinguishability_category
     order by distinguishability_category asc
     """
+
+    if group_by_match_weight_bins:
+
+        sql = """
+        WITH a AS (
+            SELECT
+                *,
+                CASE
+                    WHEN match_weight < -20 tHEN '00. mw < -20'
+                    WHEN match_weight >= -20 AND match_weight < -10 THEN '01. -20 to -10'
+                    WHEN match_weight >= -10 AND match_weight < 0 THEN '02. -10 to 0'
+                    WHEN match_weight >= 0 AND match_weight < 10 THEN '03. 0 to 10'
+                    WHEN match_weight >= 10 AND match_weight < 20 THEN '04. 10 to 20'
+                    WHEN match_weight >= 20 THEN '05. mw > 20'
+                    ELSE 'Unknown'
+                END AS match_weight_bin_label
+            FROM d_list_cat
+        )
+        SELECT
+            distinguishability_category,
+            match_weight_bin_label,
+            COUNT(*) AS count,
+            printf('%.2f%%', 100.0 * COUNT(*) / (SELECT COUNT(*) FROM a)) AS percentage
+        FROM a
+        GROUP BY distinguishability_category, match_weight_bin_label
+        ORDER BY distinguishability_category ASC, match_weight_bin_label DESC
+        """
+
     return con.sql(sql)

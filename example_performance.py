@@ -2,9 +2,7 @@ import duckdb
 import pandas as pd
 
 from uk_address_matcher.analyse_results import (
-    distinguishability_by_id,
     distinguishability_summary,
-    distinguishability_table,
 )
 from uk_address_matcher.cleaning_pipelines import (
     clean_data_using_precomputed_rel_tok_freq,
@@ -61,19 +59,24 @@ linker, predictions = _performance_predict(
     df_addresses_to_match=df_fhrs_clean,
     df_addresses_to_search_within=df_ch_clean,
     con=con,
-    match_weight_threshold=2,
+    match_weight_threshold=-5,
     output_all_cols=True,
     include_full_postcode_block=True,
 )
 
 
-dbyid = distinguishability_by_id(predictions, df_fhrs_clean, con).df()
+# -----------------------------------------------------------------------------
+# Step 2: Get summary results of the match rate
+# -----------------------------------------------------------------------------
 
 
 distinguishability_summary(
     df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
 )
 
-distinguishability_table(
-    df_predict=predictions, human_readable=True, best_match_only=False
+distinguishability_summary(
+    df_predict=predictions,
+    df_addresses_to_match=df_fhrs_clean,
+    con=con,
+    group_by_match_weight_bins=10,
 )

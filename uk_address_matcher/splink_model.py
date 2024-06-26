@@ -9,7 +9,8 @@ from splink.duckdb.linker import DuckDBLinker
 
 
 def get_pretrained_linker(
-    dfs: List[DuckDBPyRelation],
+    df_addresses_to_match: DuckDBPyRelation,
+    df_addresses_to_search_within: DuckDBPyRelation,
     *,
     con: DuckDBPyConnection,
     precomputed_numeric_tf_table: DuckDBPyRelation = None,
@@ -48,10 +49,21 @@ def get_pretrained_linker(
             )
         settings_as_dict["blocking_rules_to_generate_predictions"] = new_rules
 
-    dfs_pd = [d.df() for d in dfs]
+    df_addresses_to_match_pd = df_addresses_to_match.df()
+    df_addresses_to_match_pd["source_dataset"] = (
+        "0_" + df_addresses_to_match_pd["source_dataset"]
+    )
+    df_addresses_to_search_within_pd = df_addresses_to_search_within.df()
+    df_addresses_to_search_within_pd["source_dataset"] = (
+        "_1" + df_addresses_to_search_within_pd["source_dataset"]
+    )
 
     # Initialize the linker
-    linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict, connection=con)
+    linker = DuckDBLinker(
+        [df_addresses_to_match_pd, df_addresses_to_search_within_pd],
+        settings_dict=settings_as_dict,
+        connection=con,
+    )
 
     # Load the default term frequency table if none is provided
     if precomputed_numeric_tf_table is None:
@@ -87,6 +99,7 @@ def _performance_predict(
     output_all_cols: bool = True,
     include_full_postcode_block=True,
     full_block=False,
+    print_timings=False,
 ):
     # Load the settings file
     with pkg_resources.path(
@@ -124,7 +137,8 @@ def _performance_predict(
     tf_table = linker._initialise_df_concat_with_tf()
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Initialise df_concat_with_tf took {elapsed_time:.2f} seconds")
+    if print_timings:
+        print(f"Initialise df_concat_with_tf took {elapsed_time:.2f} seconds")
 
     if include_full_postcode_block:
         pc_blocking_rule = """
@@ -447,7 +461,8 @@ def _performance_predict(
     linker._con.sql(sql)
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Time taken to block: {elapsed_time:.2f} seconds")
+    if print_timings:
+        print(f"Time taken to block: {elapsed_time:.2f} seconds")
 
     if additional_columns_to_retain:
         additional_cols_expr = ", ".join(
@@ -914,10 +929,10 @@ def _performance_predict(
 
     )
         """
-    print(match_weight_condition)
     start_time = time.time()
     linker._con.sql(sql)
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Time taken to predict: {elapsed_time:.2f} seconds")
+    if print_timings:
+        print(f"Time taken to predict: {elapsed_time:.2f} seconds")
     return linker, con.sql("select * from predictions")
