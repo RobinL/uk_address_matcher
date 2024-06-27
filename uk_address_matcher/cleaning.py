@@ -118,6 +118,8 @@ def parse_out_numbers(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRelat
     """
     Extracts and processes numeric tokens from address strings, ensuring the max length
     of the number+letter is 6 with no more than 1 letter which can be at the start or end.
+    It also captures ranges like '1-2', '12-17', '98-102' as a single 'number', and
+    matches patterns like '20A', 'A20', '20', and '20-21'.
 
     Args:
         table_name (str): The name of the table to process.
@@ -128,9 +130,8 @@ def parse_out_numbers(table_name: str, con: DuckDBPyConnection) -> DuckDBPyRelat
     """
     regex_pattern = (
         r"\b"  # Word boundary
-        # Matches optional letter followed by 1-5 digits or 1-5 digits
-        # followed by an optional letter
-        r"(?:[A-Za-z]?\d{1,5}|\d{1,5}[A-Za-z])"
+        # Prioritize matching number ranges first
+        r"(\d{1,5}-\d{1,5}|[A-Za-z]?\d{1,5}[A-Za-z]?)"
         r"\b"  # Word boundary
     )
     sql = f"""

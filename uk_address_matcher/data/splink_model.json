@@ -337,13 +337,13 @@
                     "u_probability": 1
                 },
                 {
-                    "sql_condition": "split_part(postcode_l, ' ', 1) = split_part(postcode_l, ' ', 1)",
+                    "sql_condition": "split_part(postcode_l, ' ', 1) = split_part(postcode_r, ' ', 1)",
                     "label_for_charts": "District",
                     "m_probability": 3000,
                     "u_probability": 1
                 },
                 {
-                    "sql_condition": "split_part(postcode_l, ' ', 2) = split_part(postcode_l, ' ', 2)",
+                    "sql_condition": "split_part(postcode_l, ' ', 2) = split_part(postcode_r, ' ', 2)",
                     "label_for_charts": "Unit not District",
                     "m_probability": 2000,
                     "u_probability": 1

@@ -16,57 +16,42 @@ con = duckdb.connect("./canonical_all.ddb")
 
 
 sql = """
-create or replace table full_blocking_canonical as
-select
-unique_id,
-numeric_token_1,
-numeric_token_2,
-numeric_token_3,
-numeric_1_alt,
-postcode,
-list_extract(unusual_tokens_arr, 1) as le_unusual_tokens_arr_1,
-list_extract(unusual_tokens_arr, 2) as le_unusual_tokens_arr_2,
-list_extract(very_unusual_tokens_arr, 1) as le_very_unusual_tokens_arr_1,
-list_extract(very_unusual_tokens_arr, 2) as le_very_unusual_tokens_arr_2,
-list_extract(extremely_unusual_tokens_arr, 1) as le_extremely_unusual_tokens_arr_1,
-split_part(postcode, ' ', 1) as postcode_start,
-split_part(postcode, ' ', 2) as postcode_end,
-very_unusual_tokens_arr,
-extremely_unusual_tokens_arr
-from full_canonical
-"""
-con.sql(sql)
-
-
-sql = """
 create or replace table os_numeric_tf as
 select * from
-read_parquet('/path_to/os_numeric_freq.parquet')
+read_parquet('/Users/robinlinacre/Documents/data_linking/address_matching_demos/data/term_frequencies/os_numeric_freq.parquet')
+
 """
 con.sql(sql)
 numeric_tf = con.table("os_numeric_tf")
 
 
 p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
-df_ch = con.read_parquet(p_ch).order("postcode").limit(20000)
+df_ch = con.read_parquet(p_ch).order("postcode").limit(10000)
+df_ch.count("*")
+sql = """
+select count(*),  address_concat from
 
+df_ch
+group by address_concat
+order by count(*) desc
+limit 20
+"""
+con.sql(sql)
 new_recs_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
 
-recs = [
-    {
-        "unique_id": "1",
-        "source_dataset": "other",
-        "address_concat": "102 Petty France",
-        "postcode": "SW1H 9AJ",
-    }
-]
-new_recs_clean = clean_data_using_precomputed_rel_tok_freq(pd.DataFrame(recs), con)
+# recs = [
+#     {
+#         "unique_id": "1",
+#         "source_dataset": "other",
+#         "address_concat": "102 Petty France",
+#         "postcode": "SW1H 9AJ",
+#     }
+# ]
+# new_recs_clean = clean_data_using_precomputed_rel_tok_freq(pd.DataFrame(recs), con)
 
 
 pd.options.display.max_columns = 1000
 pd.options.display.max_rows = 100
-
-new_recs_clean.df()
 
 
 predictions = _performance_predict_against_canonical(
