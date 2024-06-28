@@ -1,6 +1,6 @@
 # Matching UK addresses using Splink
 
-High performance address matching using a pre-trained Splink model.
+High performance address matching using a pre-trained [Splink](https://github.com/moj-analytical-services/splink) model.
 
 Assuming you have two duckdb dataframes  in this format:
 
@@ -33,7 +33,7 @@ linker, predictions = _performance_predict(
 )
 ```
 
-Initial tests suggest you can match ~ 500 addresses per second on a laptop.
+Initial tests suggest you can match ~ 1,000 addresses per second against a list of 30 million addresses on a laptop.
 
 Refer to [the example](example.py), which has detailed comments, for how to match your data.
 
