@@ -152,7 +152,7 @@ def _performance_predict_against_canonical(
             from new_recs_to_match as l
             inner join full_blocking_canonical as r
             on
-            (list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and l.postcode = r.postcode)
+            (list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and l.postcode = r.postcode) and false --HACK BECAUSE CREATES LOTS OF PAIRS BUT FEW MATCHES
              where 1=1
             AND NOT (coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and list_extract(l.unusual_tokens_arr, 2) = r.le_unusual_tokens_arr_2 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 2) = r.postcode_end),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and list_extract(l.unusual_tokens_arr, 2) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and split_part(l.postcode, ' ', 2) = r.postcode_end),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and l.postcode = r.postcode),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and l.postcode = r.postcode),false))
              UNION ALL
@@ -163,7 +163,7 @@ def _performance_predict_against_canonical(
             from new_recs_to_match as l
             inner join full_blocking_canonical as r
             on
-            (list_extract(l.very_unusual_tokens_arr, 1) = r.le_very_unusual_tokens_arr_1 and l.numeric_token_1 = r.numeric_token_1)
+            (list_extract(l.very_unusual_tokens_arr, 1) = r.le_very_unusual_tokens_arr_1 and l.numeric_token_1 = r.numeric_token_1) and false --HACK BECAUSE CREATES LOTS OF PAIRS BUT FEW MATCHES
              where 1=1
             AND NOT (coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and list_extract(l.unusual_tokens_arr, 2) = r.le_unusual_tokens_arr_2 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 2) = r.postcode_end),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and list_extract(l.unusual_tokens_arr, 2) = r.le_unusual_tokens_arr_1 and split_part(l.postcode, ' ', 1) = r.postcode_start),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and split_part(l.postcode, ' ', 2) = r.postcode_end),false) OR coalesce((l.numeric_token_1 = r.numeric_token_1 and l.postcode = r.postcode),false) OR coalesce((l.numeric_token_1 = r.numeric_token_2 and l.postcode = r.postcode),false) OR coalesce((list_extract(l.unusual_tokens_arr, 1) = r.le_unusual_tokens_arr_2 and l.postcode = r.postcode),false))
              UNION ALL
@@ -355,7 +355,7 @@ def _performance_predict_against_canonical(
             replace,
             sql,
         )
-    print(sql)
+
     start_time = time.time()
 
     con.sql(sql)
@@ -367,10 +367,7 @@ def _performance_predict_against_canonical(
     if print_timings:
         print(f"Time taken to block: {elapsed_time:.2f} seconds")
 
-    return
-
     if "uprn" in df_addresses_to_match.columns:
-        print("uprn column found in df_addresses_to_match")
         additional_cols_expr = "l.uprn as uprn_l"
         additional_cols_expr_2 = "uprn_l"
     else:
