@@ -1,27 +1,17 @@
-import importlib.resources as pkg_resources
-import json
-import re
 import time
-from typing import List
 
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
-from splink.duckdb.linker import DuckDBLinker
 
 
 def _performance_predict_against_canonical(
     *,
     df_addresses_to_match: DuckDBPyRelation,
-    tf_table: DuckDBPyRelation,
     con: DuckDBPyConnection,
     match_weight_threshold: None,
     output_all_cols: bool = True,
     include_full_postcode_block=True,
-    full_block=False,
     print_timings=True,
 ):
-
-    con.register("tf_table", tf_table)
-    con.register("to_match", df_addresses_to_match)
 
     sql = """
     create or replace table new_recs_to_match as
@@ -31,15 +21,15 @@ def _performance_predict_against_canonical(
         tf2.tf_numeric_token AS tf_numeric_token_2,
         tf3.tf_numeric_token AS tf_numeric_token_3
     FROM
-        to_match as df
+        df_addresses_to_match as df
     LEFT JOIN
-        tf_table tf1
+        numeric_term_frequencies tf1
     ON df.numeric_token_1 = tf1.numeric_token
     LEFT JOIN
-        tf_table tf2
+        numeric_term_frequencies tf2
     ON df.numeric_token_2 = tf2.numeric_token
     LEFT JOIN
-        tf_table tf3
+        numeric_term_frequencies tf3
     ON df.numeric_token_3 = tf3.numeric_token
     """
     con.sql(sql)
@@ -337,24 +327,6 @@ def _performance_predict_against_canonical(
 
     select *, ceiling(random() * 8) as _salt_block from __splink__df_blocked)
     """
-    if full_block:
-        # replace text between the -- start_blocking  line and the -- end_blocking line
-        # with 1=1
-        replace = """
-
-        select
-            "l"."unique_id" AS "unique_id_l", "r"."unique_id" AS "unique_id_r"
-            , '1' as match_key
-
-            from new_recs_to_match as l
-            inner join full_blocking_canonical as r
-            on 1=1
-        """
-        sql = re.sub(
-            r"(?s)-- start_blocking.*?-- end_blocking",
-            replace,
-            sql,
-        )
 
     start_time = time.time()
 

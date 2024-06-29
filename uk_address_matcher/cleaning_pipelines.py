@@ -66,6 +66,13 @@ def clean_data_using_precomputed_rel_tok_freq(
 
     con.register("rel_tok_freq", rel_tok_freq_table)
 
+    sql = """
+    DROP TABLE IF EXISTS address_table_in
+    """
+    con.sql(sql)
+    address_table.create("address_table_in")
+    address_table = con.table("address_table_in")
+
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
         upper_case_address_and_postcode,
