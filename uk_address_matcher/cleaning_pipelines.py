@@ -51,16 +51,25 @@ def clean_data_on_the_fly(
     # and `address_table` is created from like
     # select * from read_parquet() order by random()
     # the rest does not work
+    con.register("__address_table_in", address_table)
     sql = """
     create or replace temporary table __address_table as
-    select * from address_table
+    select * from __address_table_in
     """
     con.execute(sql)
     input_table = con.table("__address_table")
 
-    return run_pipeline(
+    res = run_pipeline(
         input_table, con=con, cleaning_queue=cleaning_queue, print_intermediate=False
     )
+
+    con.register("__address_table_res", res)
+    sql = """
+    create or replace temporary table __address_table_cleaned as
+    select * from __address_table_res
+    """
+    con.execute(sql)
+    return con.table("__address_table_cleaned")
 
 
 def clean_data_using_precomputed_rel_tok_freq(
@@ -82,9 +91,10 @@ def clean_data_using_precomputed_rel_tok_freq(
     # and `address_table` is created from like
     # select * from read_parquet() order by random()
     # the rest does not work
+    con.register("__address_table_in", address_table)
     sql = """
-    create or replace  temporary table __address_table as
-    select * from address_table
+    create or replace temporary table __address_table as
+    select * from __address_table_in
     """
     con.execute(sql)
     input_table = con.table("__address_table")
@@ -108,4 +118,12 @@ def clean_data_using_precomputed_rel_tok_freq(
         final_column_order,
     ]
 
-    return run_pipeline(input_table, con=con, cleaning_queue=cleaning_queue)
+    res = run_pipeline(input_table, con=con, cleaning_queue=cleaning_queue)
+
+    con.register("__address_table_res", res)
+    sql = """
+    create or replace temporary table __address_table_cleaned as
+    select * from __address_table_res
+    """
+    con.execute(sql)
+    return con.table("__address_table_cleaned")
