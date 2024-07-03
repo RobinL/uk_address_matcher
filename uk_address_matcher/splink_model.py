@@ -117,6 +117,8 @@ def _performance_predict(
     dfs_pd = [df_addresses_to_match.df(), df_addresses_to_search_within.df()]
     left_source_dataset = dfs_pd[0].iloc[0]["source_dataset"]
     right_source_dataset = dfs_pd[1].iloc[0]["source_dataset"]
+    dfs_pd[0]["numeric_1_alt"] = dfs_pd[0]["numeric_1_alt"].astype(str)
+    dfs_pd[1]["numeric_1_alt"] = dfs_pd[0]["numeric_1_alt"].astype(str)
 
     # Initialize the linker
     linker = DuckDBLinker(dfs_pd, settings_dict=settings_as_dict, connection=con)

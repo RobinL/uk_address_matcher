@@ -161,6 +161,7 @@ def distinguishability_by_id(
             select d.*,
                 a.original_address_concat as original_address_concat,
                 a.postcode as postcode
+
             from df_addresses_to_match_xyz as a
             left join dist_by_id as d
             on a.unique_id = d.unique_id_l
@@ -176,7 +177,10 @@ def distinguishability_by_id(
             else distinguishability_category end as distinguishability_category,
         coalesce(original_address_concat_l,original_address_concat) as original_address_concat_l,
         coalesce(postcode_l,postcode) as postcode_l,
-        original_address_concat_r, postcode_r
+        unique_id_r,
+        original_address_concat_r,
+        postcode_r,
+
 
 
         from dist_by_id_with_nulls

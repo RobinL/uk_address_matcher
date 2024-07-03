@@ -1,4 +1,6 @@
 import importlib.resources as pkg_resources
+import random
+import string
 
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
@@ -22,6 +24,11 @@ from uk_address_matcher.cleaning import (
     use_first_unusual_token_if_no_numeric_token,
 )
 from uk_address_matcher.run_pipeline import run_pipeline
+
+
+def _generate_random_identifier(length=8):
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choice(characters) for _ in range(length))
 
 
 def clean_data_on_the_fly(
@@ -51,25 +58,30 @@ def clean_data_on_the_fly(
     # and `address_table` is created from like
     # select * from read_parquet() order by random()
     # the rest does not work
+
+    uid = _generate_random_identifier()
     con.register("__address_table_in", address_table)
-    sql = """
-    create or replace temporary table __address_table as
+
+    materialised_table_name = f"__address_table_{uid}"
+    sql = f"""
+    create or replace temporary table {materialised_table_name} as
     select * from __address_table_in
     """
     con.execute(sql)
-    input_table = con.table("__address_table")
+    input_table = con.table(materialised_table_name)
 
     res = run_pipeline(
         input_table, con=con, cleaning_queue=cleaning_queue, print_intermediate=False
     )
 
+    materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
     con.register("__address_table_res", res)
-    sql = """
-    create or replace temporary table __address_table_cleaned as
+    sql = f"""
+    create or replace temporary table {materialised_cleaned_table_name} as
     select * from __address_table_res
     """
     con.execute(sql)
-    return con.table("__address_table_cleaned")
+    return con.table(materialised_cleaned_table_name)
 
 
 def clean_data_using_precomputed_rel_tok_freq(
@@ -91,13 +103,18 @@ def clean_data_using_precomputed_rel_tok_freq(
     # and `address_table` is created from like
     # select * from read_parquet() order by random()
     # the rest does not work
+
+    uid = _generate_random_identifier()
+
     con.register("__address_table_in", address_table)
-    sql = """
-    create or replace temporary table __address_table as
+
+    materialised_table_name = f"__address_table_{uid}"
+    sql = f"""
+    create or replace temporary table {materialised_table_name} as
     select * from __address_table_in
     """
     con.execute(sql)
-    input_table = con.table("__address_table")
+    input_table = con.table(materialised_table_name)
 
     cleaning_queue = [
         trim_whitespace_address_and_postcode,
@@ -120,10 +137,11 @@ def clean_data_using_precomputed_rel_tok_freq(
 
     res = run_pipeline(input_table, con=con, cleaning_queue=cleaning_queue)
 
+    materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
     con.register("__address_table_res", res)
-    sql = """
-    create or replace temporary table __address_table_cleaned as
+    sql = f"""
+    create or replace temporary table {materialised_cleaned_table_name} as
     select * from __address_table_res
     """
     con.execute(sql)
-    return con.table("__address_table_cleaned")
+    return con.table(materialised_cleaned_table_name)
