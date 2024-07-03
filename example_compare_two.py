@@ -14,7 +14,7 @@ dataset_1_dict = [
     {
         "unique_id": "1",
         "source_dataset": "dataset 1",
-        "address_concat": "flat 11A 243 high street birmingham",
+        "address_concat": "clo king la",
         "postcode": "B12 0AB",
     },
 ]
@@ -43,9 +43,10 @@ linker, predictions = _performance_predict(
     df_addresses_to_match=cleaned_1,
     df_addresses_to_search_within=cleaned_2,
     con=con,
-    match_weight_threshold=-10,
+    match_weight_threshold=-1000,
     output_all_cols=True,
     include_full_postcode_block=True,
+    full_block=True,
 )
 
 recs = predictions.df().to_dict(orient="records")
