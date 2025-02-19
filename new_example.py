@@ -33,8 +33,8 @@ display(df_fhrs.limit(5).df())
 display(df_ch.limit(5).df())
 df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
 df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
-df_ch_clean
 
+df_fhrs_clean.filter("unique_id = 1543406").show(max_width=1000)
 
 with (
     pkg_resources.files("uk_address_matcher.data")
@@ -43,7 +43,9 @@ with (
 ):
     settings_as_dict = json.load(f)
 
+
 settings = SettingsCreator.from_path_or_dict(settings_as_dict)
+print(settings_as_dict["comparisons"][4]["comparison_levels"][3]["sql_condition"])
 
 db_api = DuckDBAPI(con)
 linker = Linker(
@@ -54,4 +56,7 @@ linker = Linker(
 
 linker.visualisations.match_weights_chart()
 
-df_predict = linker.inference.predict(experimental_optimisation=True)
+df_predict = linker.inference.predict(
+    experimental_optimisation=True, threshold_match_weight=-5
+)
+df_predict.as_pandas_dataframe()["match_weight"].sum()
