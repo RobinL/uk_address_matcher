@@ -1,5 +1,16 @@
 # Matching UK addresses using Splink
 
+## Installation
+
+At the moment this uses a branch of Splink only available on Github.
+```bash
+pip install --pre uk_address_matcher
+pip install git+https://github.com/moj-analytical-services/splink.git@2580-improve-runtimes-but-pushing-up-common-case-statements-into-precomputed-values
+```
+
+## Usage
+
+
 High performance address matching using a pre-trained [Splink](https://github.com/moj-analytical-services/splink) model.
 
 Assuming you have two duckdb dataframes  in this format:
