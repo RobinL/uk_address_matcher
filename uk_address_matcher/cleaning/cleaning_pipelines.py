@@ -4,7 +4,7 @@ import string
 
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
-from uk_address_matcher.cleaning import (
+from uk_address_matcher.cleaning.cleaning_steps import (
     add_term_frequencies_to_address_tokens,
     add_term_frequencies_to_address_tokens_using_registered_df,
     clean_address_string_first_pass,
@@ -23,7 +23,7 @@ from uk_address_matcher.cleaning import (
     upper_case_address_and_postcode,
     use_first_unusual_token_if_no_numeric_token,
 )
-from uk_address_matcher.run_pipeline import run_pipeline
+from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
 
 def _generate_random_identifier(length=8):
@@ -89,7 +89,6 @@ def clean_data_using_precomputed_rel_tok_freq(
     con: DuckDBPyConnection,
     rel_tok_freq_table: DuckDBPyRelation = None,
 ) -> DuckDBPyRelation:
-
     # Load the default term frequency table if none is provided
     if rel_tok_freq_table is None:
         with pkg_resources.path(
