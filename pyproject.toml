@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "uk_address_matcher"
-version = "0.0.1.dev11"
+version = "1.0.0.dev01"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
 license = "MIT"
