@@ -1,13 +1,14 @@
 import duckdb
 import pandas as pd
 
-from uk_address_matcher.analyse_results import (
+from uk_address_matcher.post_linkage.analyse_results import (
     distinguishability_summary,
 )
-from uk_address_matcher.cleaning_pipelines import (
-    clean_data_using_precomputed_rel_tok_freq,
+from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
+    improve_predictions_using_distinguishing_tokens,
 )
-from uk_address_matcher.splink_model import _performance_predict
+from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq, get_linker
+import time
 
 pd.options.display.max_colwidth = 1000
 
@@ -33,50 +34,68 @@ pd.options.display.max_colwidth = 1000
 
 # Any additional columns should be retained as-is by the cleaning code
 
-# Remove the limit statements to run the full dataset, the limit is just to speed up
-# the example
 p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
 p_fhrs = "./example_data/fhrs_addresses_sample.parquet"
 
-
 con = duckdb.connect(database=":memory:")
-
 
 df_ch = con.read_parquet(p_ch).order("postcode")
 df_fhrs = con.read_parquet(p_fhrs).order("postcode")
-
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean the data/feature engineering to prepare for matching model
 # -----------------------------------------------------------------------------
 
-
 df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
 df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
 
+# -----------------------------------------------------------------------------
+# Step 3: Link the data using Splink
+# -----------------------------------------------------------------------------
 
-linker, predictions = _performance_predict(
+
+linker = get_linker(
     df_addresses_to_match=df_fhrs_clean,
     df_addresses_to_search_within=df_ch_clean,
     con=con,
-    match_weight_threshold=-5,
-    output_all_cols=True,
     include_full_postcode_block=True,
+    additional_columns_to_retain=["original_address_concat"],
 )
 
-
-# -----------------------------------------------------------------------------
-# Step 2: Get summary results of the match rate
-# -----------------------------------------------------------------------------
-
-
-distinguishability_summary(
-    df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
+df_predict = linker.inference.predict(
+    threshold_match_weight=-50, experimental_optimisation=True
 )
+df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-distinguishability_summary(
-    df_predict=predictions,
-    df_addresses_to_match=df_fhrs_clean,
+# -----------------------------------------------------------------------------
+# Step 4: There's an optimisation we can do post-linking to improve score
+# described here https://github.com/RobinL/uk_address_matcher/issues/14
+# -----------------------------------------------------------------------------
+
+start_time = time.time()
+df_predict_improved = improve_predictions_using_distinguishing_tokens(
+    df_predict=df_predict_ddb,
     con=con,
-    group_by_match_weight_bins=10,
+    match_weight_threshold=-20,
 )
+
+df_predict_improved.show(max_width=500, max_rows=20)
+
+end_time = time.time()
+print(f"Time taken: {end_time - start_time} seconds")
+# -----------------------------------------------------------------------------
+
+# # -----------------------------------------------------------------------------
+# # Step 4: Get summary results of the match accuracy by taking the best match
+# # for each FHRS address
+# # -----------------------------------------------------------------------------
+
+dsum_1 = distinguishability_summary(
+    df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
+)
+dsum_1.show(max_width=500, max_rows=20)
+
+dsum_2 = distinguishability_summary(
+    df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
+)
+dsum_2.show(max_width=500, max_rows=20)

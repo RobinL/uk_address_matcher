@@ -312,6 +312,7 @@ def add_term_frequencies_to_address_tokens(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
     # Compute relative term frequencies amongst the tokens
+    # TODO - if we're removing numbers we should also remove flat positionals
     con.register("ddb_pyrel_alias", ddb_pyrel)
     sql = f"""
     WITH rel_tok_freq_cte AS (
@@ -334,7 +335,6 @@ def add_term_frequencies_to_address_tokens(
 def add_term_frequencies_to_address_tokens_using_registered_df(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
-
     # For some reason this is necessary to avoid a
     # BinderException: Binder Error: Max expression depth limit of 1000 exceeded.
 
