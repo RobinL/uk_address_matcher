@@ -31,26 +31,24 @@ pd.options.display.max_colwidth = 1000
 
 # Any additional columns should be retained as-is by the cleaning code
 
-# Remove the limit statements to run the full dataset, the limit is just to speed up
-# the example
 p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
 p_fhrs = "./example_data/fhrs_addresses_sample.parquet"
 
-
 con = duckdb.connect(database=":memory:")
-
 
 df_ch = con.read_parquet(p_ch).order("postcode")
 df_fhrs = con.read_parquet(p_fhrs).order("postcode")
-
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean the data/feature engineering to prepare for matching model
 # -----------------------------------------------------------------------------
 
-
 df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
 df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
+
+# -----------------------------------------------------------------------------
+# Step 3: Link the data using Splink
+# -----------------------------------------------------------------------------
 
 
 linker = get_linker(
@@ -61,14 +59,14 @@ linker = get_linker(
     additional_columns_to_retain=["original_address_concat"],
 )
 
-
 df_predict = linker.inference.predict(
     threshold_match_weight=-50, experimental_optimisation=True
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
 # # -----------------------------------------------------------------------------
-# # Step 2: Get summary results of the match rate
+# # Step 4: Get summary results of the match accuracy by taking the best match
+# # for each FHRS address
 # # -----------------------------------------------------------------------------
 
 
