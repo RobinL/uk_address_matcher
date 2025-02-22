@@ -214,14 +214,14 @@ def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
     anchor_exp = 12
     anchor_m_prob = 2048.0
 
-    if start_exp < end_exp:
-        raise ValueError(
-            "start_exp must be greater than end_exp for descending exponents."
-        )
-
     current_exp = start_exp
     while current_exp >= end_exp:
-        label = f"<1e-{current_exp}"
+        if current_exp >= 0:
+            sql_cond = f"{arr_red_sql} > 1e+{current_exp}"
+            label = f" > 1e+{current_exp}"
+        else:
+            sql_cond = f"{arr_red_sql} < 1e-{abs(current_exp)}"
+            label = f" < 1e-{abs(current_exp)}"
 
         if current_exp > anchor_exp:
             # Above <1e-12: doubles every 4 steps (increases by 2^(1/4) per step)
@@ -232,7 +232,7 @@ def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
 
         data.append(
             {
-                "sql_condition": f"{arr_red_sql} < 1e-{current_exp}",
+                "sql_condition": sql_cond,
                 "label_for_charts": label,
                 "m_probability": m_prob,
                 "u_probability": 1,
@@ -241,7 +241,7 @@ def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
             }
         )
 
-        current_exp += step  # Decrement by 1
+        current_exp += step
 
     return data
 

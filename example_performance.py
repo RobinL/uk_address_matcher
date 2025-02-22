@@ -1,13 +1,11 @@
 import duckdb
 import pandas as pd
 
-from uk_address_matcher.analyse_results import (
+from uk_address_matcher.post_linkage.analyse_results import (
     distinguishability_summary,
 )
-from uk_address_matcher.cleaning_pipelines import (
-    clean_data_using_precomputed_rel_tok_freq,
-)
-from uk_address_matcher.splink_model import _performance_predict
+from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq, get_linker
+
 
 pd.options.display.max_colwidth = 1000
 
@@ -55,28 +53,31 @@ df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
 df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
 
 
-linker, predictions = _performance_predict(
+linker = get_linker(
     df_addresses_to_match=df_fhrs_clean,
     df_addresses_to_search_within=df_ch_clean,
     con=con,
-    match_weight_threshold=-5,
-    output_all_cols=True,
-    include_full_postcode_block=True,
+    include_full_postcode_block=False,
 )
 
 
-# -----------------------------------------------------------------------------
-# Step 2: Get summary results of the match rate
-# -----------------------------------------------------------------------------
-
-
-distinguishability_summary(
-    df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
+df_predict = linker.inference.predict(
+    threshold_match_weight=-50, experimental_optimisation=True
 )
+df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-distinguishability_summary(
-    df_predict=predictions,
-    df_addresses_to_match=df_fhrs_clean,
-    con=con,
-    group_by_match_weight_bins=10,
-)
+# # -----------------------------------------------------------------------------
+# # Step 2: Get summary results of the match rate
+# # -----------------------------------------------------------------------------
+
+
+# distinguishability_summary(
+#     df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
+# )
+
+# distinguishability_summary(
+#     df_predict=predictions,
+#     df_addresses_to_match=df_fhrs_clean,
+#     con=con,
+#     group_by_match_weight_bins=10,
+# )
