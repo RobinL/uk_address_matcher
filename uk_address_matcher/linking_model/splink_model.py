@@ -68,7 +68,6 @@ def get_linker(
         db_api=db_api,
     )
 
-    # Load the default term frequency table if none is provided
     if precomputed_numeric_tf_table is None:
         precomputed_numeric_tf_table = _get_precomputed_numeric_tf_table(con)
 
