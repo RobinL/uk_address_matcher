@@ -1,12 +1,8 @@
 import duckdb
 import pandas as pd
-from IPython.display import display
 
-from uk_address_matcher.cleaning_pipelines import (
-    clean_data_using_precomputed_rel_tok_freq,
-)
-from uk_address_matcher.display_results import display_l_r, display_token_rel_freq
-from uk_address_matcher.splink_model import _performance_predict
+from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq, get_linker
+
 
 con = duckdb.connect(database=":memory:")
 
@@ -14,15 +10,14 @@ dataset_1_dict = [
     {
         "unique_id": "1",
         "source_dataset": "dataset 1",
-        "address_concat": "clo king la",
+        "address_concat": "11A spitfire court 243 birmingham",
         "postcode": "B12 0AB",
     },
 ]
 dataset_1 = pd.DataFrame(dataset_1_dict)
 con.register("dataset_1", dataset_1)
 
-"11 spitfire court 243 high street birmingham B12 0AB",
-"flat A, 11 243 high street birmingham B12 1CD",
+
 dataset_2_dict = [
     {
         "unique_id": "2",
@@ -31,7 +26,6 @@ dataset_2_dict = [
         "postcode": "B12 0AB",
     },
 ]
-
 dataset_2 = pd.DataFrame(dataset_2_dict)
 con.register("dataset_2", dataset_2)
 
@@ -39,16 +33,21 @@ con.register("dataset_2", dataset_2)
 cleaned_1 = clean_data_using_precomputed_rel_tok_freq(dataset_1, con=con)
 cleaned_2 = clean_data_using_precomputed_rel_tok_freq(dataset_2, con=con)
 
-linker, predictions = _performance_predict(
+linker = get_linker(
     df_addresses_to_match=cleaned_1,
     df_addresses_to_search_within=cleaned_2,
     con=con,
-    match_weight_threshold=-1000,
-    output_all_cols=True,
     include_full_postcode_block=True,
-    full_block=True,
+    additional_columns_to_retain=["original_address_concat"],
 )
 
-recs = predictions.df().to_dict(orient="records")
-recs
-display(linker.waterfall_chart(recs))
+
+res = linker.inference.compare_two_records(
+    record_1=cleaned_1, record_2=cleaned_2, include_found_by_blocking_rules=True
+)
+
+res_ddb = res.as_duckdbpyrelation()
+res_ddb.show(max_width=400)
+
+recs = res_ddb.df().to_dict(orient="records")
+linker.visualisations.waterfall_chart(recs)
