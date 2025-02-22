@@ -3,12 +3,16 @@ from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 def distinguishability_table(
     df_predict: DuckDBPyRelation,
-    unique_id_l: str = None,
+    unique_id_r: str = None,
     human_readable=False,
     best_match_only=True,
     distinguishability_thresholds=[1, 5, 10],
 ):
+    """
+    Computes the distinguishability score for each row in the predict table.
 
+    Also derives a 'distinguishability_category' bin
+    """
     if human_readable:
         select_cols = """
             unique_id_l,
@@ -27,8 +31,8 @@ def distinguishability_table(
     else:
         select_cols = "*"
 
-    if unique_id_l is not None:
-        uid_where_condition = f"where unique_id_l = '{unique_id_l}'"
+    if unique_id_r is not None:
+        uid_where_condition = f"where unique_id_r = '{unique_id_r}'"
     else:
         uid_where_condition = "where 1=1"
 
@@ -50,15 +54,15 @@ def distinguishability_table(
     sql = f"""
     WITH results_with_rn AS (
             SELECT
-                unique_id_l,
+                unique_id_r,
                 *,
-                ROW_NUMBER() OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn
             FROM predict_for_distinguishability
         ),
         second_place_match_weight AS (
             SELECT
                 *,
-                LEAD(match_weight) OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) AS previous_match_weight,
+                LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight,
             FROM results_with_rn
 
         ),
@@ -85,7 +89,7 @@ def distinguishability_table(
         from disting_2
         {uid_where_condition}
         {best_match_only_condition}
-        order by unique_id_l
+        order by unique_id_r, match_weight desc
 
     """
 
@@ -98,7 +102,6 @@ def distinguishability_by_id(
     con: DuckDBPyConnection,
     distinguishability_thresholds=[1, 5, 10],
 ):
-
     if 0 not in distinguishability_thresholds:
         distinguishability_thresholds.append(0)
 
@@ -215,7 +218,6 @@ def distinguishability_summary(
     """
 
     if group_by_match_weight_bins:
-
         sql = """
         WITH a AS (
             SELECT
