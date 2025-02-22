@@ -57,7 +57,8 @@ linker = get_linker(
     df_addresses_to_match=df_fhrs_clean,
     df_addresses_to_search_within=df_ch_clean,
     con=con,
-    include_full_postcode_block=False,
+    include_full_postcode_block=True,
+    additional_columns_to_retain=["original_address_concat"],
 )
 
 
@@ -71,13 +72,6 @@ df_predict_ddb = df_predict.as_duckdbpyrelation()
 # # -----------------------------------------------------------------------------
 
 
-# distinguishability_summary(
-#     df_predict=predictions, df_addresses_to_match=df_fhrs_clean, con=con
-# )
-
-# distinguishability_summary(
-#     df_predict=predictions,
-#     df_addresses_to_match=df_fhrs_clean,
-#     con=con,
-#     group_by_match_weight_bins=10,
-# )
+distinguishability_summary(
+    df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
+)
