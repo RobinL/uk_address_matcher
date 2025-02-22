@@ -308,26 +308,6 @@ def _tokens_with_freq_sql(
     """
 
 
-def derive_address_token_frequency_table(
-    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
-) -> DuckDBPyRelation:
-    con.register("ddb_pyrel_alias", ddb_pyrel)
-
-    sql = """
-    SELECT
-            token,
-            count(*)  / sum(count(*)) OVER() as rel_freq
-        FROM (
-            SELECT
-                unnest(address_without_numbers_tokenised) as token
-            FROM ddb_pyrel_alias
-        )
-        GROUP BY token
-
-    """
-    return con.sql(sql)
-
-
 def add_term_frequencies_to_address_tokens(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
