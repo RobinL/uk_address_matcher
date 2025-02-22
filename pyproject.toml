@@ -11,7 +11,6 @@ repository = "https://github.com/robinL/uk_address_matcher"
 [tool.poetry.dependencies]
 python = "^3.9"
 duckdb = ">=1.2.0"
-splink = {git = "https://github.com/moj-analytical-services/splink.git", rev = "2580-improve-runtimes-but-pushing-up-common-case-statements-into-precomputed-values"}
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.4"
