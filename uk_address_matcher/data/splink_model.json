@@ -25,11 +25,7 @@
         "l.numeric_token_1 = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)",
         "l.numeric_token_1 = r.numeric_token_1 and l.numeric_token_2 = r.numeric_token_2 and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)",
         "list_extract(l.extremely_unusual_tokens_arr, 1) = list_extract(r.extremely_unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 1) = split_part(r.postcode, ' ', 1)",
-        "list_extract(l.extremely_unusual_tokens_arr, 1) = list_extract(r.extremely_unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)",
-        {
-            "blocking_rule": "l.postcode = r.postcode",
-            "salting_partitions": 10
-        }
+        "list_extract(l.extremely_unusual_tokens_arr, 1) = list_extract(r.extremely_unusual_tokens_arr, 1) and split_part(l.postcode, ' ', 2) = split_part(r.postcode, ' ', 2)"
     ],
     "comparisons": [
         {
