@@ -4,8 +4,11 @@ import pandas as pd
 from uk_address_matcher.post_linkage.analyse_results import (
     distinguishability_summary,
 )
+from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
+    improve_predictions_using_distinguishing_tokens,
+)
 from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq, get_linker
-
+import time
 
 pd.options.display.max_colwidth = 1000
 
@@ -64,12 +67,35 @@ df_predict = linker.inference.predict(
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
+# -----------------------------------------------------------------------------
+# Step 4: There's an optimisation we can do post-linking to improve score
+# described here https://github.com/RobinL/uk_address_matcher/issues/14
+# -----------------------------------------------------------------------------
+
+start_time = time.time()
+df_predict_improved = improve_predictions_using_distinguishing_tokens(
+    df_predict=df_predict_ddb,
+    con=con,
+    match_weight_threshold=-20,
+)
+
+df_predict_improved.show(max_width=500, max_rows=20)
+
+end_time = time.time()
+print(f"Time taken: {end_time - start_time} seconds")
+# -----------------------------------------------------------------------------
+
 # # -----------------------------------------------------------------------------
 # # Step 4: Get summary results of the match accuracy by taking the best match
 # # for each FHRS address
 # # -----------------------------------------------------------------------------
 
-
-distinguishability_summary(
+dsum_1 = distinguishability_summary(
     df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
 )
+dsum_1.show(max_width=500, max_rows=20)
+
+dsum_2 = distinguishability_summary(
+    df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
+)
+dsum_2.show(max_width=500, max_rows=20)
