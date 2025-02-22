@@ -9,9 +9,10 @@ def distinguishability_table(
     distinguishability_thresholds=[1, 5, 10],
 ):
     """
-    Computes the distinguishability score for each row in the predict table.
-
-    Also derives a 'distinguishability_category' bin
+    Computes the difference in match weights between the top and next-best matches
+    for each unique_id_r, categorizes distinguishability based on thresholds, and
+    returns a filtered table. Supports optional filtering by unique_id_r and
+    selecting only the best match.
     """
     if human_readable:
         select_cols = """
@@ -31,66 +32,59 @@ def distinguishability_table(
     else:
         select_cols = "*"
 
+    # Remove 'where' from the condition itself, as it will be added in the SQL
     if unique_id_r is not None:
-        uid_where_condition = f"where unique_id_r = '{unique_id_r}'"
+        uid_condition = f"unique_id_r = '{unique_id_r}'"
     else:
-        uid_where_condition = "where 1=1"
+        uid_condition = "1=1"
 
-    best_match_only_condition = "and rn = 1" if best_match_only else ""
+    # Define the best match condition
+    best_match_condition = "rn = 1" if best_match_only else "1=1"
+
+    # Handle distinguishability thresholds
     if 0 not in distinguishability_thresholds:
         distinguishability_thresholds.append(0)
-
     thres_sorted = sorted(distinguishability_thresholds, reverse=True)
     d_case_whens = "\n".join(
         [
-            f"when distinguishability > {d} then '{str(index).zfill(2)}: Distinguishability > {d}'"
+            f"WHEN distinguishability > {d} THEN '{str(index).zfill(2)}: Distinguishability > {d}'"
             for index, d in enumerate(thres_sorted, start=2)
         ]
     )
-
     next_label_index = len(thres_sorted) + 2
     next_label_value = f"{str(next_label_index).zfill(2)}."
 
     sql = f"""
-    WITH results_with_rn AS (
-            SELECT
-                unique_id_r,
-                *,
-                ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn
-            FROM predict_for_distinguishability
-        ),
-        second_place_match_weight AS (
-            SELECT
-                *,
-                LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight,
-            FROM results_with_rn
-
-        ),
-        distinguishability as (
-            SELECT
-                *,
-                match_weight - coalesce(previous_match_weight, null) as distinguishability
-                from second_place_match_weight
-        ),
-        disting_2 as (
-        select *,
-        case
-        when distinguishability is null then '01: One match only'
-        {d_case_whens}
-        when distinguishability = 0 then '{next_label_value}: Distinguishability = 0'
-        else '99: error, uncategorised'
-        end as distinguishability_category
-        from distinguishability
-
-        )
-        select
-            {select_cols}
-
-        from disting_2
-        {uid_where_condition}
-        {best_match_only_condition}
-        order by unique_id_r, match_weight desc
-
+    WITH enriched_data AS (
+        SELECT
+            unique_id_r,
+            *,
+            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn,
+            LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight
+        FROM predict_for_distinguishability
+    ),
+    distinguishability_calc AS (
+        SELECT
+            *,
+            match_weight - previous_match_weight AS distinguishability
+        FROM enriched_data
+    ),
+    categorized_data AS (
+        SELECT
+            *,
+            CASE
+                WHEN distinguishability IS NULL THEN '01: One match only'
+                {d_case_whens}
+                WHEN distinguishability = 0 THEN '{next_label_value}: Distinguishability = 0'
+                ELSE '99: error, uncategorized'
+            END AS distinguishability_category
+        FROM distinguishability_calc
+    )
+    SELECT
+        {select_cols}
+    FROM categorized_data
+    WHERE {uid_condition} AND {best_match_condition}
+    ORDER BY unique_id_r, match_weight DESC
     """
 
     return df_predict.query("predict_for_distinguishability", sql)
@@ -123,13 +117,13 @@ def distinguishability_by_id(
     WITH results_with_rn AS (
             SELECT
                 *,
-                ROW_NUMBER() OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn
             FROM df_predict_xyz
         ),
         second_place_match_weight AS (
             SELECT
                 *,
-                LEAD(match_weight) OVER (PARTITION BY unique_id_l ORDER BY match_weight DESC) AS previous_match_weight,
+                LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight,
             FROM results_with_rn
 
         ),
@@ -158,7 +152,7 @@ def distinguishability_by_id(
 
         from disting_2
         where rn = 1
-        order by unique_id_l
+        order by unique_id_r
         ),
         dist_by_id_with_nulls as (
             select d.*,
@@ -167,22 +161,22 @@ def distinguishability_by_id(
 
             from df_addresses_to_match_xyz as a
             left join dist_by_id as d
-            on a.unique_id = d.unique_id_l
+            on a.unique_id = d.unique_id_r
         )
 
         select
-        unique_id_l,
+        unique_id_r,
         distinguishability,
         match_probability,
         match_weight,
         case
             when distinguishability_category is null then '99: No match'
             else distinguishability_category end as distinguishability_category,
-        coalesce(original_address_concat_l,original_address_concat) as original_address_concat_l,
-        coalesce(postcode_l,postcode) as postcode_l,
-        unique_id_r,
-        original_address_concat_r,
-        postcode_r,
+        coalesce(original_address_concat_r,original_address_concat) as original_address_concat_r,
+        coalesce(postcode_r,postcode) as postcode_r,
+        unique_id_l,
+        original_address_concat_l,
+        postcode_l,
 
 
 
