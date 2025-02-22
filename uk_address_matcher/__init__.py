@@ -1,4 +1,4 @@
-__version__ = "1.0.0.dev01"
+__version__ = "1.0.0.dev02"
 
 from uk_address_matcher.linking_model.splink_model import get_linker
 from uk_address_matcher.cleaning.cleaning_pipelines import (
