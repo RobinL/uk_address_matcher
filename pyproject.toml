@@ -1,6 +1,6 @@
 [project]
 name = "uk_address_matcher"
-version = "1.0.0.dev05"
+version = "1.0.0.dev06"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = [{name = "Robin Linacre", email = "robinlinacre@hotmail.com"}]
 license = "MIT"
@@ -8,7 +8,7 @@ readme = "readme.md"
 requires-python = ">=3.9"
 dependencies = [
     "duckdb>=1.2.0",
-    "splink",
+    "splink==4.0.7.dev1",
     "sqlglot>=26.6.0",
 ]
 
@@ -33,5 +33,4 @@ include = [
     "uk_address_matcher/data/splink_model.json",
 ]
 
-[tool.uv.sources]
-splink = { git = "https://github.com/moj-analytical-services/splink.git", branch = "2580-improve-runtimes-but-pushing-up-common-case-statements-into-precomputed-values" }
+

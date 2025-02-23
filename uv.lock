@@ -1096,8 +1096,8 @@ wheels = [
 
 [[package]]
 name = "splink"
-version = "4.0.6"
-source = { git = "https://github.com/moj-analytical-services/splink.git?branch=2580-improve-runtimes-but-pushing-up-common-case-statements-into-precomputed-values#91ba4c9bfc4ea14425a6dd48dd9e18750f58aeea" }
+version = "4.0.7.dev1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altair" },
     { name = "duckdb" },
@@ -1108,6 +1108,10 @@ dependencies = [
     { name = "numpy", version = "2.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pandas" },
     { name = "sqlglot" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/4d/22be087d4310e8503e26b72644d977dd39553d109865a64921aa15d05ff2/splink-4.0.7.dev1.tar.gz", hash = "sha256:d26458111be3816c394a24dd67977ec335e3073b169deea83a78db4b67fb327c", size = 3658662 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/69/0ccb35684efaeddee11c3b2d550de6f4a4ac9e0107d4458ebbcd26b18d6b/splink-4.0.7.dev1-py3-none-any.whl", hash = "sha256:3201ba6f578c44b6f41cbbda8fa878ea26c0ce507b2f5be0d76f2eee17b81566", size = 3728156 },
 ]
 
 [[package]]
@@ -1189,7 +1193,7 @@ wheels = [
 
 [[package]]
 name = "uk-address-matcher"
-version = "1.0.0.dev4"
+version = "1.0.0.dev6"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
@@ -1206,7 +1210,7 @@ dev = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.2.0" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.4" },
-    { name = "splink", git = "https://github.com/moj-analytical-services/splink.git?branch=2580-improve-runtimes-but-pushing-up-common-case-statements-into-precomputed-values" },
+    { name = "splink", specifier = "==4.0.7.dev1" },
     { name = "sqlglot", specifier = ">=26.6.0" },
 ]
 
