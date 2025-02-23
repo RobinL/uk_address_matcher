@@ -33,4 +33,9 @@ include = [
     "uk_address_matcher/data/splink_model.json",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]
+
 

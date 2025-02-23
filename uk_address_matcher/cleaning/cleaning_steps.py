@@ -91,25 +91,51 @@ def parse_out_flat_positional(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
     """
-    Extracts the first flat positional from address strings and creates a new field called flat_positional.
+    Extracts flat positionals and identifiers from address strings into an array.
 
-    Examples of flat positionals:
-        "BASEMENT", "GROUND FLOOR", "FIRST FLOOR", "SECOND FLOOR", "TOP FLOOR"
+    Examples:
+    - "11A HIGH STREET" -> ["A"] (just the letter part)
+    - "FLAT A" -> ["A"] (just the letter)
+    - "BASEMENT FLAT A" -> ["BASEMENT", "A"]
+    - "BASEMENT FLAT 11" -> ["BASEMENT"]
 
     Args:
-        table_name (str): The name of the table to process.
-        con (DuckDBPyConnection): The DuckDB connection.
+        ddb_pyrel (DuckDBPyRelation): The input relation
+        con (DuckDBPyConnection): The DuckDB connection
 
     Returns:
-        DuckDBPyRelation: The modified table with the new field flat_positional.
+        DuckDBPyRelation: The modified table with flat_positional array field
     """
-    regex_pattern = r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR)\b"  # Matches flat positionals
+    floor_positions = "BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR|GARDEN"
 
     sql = f"""
+    WITH step1 AS (
+        SELECT
+            *,
+            -- Get floor position if present
+            regexp_extract(address_concat, '\\b({floor_positions})\\b', 1) as floor_pos,
+            -- Get letter after FLAT if present
+            regexp_extract(address_concat, '\\bFLAT\\s+([A-Z])\\b', 1) as flat_letter,
+            -- Get just the letter part of leading number+letter combination
+            regexp_extract(address_concat, '^\\s*\\d+([A-Z])\\b', 1) as leading_letter
+        FROM ddb_pyrel
+    )
     SELECT
-        *,
-        NULLIF(regexp_extract(address_concat, '{regex_pattern}', 1),'') AS flat_positional
-    FROM ddb_pyrel
+        * EXCLUDE (floor_pos, flat_letter, leading_letter),
+        array_filter(
+            [
+                NULLIF(floor_pos, ''),
+                CASE
+                    -- If we have a floor position + FLAT + number, don't include letter
+                    WHEN floor_pos IS NOT NULL AND regexp_matches(address_concat, '\\bFLAT\\s+\\d+\\b')
+                    THEN NULL
+                    -- Otherwise include any letter we found
+                    ELSE COALESCE(NULLIF(flat_letter, ''), NULLIF(leading_letter, ''))
+                END
+            ],
+            x -> x IS NOT NULL
+        ) AS flat_positional
+    FROM step1
     """
     return con.sql(sql)
 
