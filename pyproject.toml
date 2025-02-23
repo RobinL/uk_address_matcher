@@ -1,6 +1,6 @@
 [project]
 name = "uk_address_matcher"
-version = "1.0.0.dev08"
+version = "1.0.0.dev09"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = [{name = "Robin Linacre", email = "robinlinacre@hotmail.com"}]
 readme = "readme.md"
@@ -29,7 +29,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["uk_address_matcher*"]
-exclude = ["secret_data*"]
+# See https://github.com/pypa/setuptools/issues/4759
+exclude = ["secret_data*", "_LICENSE.md"]
 
 [tool.setuptools]
 include-package-data = true
