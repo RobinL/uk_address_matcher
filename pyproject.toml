@@ -1,10 +1,10 @@
 [project]
 name = "uk_address_matcher"
-version = "1.0.0.dev07"
+version = "1.0.0.dev08"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = [{name = "Robin Linacre", email = "robinlinacre@hotmail.com"}]
-license = "MIT"
 readme = "readme.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
     "duckdb>=1.2.0",
@@ -21,16 +21,13 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["uk_address_matcher"]
-include = [
-    "uk_address_matcher/data/address_token_frequencies.parquet",
-    "uk_address_matcher/data/numeric_token_frequencies.parquet",
-    "uk_address_matcher/data/common_end_tokens.csv",
-    "uk_address_matcher/data/splink_model.json",
-]
+[tool.setuptools.package-data]
+"uk_address_matcher" = ["data/*.parquet", "data/*.csv", "data/*.json"]
 
 
+
+[tool.setuptools]
+include-package-data = true
