@@ -53,8 +53,8 @@ def improve_predictions_using_distinguishing_tokens(
         flatten(
             array_agg(tokens_l)  FILTER (WHERE match_weight > -20) OVER (
                 PARTITION BY unique_id_r
-                ORDER BY reverse(original_address_concat_l) DESC
-                ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                ORDER BY match_weight DESC
+                ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING
             )
         ) as all_tokens_in_group_l,
 
@@ -67,6 +67,24 @@ def improve_predictions_using_distinguishing_tokens(
             list_intersect(tokens_r, canonical_distinguishing_tokens_1),
             t -> t NOT IN ('FLAT', 'FLOOR')
         ) AS messy_distinguishing_tokens_1,
+
+        -- Here we want to find 'punishing' tokens - ones which are NOT
+        -- in this address but ARE in the other addresses in the window
+
+        -- Get all unique tokens from all canonical addresses in the group
+        array_distinct(all_tokens_in_group_l) AS unique_tokens_in_group_l,
+
+        -- Find tokens in the messy address that are in other canonical addresses but not in this one
+        list_filter(
+            tokens_r,
+            t -> (t IN unique_tokens_in_group_l) AND (t NOT IN tokens_l)
+        ) AS punishment_tokens,
+
+        -- Count of punishment tokens to potentially use for scoring
+        len(list_filter(
+            tokens_r,
+            t -> (t IN unique_tokens_in_group_l) AND (t NOT IN tokens_l)
+        )) AS punishment_token_count,
 
         original_address_concat_l,
         original_address_concat_r,
@@ -93,16 +111,24 @@ def improve_predictions_using_distinguishing_tokens(
         match_weight as match_weight_original,
 
         case
-            when dist_tok_match then match_weight + 5
-            else match_weight - 5
+            when dist_tok_match then match_weight + 2
+            else match_weight - 2
+        end as match_weight_with_dist_tokens,
+
+        -- Apply additional punishment based on punishment tokens
+        case
+            when dist_tok_match then match_weight + 5 - (punishment_token_count * 3)
+            else match_weight - 5 - (punishment_token_count * 3)
         end as match_weight,
 
         match_probability as match_probability_original,
+        pow(2, match_weight_with_dist_tokens)/(1+pow(2, match_weight_with_dist_tokens)) as match_probability_with_dist_tokens,
         pow(2, match_weight)/(1+pow(2, match_weight)) as match_probability,
-
 
         canonical_distinguishing_tokens_1,
         messy_distinguishing_tokens_1,
+        punishment_tokens,
+        punishment_token_count,
         original_address_concat_l,
         postcode_l,
         original_address_concat_r,
