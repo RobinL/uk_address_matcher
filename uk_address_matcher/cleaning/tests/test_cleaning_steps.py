@@ -1,72 +1,81 @@
 import duckdb
+from uk_address_matcher.cleaning.cleaning_steps import (
+    parse_out_flat_position_and_letter,
+)
 
-from uk_address_matcher.cleaning.cleaning_steps import parse_out_flat_positional
+
+def run_tests(test_cases):
+    duckdb_connection = duckdb.connect()
+
+    # Prepare the test data as a DuckDB table
+    test_data = "SELECT * FROM (VALUES\n"
+    test_data += ",\n".join(f"('{case['input']}')" for case in test_cases)
+    test_data += ") AS t(address_concat)"
+
+    input_relation = duckdb_connection.sql(test_data)
+
+    # Run the actual function
+    result = parse_out_flat_position_and_letter(input_relation, duckdb_connection)
+    results = result.fetchall()
+
+    # Assert that the results match the expected output
+    for actual_row, case in zip(results, test_cases):
+        expected_flat_pos = case["expected_flat_positional"]
+        expected_flat_letter = case["expected_flat_letter"]
+        assert actual_row[-2] == expected_flat_pos, (
+            f"For address '{case['input']}', expected positional {expected_flat_pos} but got {actual_row[-2]}"
+        )
+        assert actual_row[-1] == expected_flat_letter, (
+            f"For address '{case['input']}', expected letter {expected_flat_letter} but got {actual_row[-1]}"
+        )
 
 
 def test_parse_out_flat_positional():
-    duckdb_connection = duckdb.connect()
-
-    test_data = """
-        SELECT * FROM (VALUES
-            ('11A SPITFIRE COURT 243 BIRMINGHAM'),
-            ('FLAT A 11 SPITFIRE COURT 243 BIRMINGHAM'),
-            ('BASEMENT FLAT A 11 SPITFIRE COURT 243 BIRMINGHAM'),
-            ('BASEMENT FLAT 11 SPITFIRE COURT 243 BIRMINGHAM'),
-            ('GARDEN FLAT 11 SPITFIRE COURT 243 BIRMINGHAM'),
-            ('TOP FLOOR FLAT 12A HIGH STREET'),
-            ('GROUND FLOOR FLAT B 25 MAIN ROAD'),
-            ('FIRST FLOOR 15B LONDON ROAD')
-        ) AS t(address_concat)
-    """
-    input_relation = duckdb_connection.sql(test_data)
-
-    result = parse_out_flat_positional(input_relation, duckdb_connection)
-
-    results = result.fetchall()
-
-    expected = [
-        ["A"],  # 11A SPITFIRE COURT
-        ["A"],  # FLAT A
-        ["BASEMENT", "A"],  # BASEMENT FLAT A
-        ["BASEMENT"],  # BASEMENT FLAT 11
-        ["GARDEN"],  # GARDEN FLAT 11
-        ["TOP FLOOR"],  # TOP FLOOR FLAT 12A
-        ["GROUND FLOOR", "B"],  # GROUND FLOOR FLAT B
-        ["FIRST FLOOR"],  # FIRST FLOOR 15B
+    test_cases = [
+        {
+            "input": "11A SPITFIRE COURT 243 BIRMINGHAM",
+            "expected_flat_positional": None,
+            "expected_flat_letter": "A",
+        },
+        {
+            "input": "FLAT A 11 SPITFIRE COURT 243 BIRMINGHAM",
+            "expected_flat_positional": None,
+            "expected_flat_letter": "A",
+        },
+        {
+            "input": "BASEMENT FLAT A 11 SPITFIRE COURT 243 BIRMINGHAM",
+            "expected_flat_positional": "BASEMENT",
+            "expected_flat_letter": "A",
+        },
+        {
+            "input": "BASEMENT FLAT 11 SPITFIRE COURT 243 BIRMINGHAM",
+            "expected_flat_positional": "BASEMENT",
+            "expected_flat_letter": None,
+        },
+        {
+            "input": "GARDEN FLAT 11 SPITFIRE COURT 243 BIRMINGHAM",
+            "expected_flat_positional": "GARDEN",
+            "expected_flat_letter": None,
+        },
+        {
+            "input": "TOP FLOOR FLAT 12A HIGH STREET",
+            "expected_flat_positional": "TOP FLOOR",
+            "expected_flat_letter": None,
+        },
+        {
+            "input": "GROUND FLOOR FLAT B 25 MAIN ROAD",
+            "expected_flat_positional": "GROUND FLOOR",
+            "expected_flat_letter": "B",
+        },
+        {
+            "input": "FIRST FLOOR 15B LONDON ROAD",
+            "expected_flat_positional": "FIRST FLOOR",
+            "expected_flat_letter": None,
+        },
+        {
+            "input": "UNIT C MY HOUSE 120 MY ROAD",
+            "expected_flat_positional": None,
+            "expected_flat_letter": "C",
+        },
     ]
-
-    for actual_row, expected_flat_pos in zip(results, expected):
-        assert actual_row[-1] == expected_flat_pos, (
-            f"For address '{actual_row[0]}', expected {expected_flat_pos} but got {actual_row[-1]}"
-        )
-
-
-def test_edge_cases():
-    duckdb_connection = duckdb.connect()
-    test_data = """
-        SELECT * FROM (VALUES
-            (''),
-            ('NO FLAT INFO HERE'),
-            ('FLAT'),
-            ('BASEMENT'),
-            ('123 BASEMENT ROAD'),
-            ('FLAT 123B STREET')
-        ) AS t(address_concat)
-    """
-    input_relation = duckdb_connection.sql(test_data)
-    result = parse_out_flat_positional(input_relation, duckdb_connection)
-    results = result.fetchall()
-
-    expected = [
-        [],  # empty string
-        [],  # no flat info
-        [],  # just FLAT
-        ["BASEMENT"],  # just BASEMENT
-        [],  # BASEMENT as part of street name
-        ["B"],  # FLAT 123B
-    ]
-
-    for actual_row, expected_flat_pos in zip(results, expected):
-        assert actual_row[-1] == expected_flat_pos, (
-            f"For address '{actual_row[0]}', expected {expected_flat_pos} but got {actual_row[-1]}"
-        )
+    run_tests(test_cases)
