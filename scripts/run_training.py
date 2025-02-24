@@ -12,7 +12,7 @@ from uk_address_matcher.linking_model.training import settings_for_training
 
 from splink import Linker, DuckDBAPI, block_on
 
-LIMIT = 1000000000
+LIMIT = 100000000
 
 con = duckdb.connect(":default:")
 
