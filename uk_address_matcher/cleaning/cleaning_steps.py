@@ -132,15 +132,14 @@ def parse_out_flat_position_and_letter(
     SELECT
         * EXCLUDE (floor_pos, flat_letter, leading_letter, flat_number),
         NULLIF(floor_pos, '') as flat_positional,
-       COALESCE(
+        NULLIF(COALESCE(
                 NULLIF(flat_letter, ''),
                 NULLIF(leading_letter, ''),
                 CASE
                     WHEN LENGTH(flat_number) <= 4 THEN flat_number
                     ELSE NULL
                 END
-            )
-        flat_letter
+            ), '') as flat_letter
     FROM step1
     """
     return con.sql(sql)
