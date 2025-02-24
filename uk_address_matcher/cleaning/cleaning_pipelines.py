@@ -1,4 +1,4 @@
-import importlib.resources as pkg_resources
+from importlib import resources
 import random
 import string
 
@@ -100,10 +100,12 @@ def clean_data_using_precomputed_rel_tok_freq(
 ) -> DuckDBPyRelation:
     # Load the default term frequency table if none is provided
     if rel_tok_freq_table is None:
-        with pkg_resources.path(
-            "uk_address_matcher.data", "address_token_frequencies.parquet"
-        ) as default_tf_path:
-            rel_tok_freq_table = con.read_parquet(str(default_tf_path))
+        default_tf_path = (
+            resources.files("uk_address_matcher")
+            / "data"
+            / "address_token_frequencies.parquet"
+        )
+        rel_tok_freq_table = con.read_parquet(str(default_tf_path))
 
     con.register("rel_tok_freq", rel_tok_freq_table)
 
