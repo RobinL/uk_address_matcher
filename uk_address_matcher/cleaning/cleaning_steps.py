@@ -98,6 +98,7 @@ def parse_out_flat_position_and_letter(
     - "FLAT A" -> (None, "A")
     - "BASEMENT FLAT A" -> ("BASEMENT", "A")
     - "BASEMENT FLAT 11" -> ("BASEMENT", None)
+    - "FLAT 11 123 OTHER STREET" -> (None, "11")
 
     Args:
         ddb_pyrel (DuckDBPyRelation): The input relation
@@ -113,6 +114,8 @@ def parse_out_flat_position_and_letter(
     flat_letter = r"\b(FLAT|UNIT|SHED|APARTMENT)\s+([A-Z])\b"
     leading_letter = r"^\s*\d+([A-Za-z])\b"
 
+    flat_number = r"\bFLAT\s+(\S*\d\S*)\s+\S*\d\S*\b"
+
     sql = f"""
     WITH step1 AS (
         SELECT
@@ -122,19 +125,22 @@ def parse_out_flat_position_and_letter(
             -- Get letter after FLAT/UNIT/etc if present
             regexp_extract(address_concat, '{flat_letter}', 2) as flat_letter,
             -- Get just the letter part of leading number+letter combination
-            regexp_extract(address_concat, '{leading_letter}', 1) as leading_letter
+            regexp_extract(address_concat, '{leading_letter}', 1) as leading_letter,
+            regexp_extract(address_concat, '{flat_number}', 1) as flat_number
         FROM ddb_pyrel
     )
     SELECT
-        * EXCLUDE (floor_pos, flat_letter, leading_letter),
+        * EXCLUDE (floor_pos, flat_letter, leading_letter, flat_number),
         NULLIF(floor_pos, '') as flat_positional,
-        CASE
-            -- If we have a floor position + FLAT + number, don't include letter
-            WHEN floor_pos IS NOT NULL AND regexp_matches(address_concat, '\\bFLAT\\s+\\d+\\b')
-            THEN NULL
-            -- Otherwise include any letter we found
-            ELSE COALESCE(NULLIF(flat_letter, ''), NULLIF(leading_letter, ''))
-        END AS flat_letter
+       COALESCE(
+                NULLIF(flat_letter, ''),
+                NULLIF(leading_letter, ''),
+                CASE
+                    WHEN LENGTH(flat_number) <= 4 THEN flat_number
+                    ELSE NULL
+                END
+            )
+        flat_letter
     FROM step1
     """
     return con.sql(sql)
