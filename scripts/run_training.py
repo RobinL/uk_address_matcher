@@ -12,7 +12,7 @@ from uk_address_matcher.linking_model.training import settings_for_training
 
 from splink import Linker, DuckDBAPI, block_on
 
-LIMIT = 100000000
+LIMIT = 1000000000
 
 con = duckdb.connect(":default:")
 
@@ -44,7 +44,7 @@ linker = Linker(
 
 linker.visualisations.match_weights_chart()
 
-linker.misc.save_model_to_json(
+m = linker.misc.save_model_to_json(
     "uk_address_matcher/data/splink_model.json", overwrite=True
 )
 
