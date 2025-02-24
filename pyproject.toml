@@ -27,10 +27,17 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.package-data]
 "uk_address_matcher" = ["data/*.parquet", "data/*.csv", "data/*.json"]
 
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]
+
 [tool.setuptools.packages.find]
 include = ["uk_address_matcher*"]
 # See https://github.com/pypa/setuptools/issues/4759
 exclude = ["secret_data*", "_LICENSE.md"]
+
 
 [tool.setuptools]
 include-package-data = true

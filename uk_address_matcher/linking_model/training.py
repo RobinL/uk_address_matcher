@@ -85,12 +85,14 @@ num_1_comparison = {
             "fix_u_probability": toggle_u_probability_fix,
         },
         {
-            "sql_condition": '"numeric_1_alt_l" = "numeric_token_1_r" OR "numeric_token_1_l" = "numeric_1_alt_r" OR "numeric_1_alt_l" = "numeric_1_alt_r"',
-            "label_for_charts": "Exact match on alt numeric token",
-            "m_probability": 0.9,
+            "sql_condition": """
+                        regexp_extract(numeric_token_1_l, '\\d+', 0) = regexp_extract(numeric_token_1_r, '\\d+', 0)
+                        """,
+            "label_for_charts": "Exact match",
+            "m_probability": 0.95,
             "u_probability": 0.01,
             "tf_adjustment_column": "numeric_token_1",
-            "tf_adjustment_weight": 0.5,
+            "tf_adjustment_weight": 1.0,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
@@ -211,24 +213,24 @@ arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.33)
 
 def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
     data = []
-    anchor_exp = 12
+    anchor_exp = -12
     anchor_m_prob = 2048.0
 
     current_exp = start_exp
-    while current_exp >= end_exp:
-        if current_exp >= 0:
-            sql_cond = f"{arr_red_sql} > 1e+{current_exp}"
-            label = f" > 1e+{current_exp}"
+    while current_exp <= end_exp:
+        if current_exp > 0:
+            sql_cond = f"{arr_red_sql} < 1e{current_exp}"
+            label = f" < 1e{current_exp}"
         else:
-            sql_cond = f"{arr_red_sql} < 1e-{abs(current_exp)}"
-            label = f" < 1e-{abs(current_exp)}"
+            sql_cond = f"{arr_red_sql} < 1e{current_exp}"
+            label = f" < 1e{current_exp}"
 
         if current_exp > anchor_exp:
             # Above <1e-12: doubles every 4 steps (increases by 2^(1/4) per step)
-            m_prob = anchor_m_prob * (2 ** ((current_exp - anchor_exp) / 4))
+            m_prob = anchor_m_prob * (2 ** ((anchor_exp - current_exp) / 1))
         else:
             # Below <1e-12: halves every 2 steps (decreases by 2^(-1/2) per step)
-            m_prob = anchor_m_prob * (2 ** (-(anchor_exp - current_exp) / 1))
+            m_prob = anchor_m_prob * (2 ** (-(current_exp - anchor_exp) / 4))
 
         data.append(
             {
@@ -246,7 +248,7 @@ def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
     return data
 
 
-middle_conditions = generate_arr_reduce_data(30, -4, -1)
+middle_conditions = generate_arr_reduce_data(-30, 4, 1)
 
 
 token_rel_freq_arr_comparison = {
@@ -365,15 +367,35 @@ flat_positional_comparison = {
     "comparison_levels": [
         # Note AND not OR
         {
-            "sql_condition": '"flat_positional_l" IS NULL AND "flat_positional_r" IS NULL',
+            "sql_condition": '"flat_positional_l" IS NULL AND "flat_positional_r" IS NULL AND "flat_letter_l" IS NULL AND "flat_letter_r" IS NULL',
             "label_for_charts": "Null",
             "is_null_level": True,
         },
         {
-            "sql_condition": '"flat_positional_l" = "flat_positional_r"',
+            "sql_condition": "flat_positional_l = flat_positional_r",
             "label_for_charts": "Exact match",
             "m_probability": 0.95,
             "u_probability": 0.01,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": "flat_letter_l = flat_letter_r",
+            "label_for_charts": "Exact match",
+            "m_probability": 0.95,
+            "u_probability": 0.01,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_l IS NOT NULL)
+            or
+            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_r IS NOT NULL)
+            """,
+            "label_for_charts": "Exact match",
+            "m_probability": 1,
+            "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },

@@ -87,29 +87,55 @@ def clean_address_string_first_pass(
     return con.sql(sql)
 
 
-def parse_out_flat_positional(
+def parse_out_flat_position_and_letter(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
     """
-    Extracts the first flat positional from address strings and creates a new field called flat_positional.
+    Extracts flat positions and letters from address strings into separate columns.
 
-    Examples of flat positionals:
-        "BASEMENT", "GROUND FLOOR", "FIRST FLOOR", "SECOND FLOOR", "TOP FLOOR"
+    Examples:
+    - "11A HIGH STREET" -> (None, "A")
+    - "FLAT A" -> (None, "A")
+    - "BASEMENT FLAT A" -> ("BASEMENT", "A")
+    - "BASEMENT FLAT 11" -> ("BASEMENT", None)
 
     Args:
-        table_name (str): The name of the table to process.
-        con (DuckDBPyConnection): The DuckDB connection.
+        ddb_pyrel (DuckDBPyRelation): The input relation
+        con (DuckDBPyConnection): The DuckDB connection
 
     Returns:
-        DuckDBPyRelation: The modified table with the new field flat_positional.
+        DuckDBPyRelation: The modified table with flat_positional and flat_letter fields
     """
-    regex_pattern = r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR)\b"  # Matches flat positionals
+    # Define regex patterns
+    floor_positions = (
+        r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR|GARDEN)\b"
+    )
+    flat_letter = r"\b(FLAT|UNIT|SHED|APARTMENT)\s+([A-Z])\b"
+    leading_letter = r"^\s*\d+([A-Z])\b"
 
     sql = f"""
+    WITH step1 AS (
+        SELECT
+            *,
+            -- Get floor position if present
+            regexp_extract(address_concat, '{floor_positions}', 1) as floor_pos,
+            -- Get letter after FLAT/UNIT/etc if present
+            regexp_extract(address_concat, '{flat_letter}', 2) as flat_letter,
+            -- Get just the letter part of leading number+letter combination
+            regexp_extract(address_concat, '{leading_letter}', 1) as leading_letter
+        FROM ddb_pyrel
+    )
     SELECT
-        *,
-        NULLIF(regexp_extract(address_concat, '{regex_pattern}', 1),'') AS flat_positional
-    FROM ddb_pyrel
+        * EXCLUDE (floor_pos, flat_letter, leading_letter),
+        NULLIF(floor_pos, '') as flat_positional,
+        CASE
+            -- If we have a floor position + FLAT + number, don't include letter
+            WHEN floor_pos IS NOT NULL AND regexp_matches(address_concat, '\\bFLAT\\s+\\d+\\b')
+            THEN NULL
+            -- Otherwise include any letter we found
+            ELSE COALESCE(NULLIF(flat_letter, ''), NULLIF(leading_letter, ''))
+        END AS flat_letter
+    FROM step1
     """
     return con.sql(sql)
 
@@ -176,40 +202,6 @@ def split_numeric_tokens_to_cols(
     from ddb_pyrel
     """
 
-    return con.sql(sql)
-
-
-def extract_numeric_1_alt(
-    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
-) -> DuckDBPyRelation:
-    """
-    Extracts a single letter followed by a numeric token from address strings
-    and creates a new field called numeric_1_alt containing this value.
-
-    Examples:
-        'FLAT B, 427, FULHAM PALACE ROAD, LONDON' -> '427B'
-        'UNIT C my house 120 my road' -> '120C'
-
-    Args:
-        table_name (str): The name of the table to process.
-        con (DuckDBPyConnection): The DuckDB connection.
-
-    Returns:
-        DuckDBPyRelation: The modified table with the new field.
-    """
-    regex_pattern = (
-        r"\b([A-Za-z])\b"  # Matches a single letter (A-Z or a-z) surrounded by word boundaries
-        r".*?"  # Non-greedy match for any characters in between
-        r"\b(\d+)\b"  # Matches any sequence of digits surrounded by word boundaries
-    )
-
-    sql = f"""
-    SELECT
-        *,
-        NULLIF(regexp_extract(address_concat, '{regex_pattern}', 2) ||
-        regexp_extract(address_concat, '{regex_pattern}', 1),'') AS numeric_1_alt
-    FROM ddb_pyrel
-    """
     return con.sql(sql)
 
 
