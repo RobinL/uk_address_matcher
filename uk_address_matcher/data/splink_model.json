@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "mtcbq0hu",
+    "linker_uid": "0qppsl4s",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -47,7 +47,7 @@
                     "fix_u_probability": true
                 },
                 {
-                    "sql_condition": "\n            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_l IS NOT NULL)\n            or\n            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_r IS NOT NULL)\n            ",
+                    "sql_condition": "\n            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)\n            or\n            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)\n            ",
                     "label_for_charts": "Exact match",
                     "m_probability": 1,
                     "u_probability": 1,

@@ -134,7 +134,11 @@ def clean_data_using_precomputed_rel_tok_freq(
         + QUEUE_POST_TF
     )
 
-    res = run_pipeline(input_table, con=con, cleaning_queue=cleaning_queue)
+    res = run_pipeline(
+        input_table,
+        con=con,
+        cleaning_queue=cleaning_queue,
+    )
 
     materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
     con.register("__address_table_res", res)

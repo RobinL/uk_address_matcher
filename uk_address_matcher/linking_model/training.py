@@ -97,9 +97,9 @@ num_1_comparison = {
             "fix_u_probability": toggle_u_probability_fix,
         },
         {
-            "sql_condition": '"numeric_token_2_l" = "numeric_token_1_r"',
+            "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
             "label_for_charts": "Exact match inverted numbers",
-            "m_probability": 3,
+            "m_probability": 4,
             "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
@@ -140,7 +140,7 @@ num_2_comparison = {
             "fix_u_probability": toggle_u_probability_fix,
         },
         {
-            "sql_condition": '"numeric_token_1_l" = "numeric_token_2_r"',
+            "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
             "label_for_charts": "Exact match inverted numbers",
             "m_probability": 1,
             "u_probability": 1,
@@ -389,9 +389,9 @@ flat_positional_comparison = {
         },
         {
             "sql_condition": """
-            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_l IS NOT NULL)
+            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)
             or
-            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_r IS NOT NULL)
+            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)
             """,
             "label_for_charts": "Exact match",
             "m_probability": 1,
