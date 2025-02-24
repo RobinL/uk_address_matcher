@@ -1,7 +1,7 @@
 # In the end we didn't really train the model
 # so much as hard code all the match weights since training
 # doesn't really work
-
+import os
 
 import duckdb
 
@@ -44,9 +44,12 @@ linker = Linker(
 
 linker.visualisations.match_weights_chart()
 
-m = linker.misc.save_model_to_json(
-    "uk_address_matcher/data/splink_model.json", overwrite=True
-)
+
+model_path = "uk_address_matcher/data/splink_model.json"
+if os.path.exists(model_path):
+    os.remove(model_path)
+
+m = linker.misc.save_model_to_json("uk_address_matcher/data/splink_model.json")
 
 # linker.training.estimate_u_using_random_sampling(
 #     max_pairs=1e8, experimental_optimisation=True

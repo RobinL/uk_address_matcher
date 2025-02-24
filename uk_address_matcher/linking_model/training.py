@@ -389,9 +389,9 @@ flat_positional_comparison = {
         },
         {
             "sql_condition": """
-            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_l IS NOT NULL)
+            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)
             or
-            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_r IS NOT NULL)
+            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)
             """,
             "label_for_charts": "Exact match",
             "m_probability": 1,

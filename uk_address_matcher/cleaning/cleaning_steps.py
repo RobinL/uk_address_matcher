@@ -111,7 +111,7 @@ def parse_out_flat_position_and_letter(
         r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR|GARDEN)\b"
     )
     flat_letter = r"\b(FLAT|UNIT|SHED|APARTMENT)\s+([A-Z])\b"
-    leading_letter = r"^\s*\d+([A-Z])\b"
+    leading_letter = r"^\s*\d+([A-Za-z])\b"
 
     sql = f"""
     WITH step1 AS (
@@ -194,12 +194,12 @@ def split_numeric_tokens_to_cols(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
     sql = """
-    select
-        * exclude (numeric_tokens),
-        numeric_tokens[1] as numeric_token_1,
-        numeric_tokens[2] as numeric_token_2,
-        numeric_tokens[3] as numeric_token_3
-    from ddb_pyrel
+    SELECT
+        * EXCLUDE (numeric_tokens),
+        regexp_extract_all(array_to_string(numeric_tokens, ' '), '\\d+')[1] as numeric_token_1,
+        regexp_extract_all(array_to_string(numeric_tokens, ' '), '\\d+')[2] as numeric_token_2,
+        regexp_extract_all(array_to_string(numeric_tokens, ' '), '\\d+')[3] as numeric_token_3
+    FROM ddb_pyrel
     """
 
     return con.sql(sql)
