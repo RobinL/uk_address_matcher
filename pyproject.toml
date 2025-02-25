@@ -30,7 +30,9 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "pyarrow>=19.0.1",
     "pytest>=8.3.4",
+    "pyyaml>=6.0.2",
 ]
 
 [tool.setuptools.packages.find]
