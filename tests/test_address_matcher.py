@@ -109,16 +109,16 @@ def test_address_matching_combined():
     correct_matches = sum(1 for m in matches if m[1] == m[2])
     match_rate = (correct_matches / total_cases) * 100 if total_cases > 0 else 0
 
-    print("\nAddress Matching Results:")
-    print(f"Total test cases: {total_cases}")
-    print(f"Correct matches: {correct_matches}")
-    print(f"Match rate: {match_rate:.2f}%\n")
+    # Create a results dictionary
+    test_results = {
+        "total_cases": total_cases,
+        "correct_matches": correct_matches,
+        "match_rate": match_rate,
+        "mismatches": [],
+    }
 
-    # Log details of mismatches
+    # Collect details of mismatches
     if correct_matches < total_cases:
-        print("Details of mismatches:")
-        print("-" * 80)
-
         for match in matches:
             test_block_id, expected_match_id, actual_match_id, match_weight = match
 
@@ -168,16 +168,58 @@ def test_address_matching_combined():
                 [test_block_id, expected_match_id, match_weight, actual_match_id],
             ).fetchall()
 
-            print(f"Test Block ID: {test_block_id}")
+            # Structure the mismatch details
+            mismatch_data = {"test_block_id": test_block_id, "records": []}
+
+            for detail in mismatch_details:
+                record_type, address, postcode, weight = detail
+                mismatch_data["records"].append(
+                    {
+                        "record_type": record_type,
+                        "address": address,
+                        "postcode": postcode,
+                        "match_weight": weight,
+                    }
+                )
+
+            test_results["mismatches"].append(mismatch_data)
+
+    # Print results for local testing purposes
+    print("\nAddress Matching Results:")
+    print(f"Total test cases: {total_cases}")
+    print(f"Correct matches: {correct_matches}")
+    print(f"Match rate: {match_rate:.2f}%\n")
+
+    if test_results["mismatches"]:
+        print("Details of mismatches:")
+        print("-" * 80)
+
+        for mismatch in test_results["mismatches"]:
+            print(f"Test Block ID: {mismatch['test_block_id']}")
             print(
                 f"{'Record Type':<15} {'Address':<60} {'Postcode':<10} {'Match Weight'}"
             )
             print("-" * 100)
 
-            for detail in mismatch_details:
-                record_type, address, postcode, weight = detail
-                weight_str = f"{weight:.2f}" if weight is not None else "N/A"
-                print(f"{record_type:<15} {address:<60} {postcode:<10} {weight_str}")
+            for record in mismatch["records"]:
+                weight_str = (
+                    f"{record['match_weight']:.2f}"
+                    if record["match_weight"] is not None
+                    else "N/A"
+                )
+                print(
+                    f"{record['record_type']:<15} {record['address']:<60} {record['postcode']:<10} {weight_str}"
+                )
 
             print("-" * 100)
             print()
+
+    # Store results in pytest module for the runner to access
+    import pytest
+
+    pytest._test_results = test_results
+
+    # Assert that all addresses were matched correctly
+    assert correct_matches == total_cases, (
+        f"Only {correct_matches}/{total_cases} addresses matched correctly"
+    )

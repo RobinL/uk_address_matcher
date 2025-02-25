@@ -33,46 +33,19 @@ jobs:
     - name: Run address matcher test
       id: run-test
       run: python .github/workflows/run_address_test.py
-
-    - name: Extract match rate
-      id: extract-rate
-      run: |
-        # Extract match rate from the test output
-        MATCH_RATE=$(grep -o "Match rate: [0-9.]\+%" test_results.txt || echo "Match rate: Not found")
-        echo "match_rate=$MATCH_RATE" >> $GITHUB_OUTPUT
-
-        # Check if there were any mismatches
-        if grep -q "Details of mismatches:" test_results.txt; then
-          echo "has_mismatches=true" >> $GITHUB_OUTPUT
-          # Extract mismatch details (limited to avoid too large comments)
-          MISMATCHES=$(sed -n '/Details of mismatches:/,/^$/p' test_results.txt)
-          echo "mismatches<<EOF" >> $GITHUB_OUTPUT
-          echo "$MISMATCHES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        else
-          echo "has_mismatches=false" >> $GITHUB_OUTPUT
-        fi
+      continue-on-error: true
 
     - name: Comment on PR
       uses: actions/github-script@v6
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          const matchRate = '${{ steps.extract-rate.outputs.match_rate }}';
-          const hasMismatches = '${{ steps.extract-rate.outputs.has_mismatches }}' === 'true';
-          const mismatches = `${{ steps.extract-rate.outputs.mismatches }}`;
-
-          let body = `## 📊 Address Matcher Test Results\n\n**${matchRate}**\n\n`;
-
-          if (hasMismatches) {
-            body += `### ⚠️ Some addresses were not matched correctly:\n\n\`\`\`\n${mismatches}\n\`\`\``;
-          } else {
-            body += `### ✅ All addresses were matched correctly!`;
-          }
+          const fs = require('fs');
+          const commentContent = fs.readFileSync('github-comment.md', 'utf8');
 
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: body
+            body: commentContent
           });
