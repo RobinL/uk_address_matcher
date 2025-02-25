@@ -39,35 +39,35 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
         (p, q) -> p * q
     )"""
 
-    # Second part - divide by frequencies of non-matching tokens
-    non_matching_tokens = f"""
-    list_reduce(
-        list_prepend(
-            1.0,
-            list_transform(
-                list_concat(
-                    array_filter(
-                        {column_name}_l,
-                        y -> NOT array_contains(
-                                list_transform({column_name}_r, x -> x.tok),
-                                y.tok
-                            )
-                    ),
-                    array_filter(
-                        {column_name}_r,
-                        y -> NOT array_contains(
-                                list_transform({column_name}_l, x -> x.tok),
-                                y.tok
-                            )
-                    )
-                ),
-                x -> x.rel_freq
-            )
-        ),
-        (p, q) -> p / q^{power}
-    )"""
+    # # Second part - divide by frequencies of non-matching tokens
+    # non_matching_tokens = f"""
+    # list_reduce(
+    #     list_prepend(
+    #         1.0,
+    #         list_transform(
+    #             list_concat(
+    #                 array_filter(
+    #                     {column_name}_l,
+    #                     y -> NOT array_contains(
+    #                             list_transform({column_name}_r, x -> x.tok),
+    #                             y.tok
+    #                         )
+    #                 ),
+    #                 array_filter(
+    #                     {column_name}_r,
+    #                     y -> NOT array_contains(
+    #                             list_transform({column_name}_l, x -> x.tok),
+    #                             y.tok
+    #                         )
+    #                 )
+    #             ),
+    #             x -> x.rel_freq
+    #         )
+    #     ),
+    #     (p, q) -> p / q^{power}
+    # )"""
 
-    return f"({matching_tokens} * {non_matching_tokens})"
+    return f"{matching_tokens}"
 
 
 num_1_comparison = {
