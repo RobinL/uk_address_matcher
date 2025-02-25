@@ -28,7 +28,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e .
-        pip install pytest
+        pip install pytest pyyaml
 
     - name: Run address matcher test
       id: run-test
@@ -41,7 +41,14 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const fs = require('fs');
-          const commentContent = fs.readFileSync('github-comment.md', 'utf8');
+          let commentContent;
+
+          try {
+            commentContent = fs.readFileSync('github-comment.md', 'utf8');
+          } catch (error) {
+            console.log('Error reading comment file:', error);
+            commentContent = '## ❌ Address Matcher Test Failed\n\nThe test failed to run properly. Please check the workflow logs for details.';
+          }
 
           github.rest.issues.createComment({
             issue_number: context.issue.number,
