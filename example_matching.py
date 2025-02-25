@@ -1,8 +1,10 @@
 import duckdb
 import pandas as pd
+from IPython.display import display
 
 from uk_address_matcher.post_linkage.analyse_results import (
     distinguishability_summary,
+    distinguishability_table,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
@@ -97,3 +99,125 @@ dsum_2 = distinguishability_summary(
     df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
 )
 dsum_2.show(max_width=500, max_rows=20)
+
+
+# -----------------------------------------------------------------------------
+# Step 6: Inspect the result
+# -----------------------------------------------------------------------------
+
+# Show matches with a weight of >5 and distinguishability of >5
+dt = distinguishability_table(df_predict_improved)
+
+best_matches_distinguishability_sql = """
+with matches as (
+SELECT
+    unique_id_r as fhrs_id,
+    original_address_concat_r as fhrs_address,
+    postcode_r as fhrs_postcode,
+    unique_id_l as ch_id,
+    original_address_concat_l as ch_address,
+    postcode_l as ch_postcode,
+    match_weight,
+    distinguishability
+FROM dt
+QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
+
+)
+select *
+from matches
+where match_weight > 5 and distinguishability > 5
+ORDER BY random()
+LIMIT 20
+"""
+
+print("\nRandom 20 matches for FHRS addresses:")
+con.sql(best_matches_distinguishability_sql).show(max_width=500)
+
+
+# Then take a random example and show the record comparison and waterfall
+random_match_sql = """
+SELECT
+    unique_id_r as fhrs_id,
+    unique_id_l as ch_id,
+    match_weight
+FROM df_predict_improved
+QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
+ORDER BY RANDOM()
+LIMIT 1
+"""
+
+# Get a random matched pair
+random_match = con.sql(random_match_sql).fetchall()[0]
+fhrs_id, ch_id, match_weight = random_match
+
+# Show detailed comparison of the random match
+print(
+    f"\nDetailed comparison for randomly selected match (weight: {match_weight:.2f}):"
+)
+
+comparison_sql = f"""
+SELECT
+    'FHRS' as source,
+    unique_id,
+    original_address_concat,
+    postcode,
+    flat_positional,
+    flat_letter,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3
+FROM df_fhrs_clean
+WHERE unique_id = '{fhrs_id}'
+
+UNION ALL
+
+SELECT
+    'Companies House' as source,
+    unique_id,
+    original_address_concat,
+    postcode,
+    flat_positional,
+    flat_letter,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3
+FROM df_ch_clean
+WHERE unique_id = '{ch_id}'
+"""
+
+con.sql(comparison_sql).show(max_width=500)
+
+# Show top matches for this FHRS ID
+top_matches_sql = f"""
+SELECT
+    concat_ws(' ', original_address_concat_r, postcode_r) as fhrs_address,
+    concat_ws(' ', original_address_concat_l, postcode_l) as ch_address,
+    match_weight,
+    distinguishing_tokens_1_count_1,
+    distinguishing_tokens_1_count_2,
+    distinguishing_tokens_2_count_1
+FROM df_predict_improved
+WHERE unique_id_r = '{fhrs_id}'
+ORDER BY match_weight DESC
+LIMIT 5
+"""
+
+print(f"\nTop 5 potential matches for FHRS ID {fhrs_id}:")
+con.sql(top_matches_sql).show(max_width=500)
+
+# Get waterfall chart data for the matched pair
+waterfall_sql = f"""
+SELECT *
+FROM df_predict_ddb
+WHERE unique_id_r = '{fhrs_id}' AND unique_id_l = '{ch_id}'
+"""
+
+waterfall_data = con.sql(waterfall_sql)
+
+# Display waterfall chart
+print("\nWaterfall chart showing match weight components:")
+display(
+    linker.visualisations.waterfall_chart(
+        waterfall_data.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
