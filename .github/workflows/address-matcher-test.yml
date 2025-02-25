@@ -7,6 +7,11 @@ on:
       - 'uk_address_matcher/**'
       - 'tests/**'
 
+# Add permissions to allow commenting on PRs
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test-address-matcher:
     runs-on: ubuntu-latest
