@@ -50,9 +50,8 @@ df_ch_clean = clean_data_using_precomputed_rel_tok_freq(df_ch, con=con)
 df_fhrs_clean = clean_data_using_precomputed_rel_tok_freq(df_fhrs, con=con)
 
 # -----------------------------------------------------------------------------
-# Step 3: Link the data using Splink
+# Step 3: First pass - Link the data using Splink
 # -----------------------------------------------------------------------------
-
 
 linker = get_linker(
     df_addresses_to_match=df_fhrs_clean,
@@ -68,8 +67,7 @@ df_predict = linker.inference.predict(
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
 # -----------------------------------------------------------------------------
-# Step 4: There's an optimisation we can do post-linking to improve score
-# described here https://github.com/RobinL/uk_address_matcher/issues/14
+# Step 4: Second pass - Improve predictions using distinguishing tokens
 # -----------------------------------------------------------------------------
 
 start_time = time.time()
@@ -83,18 +81,18 @@ df_predict_improved.show(max_width=500, max_rows=20)
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
+
+# -----------------------------------------------------------------------------
+# Step 5: Compare results before and after the second pass
 # -----------------------------------------------------------------------------
 
-# # -----------------------------------------------------------------------------
-# # Step 4: Get summary results of the match accuracy by taking the best match
-# # for each FHRS address
-# # -----------------------------------------------------------------------------
-
+print("\nResults before second pass:")
 dsum_1 = distinguishability_summary(
     df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
 )
 dsum_1.show(max_width=500, max_rows=20)
 
+print("\nResults after second pass:")
 dsum_2 = distinguishability_summary(
     df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
 )

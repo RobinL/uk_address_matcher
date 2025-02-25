@@ -9,10 +9,9 @@ pip install --pre uk_address_matcher
 
 ## Usage
 
-
 High performance address matching using a pre-trained [Splink](https://github.com/moj-analytical-services/splink) model.
 
-Assuming you have two duckdb dataframes  in this format:
+Assuming you have two duckdb dataframes in this format:
 
 | unique_id | address_concat               | postcode  |
 |-----------|------------------------------|-----------|
@@ -20,6 +19,8 @@ Assuming you have two duckdb dataframes  in this format:
 | 2         | 456 Other Road, Otherville   | NO1 3WY   |
 | ...       | ...                          | ...       |
 
+
+### Basic Matching
 
 Match them with:
 
@@ -47,13 +48,37 @@ linker = get_linker(
     additional_columns_to_retain=["original_address_concat"],
 )
 
+# First pass - standard probabilistic linkage
 df_predict = linker.inference.predict(
     threshold_match_weight=-50, experimental_optimisation=True
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
+
+# Second pass - improve predictions using distinguishing tokens
+from uk_address_matcher.post_linkage.identify_distinguishing_tokens import improve_predictions_using_distinguishing_tokens
+
+df_predict_improved = improve_predictions_using_distinguishing_tokens(
+    df_predict=df_predict_ddb,
+    con=con,
+    match_weight_threshold=-20,
+)
 ```
 
-Initial tests suggest you can match ~ 1,000 addresses per second against a list of 30 million addresses on a laptop.
+
+### Two-Pass Matching Approach
+
+The package uses a two-pass approach to achieve high accuracy matching:
+
+1. **First Pass**: A standard probabilistic linkage model using Splink generates candidate matches for each input address.
+
+2. **Second Pass**: Within each candidate group, the model analyzes distinguishing tokens to refine matches:
+   - Identifies tokens that uniquely distinguish addresses within a candidate group
+   - Detects "punishment tokens" (tokens in the messy address that don't match the current candidate but do match other candidates)
+   - Uses this contextual information to improve match scores
+
+This approach is particularly effective when matching to a canonical (deduplicated) address list, as it can identify subtle differences between very similar addresses.
+
+
 
 Refer to [the example](example_matching.py), which has detailed comments, for how to match your data.
 
