@@ -1,0 +1,65 @@
+name: Address Matcher Test
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'uk_address_matcher/**'
+      - 'tests/**'
+
+# Add permissions to allow commenting on PRs
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test-address-matcher:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Setup uv
+      id: setup-uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install the project
+      run: uv sync --all-extras --dev
+
+    - name: Run address matcher test
+      id: run-test
+      run: uv run .github/workflows/run_address_test.py
+      continue-on-error: true
+
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          let commentContent;
+
+          try {
+            commentContent = fs.readFileSync('github-comment.md', 'utf8');
+          } catch (error) {
+            console.log('Error reading comment file:', error);
+            commentContent = '## ❌ Address Matcher Test Failed\n\nThe test failed to run properly. Please check the workflow logs for details.';
+          }
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: commentContent
+          });

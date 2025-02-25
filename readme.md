@@ -1,4 +1,4 @@
-# Matching UK addresses using Splink
+# High performance UK addresses matcher (geocoder)
 
 ## Installation
 
