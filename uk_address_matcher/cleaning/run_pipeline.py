@@ -39,7 +39,9 @@ def run_pipeline(
         ddb_pyrel = cleaning_function(ddb_pyrel, con)
 
         if print_intermediate:
-            print(f"{'-'*20}\nApplying function: {cleaning_function.__name__}, result:")
+            print(
+                f"{'-' * 20}\nApplying function: {cleaning_function.__name__}, result:"
+            )
             df_filtered = ddb_pyrel.filter(filter_sql) if filter_sql else ddb_pyrel
             df_filtered.show(max_rows=10, max_width=10000, max_col_width=10000)
 

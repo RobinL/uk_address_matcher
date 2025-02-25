@@ -93,12 +93,6 @@ def parse_out_flat_position_and_letter(
     """
     Extracts flat positions and letters from address strings into separate columns.
 
-    Examples:
-    - "11A HIGH STREET" -> (None, "A")
-    - "FLAT A" -> (None, "A")
-    - "BASEMENT FLAT A" -> ("BASEMENT", "A")
-    - "BASEMENT FLAT 11" -> ("BASEMENT", None)
-    - "FLAT 11 123 OTHER STREET" -> (None, "11")
 
     Args:
         ddb_pyrel (DuckDBPyRelation): The input relation
@@ -108,10 +102,8 @@ def parse_out_flat_position_and_letter(
         DuckDBPyRelation: The modified table with flat_positional and flat_letter fields
     """
     # Define regex patterns
-    floor_positions = (
-        r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|TOP FLOOR|GARDEN)\b"
-    )
-    flat_letter = r"\b(FLAT|UNIT|SHED|APARTMENT)\s+([A-Z])\b"
+    floor_positions = r"\b(BASEMENT|GROUND FLOOR|FIRST FLOOR|SECOND FLOOR|THIRD FLOOR|TOP FLOOR|GARDEN)\b"
+    flat_letter = r"\b\d{0,4}([A-Za-z])\b"
     leading_letter = r"^\s*\d+([A-Za-z])\b"
 
     flat_number = r"\bFLAT\s+(\S*\d\S*)\s+\S*\d\S*\b"
@@ -123,7 +115,7 @@ def parse_out_flat_position_and_letter(
             -- Get floor position if present
             regexp_extract(address_concat, '{floor_positions}', 1) as floor_pos,
             -- Get letter after FLAT/UNIT/etc if present
-            regexp_extract(address_concat, '{flat_letter}', 2) as flat_letter,
+            regexp_extract(address_concat, '{flat_letter}', 1) as flat_letter,
             -- Get just the letter part of leading number+letter combination
             regexp_extract(address_concat, '{leading_letter}', 1) as leading_letter,
             regexp_extract(address_concat, '{flat_number}', 1) as flat_number
