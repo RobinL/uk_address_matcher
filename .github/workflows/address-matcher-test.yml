@@ -1,0 +1,97 @@
+name: Address Matcher Test
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'uk_address_matcher/**'
+      - 'tests/**'
+
+jobs:
+  test-address-matcher:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest
+
+    - name: Run address matcher test
+      id: run-test
+      run: |
+        # Run the test and capture output
+        python -c "
+import sys
+from io import StringIO
+import pytest
+
+# Redirect stdout to capture output
+old_stdout = sys.stdout
+sys.stdout = mystdout = StringIO()
+
+# Run the specific test
+pytest.main(['tests/test_address_matcher.py::test_address_matching_combined', '-v'])
+
+# Get the captured output
+output = mystdout.getvalue()
+sys.stdout = old_stdout
+
+# Save output to file for the next step
+with open('test_results.txt', 'w') as f:
+    f.write(output)
+
+# Print output for logs
+print(output)
+        "
+
+    - name: Extract match rate
+      id: extract-rate
+      run: |
+        # Extract match rate from the test output
+        MATCH_RATE=$(grep -o "Match rate: [0-9.]\+%" test_results.txt || echo "Match rate: Not found")
+        echo "match_rate=$MATCH_RATE" >> $GITHUB_OUTPUT
+
+        # Check if there were any mismatches
+        if grep -q "Details of mismatches:" test_results.txt; then
+          echo "has_mismatches=true" >> $GITHUB_OUTPUT
+          # Extract mismatch details (limited to avoid too large comments)
+          MISMATCHES=$(sed -n '/Details of mismatches:/,/^$/p' test_results.txt)
+          echo "mismatches<<EOF" >> $GITHUB_OUTPUT
+          echo "$MISMATCHES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "has_mismatches=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const matchRate = '${{ steps.extract-rate.outputs.match_rate }}';
+          const hasMismatches = '${{ steps.extract-rate.outputs.has_mismatches }}' === 'true';
+          const mismatches = `${{ steps.extract-rate.outputs.mismatches }}`;
+
+          let body = `## 📊 Address Matcher Test Results\n\n**${matchRate}**\n\n`;
+
+          if (hasMismatches) {
+            body += `### ⚠️ Some addresses were not matched correctly:\n\n\`\`\`\n${mismatches}\n\`\`\``;
+          } else {
+            body += `### ✅ All addresses were matched correctly!`;
+          }
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
