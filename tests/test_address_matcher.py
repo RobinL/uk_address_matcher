@@ -74,69 +74,97 @@ def run_matcher_workflow(messy_addresses, canonical_addresses, duckdb_con=None):
 
 def evaluate_matching_results(matching_results, duckdb_con):
     """
-    Evaluate address matching results and collect statistics.
+    Evaluate address matching results, including the distinguishability metric and mismatch details.
 
     Args:
         matching_results: DuckDB relation with matching results
         duckdb_con: DuckDB connection
 
     Returns:
-        dict: Results including total cases, correct matches, match rate, and mismatch details
+        dict: Results including total cases, correct matches, match rate, distinguishability, and mismatches
     """
+    # Register the results table in DuckDB
     duckdb_con.register("results", matching_results)
 
-    # Query to get top matches per test block
-    matches_query = """
-    WITH top_matches AS (
-        SELECT
-            unique_id_r AS test_block_id,
-            true_match_id AS expected_match_id,
-            unique_id_l AS actual_match_id,
-            match_weight
-        FROM results
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
-    )
-    SELECT * FROM top_matches
+    # Query all matches, ordered by test_block_id and match_weight descending
+    all_matches_query = """
+    SELECT
+        unique_id_r AS test_block_id,
+        unique_id_l AS match_id,
+        match_weight,
+        true_match_id
+    FROM results
+    ORDER BY test_block_id, match_weight DESC
     """
-    matches = duckdb_con.execute(matches_query).fetchall()
+    all_matches = duckdb_con.execute(all_matches_query).fetchall()
 
-    # Calculate statistics
-    total_cases = len(matches)
-    correct_matches = sum(1 for m in matches if m[1] == m[2])
-    match_rate = (correct_matches / total_cases * 100) if total_cases > 0 else 0
+    # Group matches by test_block_id
+    from collections import defaultdict
 
-    results = {
-        "total_cases": total_cases,
-        "correct_matches": correct_matches,
-        "match_rate": match_rate,
-        "mismatches": [],
-    }
+    matches_by_block = defaultdict(list)
+    for row in all_matches:
+        test_block_id, match_id, match_weight, true_match_id = row
+        matches_by_block[test_block_id].append((match_id, match_weight, true_match_id))
 
-    # Collect mismatch details if any
-    if correct_matches < total_cases:
-        for test_block_id, expected_id, actual_id, match_weight in matches:
-            if expected_id == actual_id:
-                continue
+    # Initialize counters and results
+    total_cases = 0
+    correct_matches = 0
+    total_distinguishability = 0.0
+    mismatches = []
 
+    # Process each test block
+    for test_block_id, matches in matches_by_block.items():
+        total_cases += 1
+        if not matches:
+            continue
+
+        # Sort matches by match_weight in descending order
+        matches.sort(key=lambda x: x[1], reverse=True)
+
+        # Extract top match details
+        top_match_id, top_match_weight, true_match_id = matches[0]
+
+        if top_match_id == true_match_id:
+            # True match is the top match
+            correct_matches += 1
+            if len(matches) > 1:
+                second_match_weight = matches[1][1]
+                distinguishability = top_match_weight - second_match_weight
+            else:
+                distinguishability = float("inf")
+            total_distinguishability += distinguishability
+        else:
+            # Top match is incorrect, calculate distinguishability penalty
+            true_match_weight = next(
+                (mw for mid, mw, _ in matches if mid == true_match_id), None
+            )
+            if true_match_weight is not None:
+                distinguishability_penalty = top_match_weight - true_match_weight
+                total_distinguishability -= distinguishability_penalty
+            else:
+                distinguishability_penalty = float("inf")
+                total_distinguishability -= float("inf")
+
+            # Collect mismatch details
             mismatch_query = """
             WITH
             messy_record AS (
                 SELECT 'Messy Record' AS record_type, address_concat AS address,
-                    postcode, NULL AS match_weight
+                       postcode, NULL AS match_weight
                 FROM messy_table_combined
                 WHERE unique_id = ?
             ),
             true_match AS (
                 SELECT 'True Match' AS record_type, address_concat AS address,
-                    postcode,
-                    (SELECT match_weight FROM results WHERE unique_id_r = ? AND unique_id_l = ?)
-                    AS match_weight
+                       postcode,
+                       (SELECT match_weight FROM results WHERE unique_id_r = ? AND unique_id_l = ?)
+                       AS match_weight
                 FROM canonical_table_combined
                 WHERE unique_id = ?
             ),
             false_match AS (
                 SELECT 'False Match' AS record_type, address_concat AS address,
-                    postcode, ? AS match_weight
+                       postcode, ? AS match_weight
                 FROM canonical_table_combined
                 WHERE unique_id = ?
             )
@@ -150,15 +178,16 @@ def evaluate_matching_results(matching_results, duckdb_con):
                 [
                     test_block_id,
                     test_block_id,
-                    expected_id,
-                    expected_id,
-                    match_weight,
-                    actual_id,
+                    true_match_id,
+                    true_match_id,
+                    top_match_weight,
+                    top_match_id,
                 ],
             ).fetchall()
 
             mismatch = {
                 "test_block_id": test_block_id,
+                "distinguishability_penalty": distinguishability_penalty,
                 "records": [
                     {
                         "record_type": r[0],
@@ -169,14 +198,26 @@ def evaluate_matching_results(matching_results, duckdb_con):
                     for r in details
                 ],
             }
-            results["mismatches"].append(mismatch)
+            mismatches.append(mismatch)
+
+    # Calculate match rate
+    match_rate = (correct_matches / total_cases * 100) if total_cases > 0 else 0
+
+    # Compile results
+    results = {
+        "total_cases": total_cases,
+        "correct_matches": correct_matches,
+        "match_rate": match_rate,
+        "total_distinguishability": total_distinguishability,
+        "mismatches": mismatches,
+    }
 
     return results
 
 
 def print_matching_results(test_results):
     """
-    Print the address matching results and mismatch details.
+    Print the address matching results, including distinguishability and mismatch details with penalties.
 
     Args:
         test_results: Dictionary with evaluation results
@@ -184,13 +225,20 @@ def print_matching_results(test_results):
     print("\nAddress Matching Results:")
     print(f"Total test cases: {test_results['total_cases']}")
     print(f"Correct matches: {test_results['correct_matches']}")
-    print(f"Match rate: {test_results['match_rate']:.2f}%\n")
+    print(f"Match rate: {test_results['match_rate']:.2f}%")
+    print(f"Total distinguishability: {test_results['total_distinguishability']:.2f}\n")
 
     if test_results["mismatches"]:
         print("Details of mismatches:")
         print("-" * 80)
         for mismatch in test_results["mismatches"]:
             print(f"Test Block ID: {mismatch['test_block_id']}")
+            penalty = (
+                f"{mismatch['distinguishability_penalty']:.2f}"
+                if mismatch["distinguishability_penalty"] != float("inf")
+                else "inf"
+            )
+            print(f"Distinguishability Penalty: {penalty}")
             print(
                 f"{'Record Type':<15} {'Address':<60} {'Postcode':<10} {'Match Weight'}"
             )
