@@ -2,11 +2,16 @@
 # since we hard code all the values!
 
 import splink.comparison_level_library as cll
+import splink.comparison_library as cl
 
 from splink import block_on, SettingsCreator
 
 toggle_u_probability_fix = True
 toggle_m_probability_fix = True
+
+original_address_concat_comparison = cl.ExactMatch(
+    "original_address_concat",
+).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
 
 
 def array_reduce_by_freq(column_name: str, power: float) -> str:
@@ -417,6 +422,7 @@ settings_for_training = SettingsCreator(
     link_type="link_only",
     blocking_rules_to_generate_predictions=[block_on("postcode")],
     comparisons=[
+        original_address_concat_comparison,
         flat_positional_comparison,
         num_1_comparison,
         num_2_comparison,
