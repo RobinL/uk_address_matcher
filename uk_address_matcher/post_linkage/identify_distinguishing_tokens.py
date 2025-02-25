@@ -156,7 +156,7 @@ def improve_predictions_using_distinguishing_tokens(
         end as match_weight_4,
 
         case
-            when len(missing_tokens) > 0 then match_weight_4 - 0.1
+            when len(missing_tokens) > 0 then match_weight_4 - (0.1 * len(missing_tokens))
             else match_weight_4
         end as match_weight_5,
 
