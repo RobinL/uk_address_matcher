@@ -31,14 +31,15 @@ jobs:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
 
-    - name: Install dependencies
-      run: |
-        uv pip install -e .
-        uv pip install pytest
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install the project
+      run: uv sync --all-extras --dev
 
     - name: Run address matcher test
       id: run-test
-      run: python .github/workflows/run_address_test.py
+      run: uv run .github/workflows/run_address_test.py
       continue-on-error: true
 
     - name: Comment on PR
