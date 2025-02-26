@@ -86,76 +86,73 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # Register the results table in DuckDB
     duckdb_con.register("results", matching_results)
 
-    # Calculate distinguishability in SQL using window functions
-    # This calculates the difference between each match's weight and the top match weight in its group
-    matches_with_distinguishability_query = """
+    sql = """
     SELECT
         unique_id_r AS test_block_id,
         unique_id_l AS match_id,
         match_weight,
         true_match_id,
-        FIRST_VALUE(match_weight) OVER (
-            PARTITION BY unique_id_r
-            ORDER BY match_weight DESC
-        ) - match_weight AS distinguishability_from_top_match,
-        CASE WHEN unique_id_l = true_match_id THEN 1 ELSE 0 END AS is_correct_match,
-        CASE WHEN unique_id_l = true_match_id THEN
-            FIRST_VALUE(unique_id_l) OVER (
-                PARTITION BY unique_id_r
-                ORDER BY match_weight DESC
-            ) = true_match_id
-        ELSE 0 END AS is_true_match_at_top
+        CASE WHEN unique_id_l = true_match_id THEN 1 ELSE 0 END AS is_correct_match
     FROM results
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1;
     """
-    duckdb_con.execute(
-        f"CREATE OR REPLACE VIEW matches_with_metrics AS {matches_with_distinguishability_query}"
-    )
 
-    duckdb_con.table("matches_with_metrics").show(max_width=50000)
+    top_matches_in_window = duckdb_con.sql(sql)
+    top_matches_in_window.show(max_width=50000)
 
-    # Get top matches for each test block with separate reward and penalty calculations
-    top_matches_query = """
+    sql = """
     SELECT
-        test_block_id,
-        FIRST_VALUE(match_id) OVER (
-            PARTITION BY test_block_id
-            ORDER BY match_weight DESC
-        ) AS top_match_id,
-        true_match_id,
-        FIRST_VALUE(is_correct_match) OVER (
-            PARTITION BY test_block_id
-            ORDER BY match_weight DESC
-        ) AS is_top_match_correct,
-        -- Reward: difference between top and second best (when top is correct)
-        MIN(distinguishability_from_top_match) OVER (
-            PARTITION BY test_block_id
-            ORDER BY match_weight DESC
-            ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING
-        ) AS reward,
-        -- Penalty: difference between top and true match (when top is incorrect)
-        (SELECT distinguishability_from_top_match
-         FROM matches_with_metrics m2
-         WHERE m2.test_block_id = matches_with_metrics.test_block_id
-           AND m2.match_id = matches_with_metrics.true_match_id) AS penalty
-    FROM matches_with_metrics
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY test_block_id ORDER BY match_weight DESC) = 1
+        r.unique_id_r AS test_block_id,
+        r.unique_id_l AS match_id,
+        r.match_weight,
+        r.true_match_id,
+        t.match_weight AS top_match_weight,
+        t.match_id AS top_match_id,
+        t.is_correct_match AS is_top_match_correct,
+        t.match_weight - r.match_weight AS score_diff_from_top,
+        CASE WHEN r.unique_id_l = r.true_match_id THEN 1 ELSE 0 END AS is_correct_match
+    FROM results r
+    JOIN top_matches_in_window t ON r.unique_id_r = t.test_block_id;
     """
-    duckdb_con.sql(top_matches_query).show(max_width=50000)
-    top_matches = duckdb_con.execute(top_matches_query).fetchall()
+    duckdb_con.sql(sql).show(max_width=50000)
+    results_with_top_score = duckdb_con.sql(sql)
+    all_matches = results_with_top_score.fetchall()
 
-    # Get match details for reporting
-    all_matches = duckdb_con.execute("""
-        SELECT
-            test_block_id,
-            match_id,
-            match_weight,
-            true_match_id,
-            distinguishability_from_top_match,
-            is_correct_match,
-            is_true_match_at_top
-        FROM matches_with_metrics
-        ORDER BY test_block_id, match_weight DESC
-    """).fetchall()
+    reward_penalty_query = """
+    SELECT
+        a.test_block_id,
+        a.top_match_id,
+        a.true_match_id,
+        a.is_top_match_correct,
+        -- Reward: difference between top match and second best match
+        (SELECT MIN(score_diff_from_top)
+         FROM results_with_top_score a2
+         WHERE a2.test_block_id = a.test_block_id
+           AND a2.match_id != a.top_match_id) AS reward,
+        -- Penalty: difference between top match and true match
+        (SELECT score_diff_from_top
+         FROM results_with_top_score a2
+         WHERE a2.test_block_id = a.test_block_id
+           AND a2.match_id = a.true_match_id) AS penalty
+    FROM results_with_top_score a
+    WHERE a.match_id = a.top_match_id
+    """
+    duckdb_con.sql(reward_penalty_query).show(max_width=50000)
+
+    # Get all matches for reporting
+    top_matches = duckdb_con.sql(reward_penalty_query).fetchall()
+
+    # ┌───────────────┬──────────────┬───────────────┬──────────────────────┬────────────────────┬─────────┐
+    # │ test_block_id │ top_match_id │ true_match_id │ is_top_match_correct │       reward       │ penalty │
+    # │     int64     │    int64     │     int64     │        int32         │       double       │ double  │
+    # ├───────────────┼──────────────┼───────────────┼──────────────────────┼────────────────────┼─────────┤
+    # │             1 │         1001 │          1001 │                    1 │  4.949999999999999 │     0.0 │
+    # │             4 │         4001 │          4001 │                    1 │ 17.819855608330947 │     0.0 │
+    # │             3 │         3001 │          3001 │                    1 │  18.17726083259552 │     0.0 │
+    # │             5 │         5001 │          5001 │                    1 │  22.35161146423435 │     0.0 │
+    # │             2 │         2001 │          2001 │                    1 │  20.76985560833095 │     0.0 │
+    # │             6 │         6003 │          6001 │                    0 │                0.0 │    9.35 │
+    # └───────────────┴──────────────┴───────────────┴──────────────────────┴────────────────────┴─────────┘
 
     # Initialize counters and results
     total_cases = len(top_matches)
