@@ -95,7 +95,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # │  3.1609619625582304 │  0.8994394653665296 │           1 │        1004 │  │ FLAT FIRST FLOOR 19 PEPPERPOT ROAD LONDON                  │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
     # │   11.14441284034456 │  0.9995584238236682 │           1 │        1001 │  │ FLAT A FIRST AND SECOND FLOORS 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
 
-    matching_results.show(max_width=50000)
+    # matching_results.show(max_width=50000)
     sql = """
     SELECT
         unique_id_r AS test_block_id,
@@ -108,7 +108,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
     """
 
     top_matches_in_window = duckdb_con.sql(sql)
-    top_matches_in_window.show(max_width=50000)
+    # top_matches_in_window.show(max_width=50000)
 
     # ┌───────────────┬──────────┬────────────────────┬───────────────┬──────────────────┐
     # │ test_block_id │ match_id │    match_weight    │ true_match_id │ is_correct_match │
@@ -135,7 +135,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
     FROM results r
     JOIN top_matches_in_window t ON r.unique_id_r = t.test_block_id;
     """
-    duckdb_con.sql(sql).show(max_width=50000)
+    # duckdb_con.sql(sql).show(max_width=50000)
 
     #     ┌───────────────┬──────────┬─────────────────────┬───────────────┬────────────────────┬──────────────┬──────────────────────┬─────────────────────┬──────────────────┐
     # │ test_block_id │ match_id │    match_weight     │ true_match_id │  top_match_weight  │ top_match_id │ is_top_match_correct │ score_diff_from_top │ is_correct_match │
@@ -171,7 +171,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
     FROM results_with_top_score a
     WHERE a.match_id = a.top_match_id
     """
-    duckdb_con.sql(reward_penalty_query).show(max_width=50000)
+    # duckdb_con.sql(reward_penalty_query).show(max_width=50000)
 
     #     ┌───────────────┬──────────────┬───────────────┬──────────────────────┬────────────────────┬─────────┐
     # │ test_block_id │ top_match_id │ true_match_id │ is_top_match_correct │       reward       │ penalty │
