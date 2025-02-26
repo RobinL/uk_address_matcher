@@ -79,7 +79,6 @@ case
 when unique_id_l = '{best_match_id}' then concat_ws(' ',original_address_concat_l,  '✅')
 else original_address_concat_l
 end as original_address_concat_l,
-original_address_concat_l,
 original_address_concat_r,
 distinguishing_tokens_1_count_1 ,
 distinguishing_tokens_1_count_2 ,
