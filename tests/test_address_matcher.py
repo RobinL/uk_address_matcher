@@ -86,6 +86,16 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # Register the results table in DuckDB
     duckdb_con.register("results", matching_results)
 
+    # This is the results (matching results) table
+    # ┌─────────────────────┬─────────────────────┬─────────────┬─────────────┬──┬────────────────────────────────────────────────────────────┬────────────┬──────────────────────────────────────────────┬────────────┬───────────────┐
+    # │    match_weight     │  match_probability  │ unique_id_r │ unique_id_l │  │                 original_address_concat_l                  │ postcode_l │          original_address_concat_r           │ postcode_r │ true_match_id │
+    # │       double        │       double        │    int64    │    int64    │  │                          varchar                           │  varchar   │                   varchar                    │  varchar   │     int64     │
+    # ├─────────────────────┼─────────────────────┼─────────────┼─────────────┼──┼────────────────────────────────────────────────────────────┼────────────┼──────────────────────────────────────────────┼────────────┼───────────────┤
+    # │  3.1609619625582304 │  0.8994394653665296 │           1 │        1003 │  │ FLAT FIRST FLOOR 29 PEPPERPOT ROAD LONDON                  │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+    # │  3.1609619625582304 │  0.8994394653665296 │           1 │        1004 │  │ FLAT FIRST FLOOR 19 PEPPERPOT ROAD LONDON                  │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+    # │   11.14441284034456 │  0.9995584238236682 │           1 │        1001 │  │ FLAT A FIRST AND SECOND FLOORS 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+
+    matching_results.show(max_width=50000)
     sql = """
     SELECT
         unique_id_r AS test_block_id,
@@ -99,6 +109,17 @@ def evaluate_matching_results(matching_results, duckdb_con):
 
     top_matches_in_window = duckdb_con.sql(sql)
     top_matches_in_window.show(max_width=50000)
+
+    # ┌───────────────┬──────────┬────────────────────┬───────────────┬──────────────────┐
+    # │ test_block_id │ match_id │    match_weight    │ true_match_id │ is_correct_match │
+    # │     int64     │  int64   │       double       │     int64     │      int32       │
+    # ├───────────────┼──────────┼────────────────────┼───────────────┼──────────────────┤
+    # │             5 │     5001 │  22.77768031918279 │          5001 │                1 │
+    # │             2 │     2001 │ 21.947176097435314 │          2001 │                1 │
+    # │             1 │     1001 │  11.14441284034456 │          1001 │                1 │
+    # │             4 │     4001 │ 22.727785600825005 │          4001 │                1 │
+    # │             3 │     3001 │ 14.853329687543958 │          3001 │                1 │
+    # │             6 │     6003 │  9.885603210085975 │          6001 │                0 │
 
     sql = """
     SELECT
@@ -115,6 +136,19 @@ def evaluate_matching_results(matching_results, duckdb_con):
     JOIN top_matches_in_window t ON r.unique_id_r = t.test_block_id;
     """
     duckdb_con.sql(sql).show(max_width=50000)
+
+    #     ┌───────────────┬──────────┬─────────────────────┬───────────────┬────────────────────┬──────────────┬──────────────────────┬─────────────────────┬──────────────────┐
+    # │ test_block_id │ match_id │    match_weight     │ true_match_id │  top_match_weight  │ top_match_id │ is_top_match_correct │ score_diff_from_top │ is_correct_match │
+    # │     int64     │  int64   │       double        │     int64     │       double       │    int64     │        int32         │       double        │      int32       │
+    # ├───────────────┼──────────┼─────────────────────┼───────────────┼────────────────────┼──────────────┼──────────────────────┼─────────────────────┼──────────────────┤
+    # │             1 │     1003 │  3.1609619625582304 │          1001 │  11.14441284034456 │         1001 │                    1 │  7.9834508777863284 │                0 │
+    # │             1 │     1004 │  3.1609619625582304 │          1001 │  11.14441284034456 │         1001 │                    1 │  7.9834508777863284 │                0 │
+    # │             1 │     1001 │   11.14441284034456 │          1001 │  11.14441284034456 │         1001 │                    1 │                 0.0 │                1 │
+    # │             1 │     1002 │    6.19441284034456 │          1001 │  11.14441284034456 │         1001 │                    1 │   4.949999999999999 │                0 │
+    # │             1 │     1005 │ -0.7055871596554408 │          1001 │  11.14441284034456 │         1001 │                    1 │               11.85 │                0 │
+
+    # └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
     results_with_top_score = duckdb_con.sql(sql)
     all_matches = results_with_top_score.fetchall()
 
@@ -139,20 +173,19 @@ def evaluate_matching_results(matching_results, duckdb_con):
     """
     duckdb_con.sql(reward_penalty_query).show(max_width=50000)
 
-    # Get all matches for reporting
-    top_matches = duckdb_con.sql(reward_penalty_query).fetchall()
-
-    # ┌───────────────┬──────────────┬───────────────┬──────────────────────┬────────────────────┬─────────┐
+    #     ┌───────────────┬──────────────┬───────────────┬──────────────────────┬────────────────────┬─────────┐
     # │ test_block_id │ top_match_id │ true_match_id │ is_top_match_correct │       reward       │ penalty │
     # │     int64     │    int64     │     int64     │        int32         │       double       │ double  │
     # ├───────────────┼──────────────┼───────────────┼──────────────────────┼────────────────────┼─────────┤
-    # │             1 │         1001 │          1001 │                    1 │  4.949999999999999 │     0.0 │
-    # │             4 │         4001 │          4001 │                    1 │ 17.819855608330947 │     0.0 │
-    # │             3 │         3001 │          3001 │                    1 │  18.17726083259552 │     0.0 │
-    # │             5 │         5001 │          5001 │                    1 │  22.35161146423435 │     0.0 │
     # │             2 │         2001 │          2001 │                    1 │  20.76985560833095 │     0.0 │
+    # │             3 │         3001 │          3001 │                    1 │  18.17726083259552 │     0.0 │
+    # │             4 │         4001 │          4001 │                    1 │ 17.819855608330947 │     0.0 │
+    # │             1 │         1001 │          1001 │                    1 │  4.949999999999999 │     0.0 │
+    # │             5 │         5001 │          5001 │                    1 │  22.35161146423435 │     0.0 │
     # │             6 │         6003 │          6001 │                    0 │                0.0 │    9.35 │
-    # └───────────────┴──────────────┴───────────────┴──────────────────────┴────────────────────┴─────────┘
+
+    # Get all matches for reporting
+    top_matches = duckdb_con.sql(reward_penalty_query).fetchall()
 
     # Initialize counters and results
     total_cases = len(top_matches)
@@ -183,44 +216,35 @@ def evaluate_matching_results(matching_results, duckdb_con):
             total_reward -= penalty if penalty is not None else float("inf")
 
             # Collect mismatch details
-            mismatch_query = """
+            mismatch_query = f"""
             WITH
             messy_record AS (
                 SELECT 'Messy Record' AS record_type, address_concat AS address,
-                       postcode, NULL AS match_weight
+                    postcode, NULL AS match_weight
                 FROM messy_table_combined
-                WHERE unique_id = ?
+                WHERE unique_id = {test_block_id}
             ),
             true_match AS (
                 SELECT 'True Match' AS record_type, address_concat AS address,
-                       postcode,
-                       (SELECT match_weight FROM results WHERE unique_id_r = ? AND unique_id_l = ?)
-                       AS match_weight
+                    postcode,
+                    (SELECT match_weight FROM results WHERE unique_id_r = {test_block_id} AND unique_id_l = {true_match_id})
+                    AS match_weight
                 FROM canonical_table_combined
-                WHERE unique_id = ?
+                WHERE unique_id = {true_match_id}
             ),
             false_match AS (
                 SELECT 'False Match' AS record_type, address_concat AS address,
-                       postcode, ? AS match_weight
+                    postcode, {block_matches[0][2]} AS match_weight
                 FROM canonical_table_combined
-                WHERE unique_id = ?
+                WHERE unique_id = {top_match_id}
             )
             SELECT * FROM messy_record
             UNION ALL SELECT * FROM true_match
             UNION ALL SELECT * FROM false_match
             ORDER BY record_type
             """
-            details = duckdb_con.execute(
-                mismatch_query,
-                [
-                    test_block_id,
-                    test_block_id,
-                    true_match_id,
-                    true_match_id,
-                    block_matches[0][2],  # top match weight
-                    top_match_id,
-                ],
-            ).fetchall()
+
+            details = duckdb_con.execute(mismatch_query).fetchall()
 
             mismatch = {
                 "test_block_id": test_block_id,
