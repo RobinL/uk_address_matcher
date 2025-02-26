@@ -41,13 +41,16 @@ def run_test():
         match_rate = f"Match rate: {test_results['match_rate']:.2f}%"
         total = test_results["total_cases"]
         correct = test_results["correct_matches"]
+        total_reward = test_results["total_reward"]
 
         # Create GitHub Actions output
         with open(Path.cwd() / "github-comment.md", "w") as f:
             f.write("## 📊 Address Matcher Test Results\n\n")
-            f.write(
-                f"**{match_rate}** ({correct}/{total} addresses matched correctly)\n\n"
-            )
+            f.write("### Statistics\n\n")
+            f.write(f"- **Total test cases:** {total}\n")
+            f.write(f"- **Correct matches:** {correct}\n")
+            f.write(f"- **{match_rate}**\n")
+            f.write(f"- **Total reward:** {total_reward:.2f}\n\n")
 
             if test_results["mismatches"]:
                 f.write("### ⚠️ Some addresses were not matched correctly:\n\n")
