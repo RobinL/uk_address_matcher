@@ -44,34 +44,126 @@ predicted_matches = linker.inference.predict(
     threshold_match_weight=MATCH_WEIGHT_THRESHOLD_PREDICT,
     experimental_optimisation=True,
 ).as_duckdbpyrelation()
-predicted_matches
-recs = predicted_matches.filter("unique_id_l = '7001'").df().to_dict(orient="records")
-display(linker.visualisations.waterfall_chart(recs, filter_nulls=False))
-
-recs = predicted_matches.filter("unique_id_l = '7001'")
 
 
-# Extract left and right records from a single match
-sql = """
-WITH df AS (
-    SELECT *
-    FROM recs
-
-)
-SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_l$') AS '\\1'
-FROM df
-UNION ALL
-SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_r$') AS '\\1'
-FROM df;
-"""
-
-duckdb_con.sql(sql).show(max_width=10000)
-
-predicted_matches.show(max_width=10000)
 # Improve predictions (second pass)
 improved_matches = improve_predictions_using_distinguishing_tokens(
     df_predict=predicted_matches,
     con=duckdb_con,
     match_weight_threshold=MATCH_WEIGHT_THRESHOLD_IMPROVE,
 )
-improved_matches.show(max_width=10000)
+
+
+# Is best mrach true match?
+
+sql = """
+with best_match as (
+    select unique_id_r, unique_id_l from improved_matches
+    order by match_weight desc
+    limit 1
+)
+select b.unique_id_l, b.unique_id_r, p.true_match_id_r
+  from predicted_matches p
+inner join best_match b
+on p.unique_id_r = b.unique_id_r
+and p.unique_id_l = b.unique_id_l
+
+"""
+best_match_id, messy_id, true_match_id = duckdb_con.sql(sql).fetchone()
+
+
+sql = f"""
+select
+match_weight,
+case
+when unique_id_l = '{best_match_id}' then concat_ws(' ',original_address_concat_l,  '✅')
+else original_address_concat_l
+end as original_address_concat_l,
+original_address_concat_l,
+original_address_concat_r,
+distinguishing_tokens_1_count_1 ,
+distinguishing_tokens_1_count_2 ,
+distinguishing_tokens_2_count_1 ,
+punishment_tokens ,
+missing_tokens
+from improved_matches
+order by match_weight desc
+"""
+
+duckdb_con.sql(sql).show(max_width=700)
+
+
+# Next print out how the messy address and the matches were parsed
+cols = """
+    concat_ws(' ', original_address_concat, postcode) as original_address_concat,
+    flat_positional,
+    flat_letter,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
+    array_transform(common_end_tokens, x -> x.tok) as cet_arr,
+    unique_id
+    """
+
+additional_sql = ""
+true_match_text = "true match and best match"
+if true_match_id != best_match_id:
+    additional_sql = f"""
+    UNION ALL
+    select 'best match' as source, {cols}
+    from canonical_clean
+    where unique_id = '{best_match_id}'
+    """
+    true_match_text = "true match"
+
+
+sql = f"""
+select 'messy' as source, {cols}
+from messy_clean
+where unique_id = '{messy_id}'
+{additional_sql}
+UNION ALL
+select '{true_match_text}' as source, {cols}
+from canonical_clean
+where unique_id = '{true_match_id}'
+"""
+
+duckdb_con.sql(sql).show(max_width=700)
+
+
+print("Waterfall chart for true match")
+recs = (
+    predicted_matches.filter("true_match_id_r = unique_id_l")
+    .df()
+    .to_dict(orient="records")
+)
+display(linker.visualisations.waterfall_chart(recs, filter_nulls=False))
+
+
+if true_match_id != best_match_id:
+    print("Waterfall chart for best match")
+    recs = (
+        predicted_matches.filter(f"unique_id_l = {best_match_id}")
+        .df()
+        .to_dict(orient="records")
+    )
+    display(linker.visualisations.waterfall_chart(recs, filter_nulls=False))
+
+
+# ########################
+# # Extract left and right records from a single match
+# sql = """
+# WITH df AS (
+#     SELECT *
+#     FROM recs
+
+# )
+# SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_l$') AS '\\1'
+# FROM df
+# UNION ALL
+# SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_r$') AS '\\1'
+# FROM df;
+# """
+
+# duckdb_con.sql(sql).show(max_width=700)
