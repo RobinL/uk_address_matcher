@@ -94,6 +94,29 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # │  3.1609619625582304 │  0.8994394653665296 │           1 │        1003 │  │ FLAT FIRST FLOOR 29 PEPPERPOT ROAD LONDON                  │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
     # │  3.1609619625582304 │  0.8994394653665296 │           1 │        1004 │  │ FLAT FIRST FLOOR 19 PEPPERPOT ROAD LONDON                  │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
     # │   11.14441284034456 │  0.9995584238236682 │           1 │        1001 │  │ FLAT A FIRST AND SECOND FLOORS 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+    # │    6.19441284034456 │    0.98652881793668 │           1 │        1002 │  │ FLAT GROUND FLOOR 21 PEPPERPOT ROAD LONDON                 │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+    # │ -0.7055871596554408 │  0.3801113214110929 │           1 │        1005 │  │ 21 PEPPERPOT ROAD LONDON                                   │ W11 1AA    │ FIRST FLOOR FLAT 21 PEPPERPOT ROAD LONDON    │ W11 1AA    │          1001 │
+    # │  21.947176097435314 │  0.9999997526900628 │           2 │        2001 │  │ FLAT BASEMENT 45 BAKER STREET LONDON                       │ A11 1AA    │ BASEMENT FLAT 45 BAKER STREET LONDON         │ A11 1AA    │          2001 │
+    # │  1.1773204891043652 │  0.6933985779033554 │           2 │        2003 │  │ FLAT FIRST FLOOR 45 BAKER STREET LONDON                    │ A11 1AA    │ BASEMENT FLAT 45 BAKER STREET LONDON         │ A11 1AA    │          2001 │
+    # │  1.1773204891043652 │  0.6933985779033554 │           2 │        2002 │  │ FLAT GROUND FLOOR 45 BAKER STREET LONDON                   │ A11 1AA    │ BASEMENT FLAT 45 BAKER STREET LONDON         │ A11 1AA    │          2001 │
+    # │  -1.622679510895635 │ 0.24513021076180913 │           2 │        2004 │  │ 45 BAKER STREET LONDON                                     │ A11 1AA    │ BASEMENT FLAT 45 BAKER STREET LONDON         │ A11 1AA    │          2001 │
+    # │ -3.3239311450515605 │ 0.09079441155346991 │           3 │        3003 │  │ ASHFIELDS LOVE LANE KINGS LANGLEY                          │ WD4 9HW    │ 5 LOVE LANE KINGS LANGLEY HERTFORSHIRE       │ WD4 9HW    │          3001 │
+    # │ -3.3239311450515605 │ 0.09079441155346991 │           3 │        3002 │  │ 7 LOVE LANE KINGS LANGLEY                                  │ WD4 9HW    │ 5 LOVE LANE KINGS LANGLEY HERTFORSHIRE       │ WD4 9HW    │          3001 │
+    # │  14.853329687543958 │  0.9999662178289236 │           3 │        3001 │  │ 5 LOVE LANE KINGS LANGLEY                                  │ WD4 9HW    │ 5 LOVE LANE KINGS LANGLEY HERTFORSHIRE       │ WD4 9HW    │          3001 │
+    # │ -3.4239311450515606 │ 0.08523241411867187 │           3 │        3004 │  │ ASHFIELDS LOVE LANE KINGS LANGLEY HERTFORDSHIRE            │ WD4 9HW    │ 5 LOVE LANE KINGS LANGLEY HERTFORSHIRE       │ WD4 9HW    │          3001 │
+    # │   4.660961962558231 │  0.9619745617209873 │           4 │        4003 │  │ SECOND FLOOR FLAT 58 BRYNDWR ROAD LONDON                   │ W11 9AA    │ SECOND FLOOR FLAT 61 BRYNDWR ROAD LONDON     │ W11 9AA    │          4001 │
+    # │   4.907929992494057 │  0.9677644186978359 │           4 │        4002 │  │ FLAT GROUND FLOOR 61 BRYNDWR ROAD LONDON                   │ W11 9AA    │ SECOND FLOOR FLAT 61 BRYNDWR ROAD LONDON     │ W11 9AA    │          4001 │
+    # │  22.727785600825005 │  0.9999998560357243 │           4 │        4001 │  │ FLAT A SECOND FLOOR 61 BRYNDWR ROAD LONDON                 │ W11 9AA    │ SECOND FLOOR FLAT 61 BRYNDWR ROAD LONDON     │ W11 9AA    │          4001 │
+    # │ -1.9920700075059434 │ 0.20088091471679928 │           4 │        4004 │  │ 61 BRYNDWR ROAD LONDON                                     │ W11 9AA    │ SECOND FLOOR FLAT 61 BRYNDWR ROAD LONDON     │ W11 9AA    │          4001 │
+    # │   22.77768031918279 │   0.999999860929527 │           5 │        5001 │  │ 14 BROADSTONE GROVE BROOKFORD MILTON KEYNES                │ ZZ10 1ZY   │ 14 BROADSTONE GROVE BROOKFORD MILTON KEYNES  │ ZZ10 1ZZ   │          5001 │
+    # │  0.4260688549484396 │   0.573300116396396 │           5 │        5002 │  │ 2 BROADSTONE GROVE BROOKFORD MILTON KEYNES                 │ ZZ10 1ZZ   │ 14 BROADSTONE GROVE BROOKFORD MILTON KEYNES  │ ZZ10 1ZZ   │          5001 │
+    # │   9.885603210085975 │  0.9989439656708183 │           6 │        6003 │  │ GROUND FLOOR FLAT 30 SOUTH EDGE CRESCENT LONDON            │ ZZ20 2ZZ   │ TOP FLOOR FLAT 30 SOUTH EDGE CRESCENT LONDON │ ZZ20 2ZZ   │          6001 │
+    # │  3.3356032100859756 │  0.9098712547701951 │           6 │        6004 │  │ FLAT SECOND AND THIRD FLOORS 30 SOUTH EDGE CRESCENT LONDON │ ZZ20 2ZZ   │ TOP FLOOR FLAT 30 SOUTH EDGE CRESCENT LONDON │ ZZ20 2ZZ   │          6001 │
+    # │   9.885603210085975 │  0.9989439656708183 │           6 │        6002 │  │ FLAT FIRST FLOOR 30 SOUTH EDGE CRESCENT LONDON             │ ZZ20 2ZZ   │ TOP FLOOR FLAT 30 SOUTH EDGE CRESCENT LONDON │ ZZ20 2ZZ   │          6001 │
+    # │  0.5356032100859751 │   0.591761436059103 │           6 │        6001 │  │ PIZZA PALACE 30 SOUTH EDGE CRESCENT LONDON                 │ ZZ20 2ZZ   │ TOP FLOOR FLAT 30 SOUTH EDGE CRESCENT LONDON │ ZZ20 2ZZ   │          6001 │
+    # ├─────────────────────┴─────────────────────┴─────────────┴─────────────┴──┴────────────────────────────────────────────────────────────┴────────────┴──────────────────────────────────────────────┴────────────┴───────────────┤
+    # │ 23 rows                                                                                                                                                                                                             16 columns │
+    # └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     matching_results.show(max_width=50000)
     sql = """
@@ -146,7 +169,26 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # │             1 │     1001 │   11.14441284034456 │          1001 │  11.14441284034456 │         1001 │                    1 │                 0.0 │                1 │
     # │             1 │     1002 │    6.19441284034456 │          1001 │  11.14441284034456 │         1001 │                    1 │   4.949999999999999 │                0 │
     # │             1 │     1005 │ -0.7055871596554408 │          1001 │  11.14441284034456 │         1001 │                    1 │               11.85 │                0 │
-
+    # │             2 │     2001 │  21.947176097435314 │          2001 │ 21.947176097435314 │         2001 │                    1 │                 0.0 │                1 │
+    # │             2 │     2003 │  1.1773204891043652 │          2001 │ 21.947176097435314 │         2001 │                    1 │   20.76985560833095 │                0 │
+    # │             2 │     2002 │  1.1773204891043652 │          2001 │ 21.947176097435314 │         2001 │                    1 │   20.76985560833095 │                0 │
+    # │             2 │     2004 │  -1.622679510895635 │          2001 │ 21.947176097435314 │         2001 │                    1 │  23.569855608330947 │                0 │
+    # │             3 │     3003 │ -3.3239311450515605 │          3001 │ 14.853329687543958 │         3001 │                    1 │   18.17726083259552 │                0 │
+    # │             3 │     3002 │ -3.3239311450515605 │          3001 │ 14.853329687543958 │         3001 │                    1 │   18.17726083259552 │                0 │
+    # │             3 │     3001 │  14.853329687543958 │          3001 │ 14.853329687543958 │         3001 │                    1 │                 0.0 │                1 │
+    # │             3 │     3004 │ -3.4239311450515606 │          3001 │ 14.853329687543958 │         3001 │                    1 │   18.27726083259552 │                0 │
+    # │             4 │     4003 │   4.660961962558231 │          4001 │ 22.727785600825005 │         4001 │                    1 │  18.066823638266776 │                0 │
+    # │             4 │     4002 │   4.907929992494057 │          4001 │ 22.727785600825005 │         4001 │                    1 │  17.819855608330947 │                0 │
+    # │             4 │     4001 │  22.727785600825005 │          4001 │ 22.727785600825005 │         4001 │                    1 │                 0.0 │                1 │
+    # │             4 │     4004 │ -1.9920700075059434 │          4001 │ 22.727785600825005 │         4001 │                    1 │   24.71985560833095 │                0 │
+    # │             5 │     5001 │   22.77768031918279 │          5001 │  22.77768031918279 │         5001 │                    1 │                 0.0 │                1 │
+    # │             5 │     5002 │  0.4260688549484396 │          5001 │  22.77768031918279 │         5001 │                    1 │   22.35161146423435 │                0 │
+    # │             6 │     6003 │   9.885603210085975 │          6001 │  9.885603210085975 │         6003 │                    0 │                 0.0 │                0 │
+    # │             6 │     6004 │  3.3356032100859756 │          6001 │  9.885603210085975 │         6003 │                    0 │   6.549999999999999 │                0 │
+    # │             6 │     6002 │   9.885603210085975 │          6001 │  9.885603210085975 │         6003 │                    0 │                 0.0 │                0 │
+    # │             6 │     6001 │  0.5356032100859751 │          6001 │  9.885603210085975 │         6003 │                    0 │                9.35 │                1 │
+    # ├───────────────┴──────────┴─────────────────────┴───────────────┴────────────────────┴──────────────┴──────────────────────┴─────────────────────┴──────────────────┤
+    # │ 23 rows                                                                                                                                                  9 columns │
     # └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
     results_with_top_score = duckdb_con.sql(sql)
@@ -187,84 +229,95 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # Get all matches for reporting
     top_matches = duckdb_con.sql(reward_penalty_query).fetchall()
 
-    # Initialize counters and results
-    total_cases = len(top_matches)
-    correct_matches = sum(match[3] for match in top_matches)
-    total_reward = 0.0
-    mismatches = []
+    # Calculate total reward and match rate directly in SQL
+    reward_summary_sql = f"""
+    SELECT
+        COUNT(*) AS total_cases,
+        SUM(is_top_match_correct) AS correct_matches,
+        SUM(CASE WHEN is_top_match_correct = 1 THEN COALESCE(reward, 0)
+                 ELSE -COALESCE(penalty, 0) END) AS total_reward
+    FROM (
+        SELECT * FROM ({reward_penalty_query})
+    ) AS summary
+    """
 
-    # Process each test block to collect mismatch details
-    for row in top_matches:
-        (
-            test_block_id,
-            top_match_id,
-            true_match_id,
-            is_top_match_correct,
-            reward,
-            penalty,
-        ) = row
+    summary_results = duckdb_con.execute(reward_summary_sql).fetchone()
+    total_cases, correct_matches, total_reward = summary_results
 
-        # Get all matches for this test block
-        block_matches = [m for m in all_matches if m[0] == test_block_id]
-
-        # Add to total reward based on whether top match is correct
-        if is_top_match_correct:
-            # Add reward (may be None if there's only one match)
-            total_reward += reward if reward is not None else float("inf")
-        else:
-            # Subtract penalty (may be None if true match isn't in results)
-            total_reward -= penalty if penalty is not None else float("inf")
-
-            # Collect mismatch details
-            mismatch_query = f"""
-            WITH
-            messy_record AS (
-                SELECT 'Messy Record' AS record_type, address_concat AS address,
-                    postcode, NULL AS match_weight
-                FROM messy_table_combined
-                WHERE unique_id = {test_block_id}
-            ),
-            true_match AS (
-                SELECT 'True Match' AS record_type, address_concat AS address,
-                    postcode,
-                    (SELECT match_weight FROM results WHERE unique_id_r = {test_block_id} AND unique_id_l = {true_match_id})
-                    AS match_weight
-                FROM canonical_table_combined
-                WHERE unique_id = {true_match_id}
-            ),
-            false_match AS (
-                SELECT 'False Match' AS record_type, address_concat AS address,
-                    postcode, {block_matches[0][2]} AS match_weight
-                FROM canonical_table_combined
-                WHERE unique_id = {top_match_id}
-            )
-            SELECT * FROM messy_record
-            UNION ALL SELECT * FROM true_match
-            UNION ALL SELECT * FROM false_match
-            ORDER BY record_type
-            """
-
-            details = duckdb_con.execute(mismatch_query).fetchall()
-
-            mismatch = {
-                "test_block_id": test_block_id,
-                "distinguishability_penalty": penalty
-                if penalty is not None
-                else float("inf"),
-                "records": [
-                    {
-                        "record_type": r[0],
-                        "address": r[1],
-                        "postcode": r[2],
-                        "match_weight": r[3],
-                    }
-                    for r in details
-                ],
-            }
-            mismatches.append(mismatch)
-
-    # Calculate match rate
+    # Match rate calculation
     match_rate = (correct_matches / total_cases * 100) if total_cases > 0 else 0
+
+    # Get mismatch details in a single query
+    mismatches_sql = f"""
+    WITH mismatch_details AS (
+        SELECT
+            r.test_block_id,
+            r.penalty AS distinguishability_penalty,
+
+            -- Get messy record
+            (SELECT ROW('Messy Record', m.address_concat, m.postcode, NULL::DOUBLE)
+             FROM messy_table_combined m
+             WHERE m.unique_id = r.test_block_id) AS messy_record,
+
+            -- Get true match record
+            (SELECT ROW('True Match', c1.address_concat, c1.postcode,
+                      (SELECT match_weight FROM results
+                       WHERE unique_id_r = r.test_block_id AND unique_id_l = r.true_match_id))
+             FROM canonical_table_combined c1
+             WHERE c1.unique_id = r.true_match_id) AS true_match,
+
+            -- Get false match record
+            (SELECT ROW('False Match', c2.address_concat, c2.postcode, r.match_weight)
+             FROM canonical_table_combined c2
+             WHERE c2.unique_id = r.top_match_id) AS false_match
+
+        FROM ({reward_penalty_query}) r
+        WHERE r.is_top_match_correct = 0
+    )
+    SELECT
+        test_block_id,
+        COALESCE(distinguishability_penalty, 'Infinity') AS distinguishability_penalty,
+        UNNEST(ARRAY[messy_record, true_match, false_match]) AS record
+    FROM mismatch_details
+    ORDER BY test_block_id, record.f0
+    """
+
+    # Process mismatches
+    mismatches = []
+    current_mismatch = None
+
+    for row in duckdb_con.execute(mismatches_sql).fetchall():
+        test_block_id, penalty, record = row
+        record_type, address, postcode, match_weight = record
+
+        # Start a new mismatch if test_block_id changed
+        if (
+            current_mismatch is None
+            or current_mismatch["test_block_id"] != test_block_id
+        ):
+            if current_mismatch is not None:
+                mismatches.append(current_mismatch)
+
+            current_mismatch = {
+                "test_block_id": test_block_id,
+                "distinguishability_penalty": float(penalty)
+                if penalty != "Infinity"
+                else float("inf"),
+                "records": [],
+            }
+
+        current_mismatch["records"].append(
+            {
+                "record_type": record_type,
+                "address": address,
+                "postcode": postcode,
+                "match_weight": match_weight,
+            }
+        )
+
+    # Add the last mismatch
+    if current_mismatch is not None:
+        mismatches.append(current_mismatch)
 
     # Compile results
     results = {
