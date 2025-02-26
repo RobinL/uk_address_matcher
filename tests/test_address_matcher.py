@@ -86,64 +86,104 @@ def evaluate_matching_results(matching_results, duckdb_con):
     # Register the results table in DuckDB
     duckdb_con.register("results", matching_results)
 
-    # Query all matches, ordered by test_block_id and match_weight descending
-    all_matches_query = """
+    # Calculate distinguishability in SQL using window functions
+    # This calculates the difference between each match's weight and the top match weight in its group
+    matches_with_distinguishability_query = """
     SELECT
         unique_id_r AS test_block_id,
         unique_id_l AS match_id,
         match_weight,
-        true_match_id
+        true_match_id,
+        FIRST_VALUE(match_weight) OVER (
+            PARTITION BY unique_id_r
+            ORDER BY match_weight DESC
+        ) - match_weight AS distinguishability_from_top_match,
+        CASE WHEN unique_id_l = true_match_id THEN 1 ELSE 0 END AS is_correct_match,
+        CASE WHEN unique_id_l = true_match_id THEN
+            FIRST_VALUE(unique_id_l) OVER (
+                PARTITION BY unique_id_r
+                ORDER BY match_weight DESC
+            ) = true_match_id
+        ELSE 0 END AS is_true_match_at_top
     FROM results
-    ORDER BY test_block_id, match_weight DESC
     """
-    all_matches = duckdb_con.execute(all_matches_query).fetchall()
+    duckdb_con.execute(
+        f"CREATE OR REPLACE VIEW matches_with_metrics AS {matches_with_distinguishability_query}"
+    )
 
-    # Group matches by test_block_id
-    from collections import defaultdict
+    duckdb_con.table("matches_with_metrics").show(max_width=50000)
 
-    matches_by_block = defaultdict(list)
-    for row in all_matches:
-        test_block_id, match_id, match_weight, true_match_id = row
-        matches_by_block[test_block_id].append((match_id, match_weight, true_match_id))
+    # Get top matches for each test block with separate reward and penalty calculations
+    top_matches_query = """
+    SELECT
+        test_block_id,
+        FIRST_VALUE(match_id) OVER (
+            PARTITION BY test_block_id
+            ORDER BY match_weight DESC
+        ) AS top_match_id,
+        true_match_id,
+        FIRST_VALUE(is_correct_match) OVER (
+            PARTITION BY test_block_id
+            ORDER BY match_weight DESC
+        ) AS is_top_match_correct,
+        -- Reward: difference between top and second best (when top is correct)
+        MIN(distinguishability_from_top_match) OVER (
+            PARTITION BY test_block_id
+            ORDER BY match_weight DESC
+            ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING
+        ) AS reward,
+        -- Penalty: difference between top and true match (when top is incorrect)
+        (SELECT distinguishability_from_top_match
+         FROM matches_with_metrics m2
+         WHERE m2.test_block_id = matches_with_metrics.test_block_id
+           AND m2.match_id = matches_with_metrics.true_match_id) AS penalty
+    FROM matches_with_metrics
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY test_block_id ORDER BY match_weight DESC) = 1
+    """
+    duckdb_con.sql(top_matches_query).show(max_width=50000)
+    top_matches = duckdb_con.execute(top_matches_query).fetchall()
+
+    # Get match details for reporting
+    all_matches = duckdb_con.execute("""
+        SELECT
+            test_block_id,
+            match_id,
+            match_weight,
+            true_match_id,
+            distinguishability_from_top_match,
+            is_correct_match,
+            is_true_match_at_top
+        FROM matches_with_metrics
+        ORDER BY test_block_id, match_weight DESC
+    """).fetchall()
 
     # Initialize counters and results
-    total_cases = 0
-    correct_matches = 0
-    total_distinguishability = 0.0
+    total_cases = len(top_matches)
+    correct_matches = sum(match[3] for match in top_matches)
+    total_reward = 0.0
     mismatches = []
 
-    # Process each test block
-    for test_block_id, matches in matches_by_block.items():
-        total_cases += 1
-        if not matches:
-            continue
+    # Process each test block to collect mismatch details
+    for row in top_matches:
+        (
+            test_block_id,
+            top_match_id,
+            true_match_id,
+            is_top_match_correct,
+            reward,
+            penalty,
+        ) = row
 
-        # Sort matches by match_weight in descending order
-        matches.sort(key=lambda x: x[1], reverse=True)
+        # Get all matches for this test block
+        block_matches = [m for m in all_matches if m[0] == test_block_id]
 
-        # Extract top match details
-        top_match_id, top_match_weight, true_match_id = matches[0]
-
-        if top_match_id == true_match_id:
-            # True match is the top match
-            correct_matches += 1
-            if len(matches) > 1:
-                second_match_weight = matches[1][1]
-                distinguishability = top_match_weight - second_match_weight
-            else:
-                distinguishability = float("inf")
-            total_distinguishability += distinguishability
+        # Add to total reward based on whether top match is correct
+        if is_top_match_correct:
+            # Add reward (may be None if there's only one match)
+            total_reward += reward if reward is not None else float("inf")
         else:
-            # Top match is incorrect, calculate distinguishability penalty
-            true_match_weight = next(
-                (mw for mid, mw, _ in matches if mid == true_match_id), None
-            )
-            if true_match_weight is not None:
-                distinguishability_penalty = top_match_weight - true_match_weight
-                total_distinguishability -= distinguishability_penalty
-            else:
-                distinguishability_penalty = float("inf")
-                total_distinguishability -= float("inf")
+            # Subtract penalty (may be None if true match isn't in results)
+            total_reward -= penalty if penalty is not None else float("inf")
 
             # Collect mismatch details
             mismatch_query = """
@@ -180,14 +220,16 @@ def evaluate_matching_results(matching_results, duckdb_con):
                     test_block_id,
                     true_match_id,
                     true_match_id,
-                    top_match_weight,
+                    block_matches[0][2],  # top match weight
                     top_match_id,
                 ],
             ).fetchall()
 
             mismatch = {
                 "test_block_id": test_block_id,
-                "distinguishability_penalty": distinguishability_penalty,
+                "distinguishability_penalty": penalty
+                if penalty is not None
+                else float("inf"),
                 "records": [
                     {
                         "record_type": r[0],
@@ -208,7 +250,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
         "total_cases": total_cases,
         "correct_matches": correct_matches,
         "match_rate": match_rate,
-        "total_distinguishability": total_distinguishability,
+        "total_reward": total_reward,
         "mismatches": mismatches,
     }
 
@@ -217,7 +259,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
 
 def print_matching_results(test_results):
     """
-    Print the address matching results, including distinguishability and mismatch details with penalties.
+    Print the address matching results, including reward metrics and mismatch details.
 
     Args:
         test_results: Dictionary with evaluation results
@@ -226,7 +268,9 @@ def print_matching_results(test_results):
     print(f"Total test cases: {test_results['total_cases']}")
     print(f"Correct matches: {test_results['correct_matches']}")
     print(f"Match rate: {test_results['match_rate']:.2f}%")
-    print(f"Total distinguishability: {test_results['total_distinguishability']:.2f}\n")
+    print(
+        f"Total reward: {test_results['total_reward']:.2f}\n"
+    )  # Renamed from total_distinguishability
 
     if test_results["mismatches"]:
         print("Details of mismatches:")
