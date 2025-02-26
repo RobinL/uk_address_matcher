@@ -44,3 +44,11 @@ addresses:
           "ZZ20 2ZZ",
         ]
       - ["PIZZA PALACE 30 SOUTH EDGE CRESCENT LONDON", "ZZ20 2ZZ"]
+
+  - messy_address: ["FLAT B 153 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+    canonical_addresses:
+      - ["FLAT 2 153 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+      - ["153 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+      - ["FLAT B GROUND FLOOR 163 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+      - ["FLAT B 155 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+      - ["FLAT B 165 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]

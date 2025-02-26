@@ -146,6 +146,9 @@ def parse_out_numbers(
     It also captures ranges like '1-2', '12-17', '98-102' as a single 'number', and
     matches patterns like '20A', 'A20', '20', and '20-21'.
 
+    Special case: If flat_letter is a number, the first number found will be ignored
+    as it's likely a duplicate of the flat number.
+
     Args:
         table_name (str): The name of the table to process.
         con (DuckDBPyConnection): The DuckDB connection.
@@ -163,7 +166,14 @@ def parse_out_numbers(
     SELECT
         * EXCLUDE (address_concat),
         regexp_replace(address_concat, '{regex_pattern}', '', 'g') AS address_without_numbers,
-        regexp_extract_all(address_concat, '{regex_pattern}') AS numeric_tokens
+        CASE
+            WHEN flat_letter IS NOT NULL AND flat_letter ~ '^\d+$' THEN
+                -- If flat_letter is numeric, ignore the first number token
+                -- Use list_filter with index to skip the first element
+            regexp_extract_all(address_concat, '{regex_pattern}')[2:]
+            ELSE
+                regexp_extract_all(address_concat, '{regex_pattern}')
+        END AS numeric_tokens
     FROM ddb_pyrel
     """
     return con.sql(sql)
