@@ -129,6 +129,7 @@ def improve_predictions_using_distinguishing_tokens(
     windowed_tokens = con.sql(sql)
 
     # Calculate new match weights based on distinguishing tokens
+    # TODO null handling in unique_distinguishing_match?
     sql = """
     CREATE OR REPLACE TABLE matches AS
     WITH compute_new_mw AS (
