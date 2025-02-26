@@ -6,7 +6,20 @@ def improve_predictions_using_distinguishing_tokens(
     df_predict: DuckDBPyRelation,
     con: DuckDBPyConnection,
     match_weight_threshold: float = -20,
+    top_n_matches: int = 5,
 ):
+    """
+    Improve match predictions by identifying distinguishing tokens between addresses.
+
+    Args:
+        df_predict: DuckDB relation containing the prediction data
+        con: DuckDB connection
+        match_weight_threshold: Minimum match weight to consider
+        top_n_matches: Number of top matches to consider for each unique_id_r
+
+    Returns:
+        DuckDBPyRelation: Table with improved match predictions
+    """
     cols = """
         match_weight,
         match_probability,
@@ -18,31 +31,31 @@ def improve_predictions_using_distinguishing_tokens(
         original_address_concat_r,
         postcode_l,
         postcode_r,
-
     """
 
-    # TODO: SHould these have list distinct? How else to deal with two 5s in same address?
+    # Create a table with tokenized addresses
     sql = f"""
-    create or replace table with_tokens as
-    SELECT
-        list_distinct(regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')) as tokens_l,
-        list_distinct(regexp_split_to_array(upper(trim(original_address_concat_r)), '\\s+')) as tokens_r,
-        {cols}
+
+    WITH good_matches AS (
+        SELECT *,
+            list_distinct(regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')) AS tokens_l,
+            list_distinct(regexp_split_to_array(upper(trim(original_address_concat_r)), '\\s+')) AS tokens_r
         FROM df_predict
-        where match_weight > {match_weight_threshold}
-    """
-
-    with_tokens = con.sql(sql)  # noqa: F841
-
-    # l is canonical
-    # r is messy
-
-    # We want:
-    # (1) Within group, all canonical tokens, so we know which canonical token ones appear only once in the group
-    # (2) Within group,all canonical tokens
-
-    sql = f"""
-
+        WHERE match_weight > {match_weight_threshold}
+    ),
+    ranked_matches AS (
+        SELECT *,
+            ROW_NUMBER() OVER (
+                PARTITION BY unique_id_r
+                ORDER BY match_weight DESC
+            ) AS rn
+        FROM good_matches
+    ),
+    top_n_matches AS (
+        SELECT * EXCLUDE (rn)
+        FROM ranked_matches
+        WHERE rn <= {top_n_matches}
+    )
     SELECT
         match_weight,
         match_probability,
@@ -52,16 +65,14 @@ def improve_predictions_using_distinguishing_tokens(
         tokens_l,
         tokens_r,
 
-        -- Alternatively could  RANGE instead of ROWS to create a window based on
-        -- match_weight values
-        -- This includes all addresses with match_weight within 3 of the current row
+        -- Get all tokens from the window of top matches
         flatten(
-            array_agg(tokens_l) FILTER (WHERE match_weight > -20) OVER (
+            array_agg(tokens_l) OVER (
                 PARTITION BY unique_id_r
                 ORDER BY match_weight DESC
                 ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
             )
-        ) as all_tokens_in_group_l,
+        ) AS all_tokens_in_group_l,
 
         -- Canonical distinguishing tokens are tokens in the row
         list_intersect(
@@ -69,32 +80,29 @@ def improve_predictions_using_distinguishing_tokens(
                 t -> len(list_filter(all_tokens_in_group_l, x -> x = t)) = 1
             ),        -- canonical distinguishing tokens
             tokens_r  -- messy tokens
-        )  as distinguishing_tokens_1_count_1,
-
+        ) AS distinguishing_tokens_1_count_1,
 
         list_intersect(
             list_filter(tokens_l,
                 t -> len(list_filter(all_tokens_in_group_l, x -> x = t)) = 2
             ),        -- canonical distinguishing tokens
             tokens_r  -- messy tokens
-        )  as distinguishing_tokens_1_count_2,
+        ) AS distinguishing_tokens_1_count_2,
 
         -- 'punishing' tokens are ones which are NOT in this address but ARE in the other
         -- addresses in the window
-
         list_filter(
             tokens_r,
             t -> (t IN array_distinct(all_tokens_in_group_l)) AND (t NOT IN tokens_l)
         ) AS punishment_tokens,
 
-
         flatten(
-            array_agg(tokens_l) FILTER (WHERE match_weight > -5) OVER (
+            array_agg(tokens_l) OVER (
                 PARTITION BY unique_id_r
                 ORDER BY reverse(original_address_concat_l) DESC
                 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
             )
-        ) as all_tokens_in_group_window_2_l,
+        ) AS all_tokens_in_group_window_2_l,
 
         -- Canonical distinguishing tokens are tokens in the row
         list_intersect(
@@ -102,87 +110,82 @@ def improve_predictions_using_distinguishing_tokens(
                 t -> len(list_filter(all_tokens_in_group_window_2_l, x -> x = t)) = 1
             ),        -- canonical distinguishing tokens
             tokens_r  -- messy tokens
-        )  as distinguishing_tokens_2_count_1,
+        ) AS distinguishing_tokens_2_count_1,
 
         -- missing tokens are tokens in the canonical address but not in the messy address
-        list_filter(tokens_l, t -> t NOT IN tokens_r) as missing_tokens,
-
+        list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
         original_address_concat_l,
         original_address_concat_r,
         postcode_l,
         postcode_r,
+        source_dataset_l,
+        source_dataset_r
 
-
-    FROM with_tokens
-    where match_weight > {match_weight_threshold}
-
-    order by unique_id_r
-
+    FROM top_n_matches
+    ORDER BY unique_id_r
     """
 
-    windowed_tokens = con.sql(sql)  # noqa: F841
+    windowed_tokens = con.sql(sql)
 
+    # Calculate new match weights based on distinguishing tokens
     # TODO null handling in unique_distinguishing_match?
     sql = """
-    CREATE OR REPLACE TABLE matches as
-    with compute_new_mw as (
-    select
-        unique_id_r,
-        unique_id_l,
+    CREATE OR REPLACE TABLE matches AS
+    WITH compute_new_mw AS (
+        SELECT
+            unique_id_r,
+            unique_id_l,
 
+            CASE
+                WHEN len(distinguishing_tokens_1_count_1) > 0 THEN match_weight + 2
+                ELSE match_weight
+            END AS match_weight_1,
 
+            CASE
+                WHEN len(distinguishing_tokens_1_count_2) > 0 THEN match_weight_1 + 1
+                ELSE match_weight_1
+            END AS match_weight_2,
 
-        case
-            when len(distinguishing_tokens_1_count_1) > 0 then match_weight + 2
-            else match_weight
-        end as match_weight_1,
+            CASE
+                WHEN len(distinguishing_tokens_2_count_1) > 0 THEN match_weight_2 + 1
+                ELSE match_weight_2
+            END AS match_weight_3,
 
-        case
-            when len(distinguishing_tokens_1_count_2) > 0 then match_weight_1 + 1
-            else match_weight_1
-        end as match_weight_2,
+            CASE
+                WHEN len(punishment_tokens) = 1 THEN match_weight_3 - 2
+                WHEN len(punishment_tokens) = 2 THEN match_weight_3 - 3
+                WHEN len(punishment_tokens) = 3 THEN match_weight_3 - 4
+                ELSE match_weight_3
+            END AS match_weight_4,
 
-        case
-            when len(distinguishing_tokens_2_count_1) > 0 then match_weight_2 + 1
-            else match_weight_2
-        end as match_weight_3,
+            CASE
+                WHEN len(missing_tokens) > 0 THEN match_weight_4 - (0.1 * len(missing_tokens))
+                ELSE match_weight_4
+            END AS match_weight_5,
 
-        case
-            when len(punishment_tokens) = 1 then match_weight_3 - 2
-            when len(punishment_tokens) = 2 then match_weight_3 - 3
-            when len(punishment_tokens) = 3 then match_weight_3 - 4
-            else match_weight_3
-        end as match_weight_4,
+            match_weight AS match_weight_original,
+            match_probability AS match_probability_original,
 
-        case
-            when len(missing_tokens) > 0 then match_weight_4 - (0.1 * len(missing_tokens))
-            else match_weight_4
-        end as match_weight_5,
+            distinguishing_tokens_1_count_1,
+            distinguishing_tokens_1_count_2,
+            distinguishing_tokens_2_count_1,
+            punishment_tokens,
+            missing_tokens,
+            original_address_concat_l,
+            postcode_l,
+            original_address_concat_r,
+            postcode_r,
+            source_dataset_l,
+            source_dataset_r
 
-    match_weight as match_weight_original,
-
-        match_probability as match_probability_original,
-
-
-        distinguishing_tokens_1_count_1,
-        distinguishing_tokens_1_count_2,
-        distinguishing_tokens_2_count_1,
-        punishment_tokens,
-        missing_tokens,
-        original_address_concat_l,
-        postcode_l,
-        original_address_concat_r,
-        postcode_r,
-
-    from windowed_tokens
+        FROM windowed_tokens
     )
-    select
-    match_weight_5 as match_weight,
-    pow(2, match_weight_5)/(1+pow(2, match_weight_5)) as match_probability,
-    * EXCLUDE (match_weight_1, match_weight_2, match_weight_3, match_weight_4, match_weight_5),
-
-    from compute_new_mw
+    SELECT
+        match_weight_5 AS match_weight,
+        pow(2, match_weight_5)/(1+pow(2, match_weight_5)) AS match_probability,
+        * EXCLUDE (match_weight_1, match_weight_2, match_weight_3, match_weight_4, match_weight_5)
+    FROM compute_new_mw
     """
 
     con.execute(sql)
