@@ -16,7 +16,7 @@ yaml_path = "tests/test_addresses.yaml"
 # Prepare data
 messy_addresses, canonical_addresses = prepare_combined_test_data(yaml_path, duckdb_con)
 
-test_block = 7
+test_block = 6
 messy_addresses = messy_addresses.filter(f"test_block = {test_block}")
 canonical_addresses = canonical_addresses.filter(f"test_block = {test_block}")
 
@@ -75,15 +75,14 @@ best_match_id, messy_id, true_match_id = duckdb_con.sql(sql).fetchone()
 sql = f"""
 select
 match_weight,
+original_address_concat_l,
 case
-when unique_id_l = '{best_match_id}' then concat_ws(' ',original_address_concat_l,  '✅')
-else original_address_concat_l
-end as original_address_concat_l,
+when unique_id_l = '{true_match_id}' then '✅'
+else ''
+end as true_match,
 original_address_concat_r,
-distinguishing_tokens_1_count_1 ,
-distinguishing_tokens_1_count_2 ,
-distinguishing_tokens_2_count_1 ,
-punishment_tokens ,
+overlapping_tokens_this_l_and_r ,
+tokens_elsewhere_in_block_but_not_this ,
 missing_tokens
 from improved_matches
 order by match_weight desc
@@ -150,19 +149,20 @@ if true_match_id != best_match_id:
     display(linker.visualisations.waterfall_chart(recs, filter_nulls=False))
 
 
-# ########################
-# # Extract left and right records from a single match
-# sql = """
-# WITH df AS (
-#     SELECT *
-#     FROM recs
+print("Pre-second pass weights")
+sql = f"""
+with t as (
+select
+match_weight,
+case
+when unique_id_l = '{true_match_id}' then '✅'
+else ''
+end as true_match,
+COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*[_l|_r]$)') AS '\\1'
+from predicted_matches
+)
+select * EXCLUDE (source_dataset_l, source_dataset_r) from t
+order by match_weight desc
+"""
 
-# )
-# SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_l$') AS '\\1'
-# FROM df
-# UNION ALL
-# SELECT COLUMNS('^(t[^f_].*|b[^f_].*|[^tb].*)_r$') AS '\\1'
-# FROM df;
-# """
-
-# duckdb_con.sql(sql).show(max_width=700)
+duckdb_con.sql(sql).show(max_width=700)

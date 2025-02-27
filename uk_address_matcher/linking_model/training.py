@@ -85,19 +85,20 @@ num_1_comparison = {
             "m_probability": 0.95,
             "u_probability": 0.01,
             "tf_adjustment_column": "numeric_token_1",
-            "tf_adjustment_weight": 1.0,
+            "tf_adjustment_weight": 0.5,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
         {
             "sql_condition": """
-                        regexp_extract(numeric_token_1_l, '\\d+', 0) = regexp_extract(numeric_token_1_r, '\\d+', 0)
+                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
+                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
                         """,
             "label_for_charts": "Exact match",
             "m_probability": 0.95,
             "u_probability": 0.01,
             "tf_adjustment_column": "numeric_token_1",
-            "tf_adjustment_weight": 1.0,
+            "tf_adjustment_weight": 0.5,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
@@ -140,7 +141,7 @@ num_2_comparison = {
             "m_probability": 0.8,
             "u_probability": 0.001,
             "tf_adjustment_column": "numeric_token_2",
-            "tf_adjustment_weight": 1.0,
+            "tf_adjustment_weight": 0.5,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
@@ -186,7 +187,7 @@ num_3_comparison = {
             "m_probability": 0.6,
             "u_probability": 0.0001,
             "tf_adjustment_column": "numeric_token_3",
-            "tf_adjustment_weight": 1.0,
+            "tf_adjustment_weight": 0.5,
         },
         {
             "sql_condition": '"numeric_token_2_l" = "numeric_token_3_r"',
@@ -194,7 +195,7 @@ num_3_comparison = {
             "m_probability": 0.3,
             "u_probability": 0.0025,
             "tf_adjustment_column": "numeric_token_3",
-            "tf_adjustment_weight": 1.0,
+            "tf_adjustment_weight": 0.5,
         },
         # One has a num 3 and the other does not
         {
@@ -389,6 +390,14 @@ flat_positional_comparison = {
             "label_for_charts": "Exact match",
             "m_probability": 0.95,
             "u_probability": 0.01,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": "flat_letter_l = numeric_token_1_r OR flat_letter_r = numeric_token_1_l",
+            "label_for_charts": "Exact match inverted numbers",
+            "m_probability": 1,
+            "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },

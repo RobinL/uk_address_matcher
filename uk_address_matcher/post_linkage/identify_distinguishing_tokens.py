@@ -37,155 +37,137 @@ def improve_predictions_using_distinguishing_tokens(
     sql = f"""
 
     WITH good_matches AS (
-        SELECT *,
-            list_distinct(regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')) AS tokens_l,
-            list_distinct(regexp_split_to_array(upper(trim(original_address_concat_r)), '\\s+')) AS tokens_r
+        SELECT *
         FROM df_predict
         WHERE match_weight > {match_weight_threshold}
     ),
-    ranked_matches AS (
-        SELECT *,
-            ROW_NUMBER() OVER (
-                PARTITION BY unique_id_r
-                ORDER BY match_weight DESC
-            ) AS rn
-        FROM good_matches
-    ),
     top_n_matches AS (
-        SELECT * EXCLUDE (rn)
-        FROM ranked_matches
-        WHERE rn <= {top_n_matches}
-    )
-    SELECT
-        match_weight,
-        match_probability,
-        unique_id_l,
-        unique_id_r,
+        SELECT *
+        FROM good_matches
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY unique_id_r
+            ORDER BY match_weight DESC
+        ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
+    ),
+    tokenise_r AS (
+        SELECT DISTINCT
+            unique_id_r,
+            regexp_split_to_array(upper(trim(original_address_concat_r)), '\\s+') AS tokens_r
+        FROM top_n_matches
+    ),
+    tokens as (
+        select
+        t.unique_id_r,
+        t.tokens_r,
+        flatten(array_agg((regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')))) as tokens_in_block_l,
 
-        tokens_l,
-        tokens_r,
+        -- Counts of tokens in canonical addresses within block
+        list_aggregate(tokens_in_block_l, 'histogram') AS hist_all_tokens_in_block_l,
 
-        -- Get all tokens from the window of top matches
-        flatten(
-            array_agg(tokens_l) OVER (
-                PARTITION BY unique_id_r
-                ORDER BY match_weight DESC
-                ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
-            )
-        ) AS all_tokens_in_group_l,
+        --
+        map_from_entries(
+                list_filter(
+                    map_entries(hist_all_tokens_in_block_l),
+                    x -> list_contains(tokens_r, x.key)
+                )
+            ) AS hist_overlapping_tokens_r_block_l
+        from top_n_matches m
+        join tokenise_r t using (unique_id_r)
+        group by t.unique_id_r, t.tokens_r
+    ),
+    intermediate AS (
+        SELECT
+            match_weight,
+            match_probability,
+            unique_id_l,
+            m.unique_id_r,
+            original_address_concat_l,
+            original_address_concat_r,
+            (regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')) AS tokens_l,
+            t.tokens_r,
 
-        -- Canonical distinguishing tokens are tokens in the row
-        list_intersect(
-            list_filter(tokens_l,
-                t -> len(list_filter(all_tokens_in_group_l, x -> x = t)) = 1
-            ),        -- canonical distinguishing tokens
-            tokens_r  -- messy tokens
-        ) AS distinguishing_tokens_1_count_1,
+            -- Filter out any tokens not in l block!
+            map_from_entries(
+                list_filter(
+                    map_entries(hist_overlapping_tokens_r_block_l),
+                    x -> list_contains(tokens_l, x.key)
+                )
+            ) AS overlapping_tokens_this_l_and_r,
 
-        list_intersect(
-            list_filter(tokens_l,
-                t -> len(list_filter(all_tokens_in_group_l, x -> x = t)) = 2
-            ),        -- canonical distinguishing tokens
-            tokens_r  -- messy tokens
-        ) AS distinguishing_tokens_1_count_2,
+            t.hist_all_tokens_in_block_l,
+            t.hist_overlapping_tokens_r_block_l,
 
-        -- 'punishing' tokens are ones which are NOT in this address but ARE in the other
-        -- addresses in the window
-        list_filter(
-            tokens_r,
-            t -> (t IN array_distinct(all_tokens_in_group_l)) AND (t NOT IN tokens_l)
-        ) AS punishment_tokens,
+            list_filter(t.tokens_r, tok -> tok NOT IN tokens_l) as tokens_r_not_in_l,
 
-        flatten(
-            array_agg(tokens_l) OVER (
-                PARTITION BY unique_id_r
-                ORDER BY reverse(original_address_concat_l) DESC
-                ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
-            )
-        ) AS all_tokens_in_group_window_2_l,
-
-        -- Canonical distinguishing tokens are tokens in the row
-        list_intersect(
-            list_filter(tokens_l,
-                t -> len(list_filter(all_tokens_in_group_window_2_l, x -> x = t)) = 1
-            ),        -- canonical distinguishing tokens
-            tokens_r  -- messy tokens
-        ) AS distinguishing_tokens_2_count_1,
+            map_from_entries(
+                list_filter(
+                    map_entries(hist_all_tokens_in_block_l),
+                    x -> list_contains(tokens_r_not_in_l, x.key)
+                )
+            ) AS tokens_elsewhere_in_block_but_not_this,
 
         -- missing tokens are tokens in the canonical address but not in the messy address
         list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
+            postcode_l,
+            postcode_r
+        FROM top_n_matches m
+        left join tokens t using (unique_id_r)
+    )
+    SELECT
+        unique_id_l,
+        unique_id_r,
+        match_weight,
+        match_probability,
         original_address_concat_l,
-        original_address_concat_r,
         postcode_l,
+        original_address_concat_r,
         postcode_r,
-        source_dataset_l,
-        source_dataset_r
 
-    FROM top_n_matches
-    ORDER BY unique_id_r
+        overlapping_tokens_this_l_and_r,
+        tokens_elsewhere_in_block_but_not_this,
+        hist_overlapping_tokens_r_block_l,
+        hist_all_tokens_in_block_l,
+        missing_tokens,
+
+    FROM intermediate
+    ORDER BY unique_id_r;
     """
 
     windowed_tokens = con.sql(sql)
 
     # Calculate new match weights based on distinguishing tokens
-    # TODO null handling in unique_distinguishing_match?
-    sql = """
+
+    REWARD_MULTIPLIER = 2
+    PUNISHMENT_MULTIPLIER = 2
+    sql = f"""
     CREATE OR REPLACE TABLE matches AS
-    WITH compute_new_mw AS (
-        SELECT
-            unique_id_r,
-            unique_id_l,
 
-            CASE
-                WHEN len(distinguishing_tokens_1_count_1) > 0 THEN match_weight + 2
-                ELSE match_weight
-            END AS match_weight_1,
-
-            CASE
-                WHEN len(distinguishing_tokens_1_count_2) > 0 THEN match_weight_1 + 1
-                ELSE match_weight_1
-            END AS match_weight_2,
-
-            CASE
-                WHEN len(distinguishing_tokens_2_count_1) > 0 THEN match_weight_2 + 1
-                ELSE match_weight_2
-            END AS match_weight_3,
-
-            CASE
-                WHEN len(punishment_tokens) = 1 THEN match_weight_3 - 2
-                WHEN len(punishment_tokens) = 2 THEN match_weight_3 - 3
-                WHEN len(punishment_tokens) = 3 THEN match_weight_3 - 4
-                ELSE match_weight_3
-            END AS match_weight_4,
-
-            CASE
-                WHEN len(missing_tokens) > 0 THEN match_weight_4 - (0.1 * len(missing_tokens))
-                ELSE match_weight_4
-            END AS match_weight_5,
-
-            match_weight AS match_weight_original,
-            match_probability AS match_probability_original,
-
-            distinguishing_tokens_1_count_1,
-            distinguishing_tokens_1_count_2,
-            distinguishing_tokens_2_count_1,
-            punishment_tokens,
-            missing_tokens,
-            original_address_concat_l,
-            postcode_l,
-            original_address_concat_r,
-            postcode_r,
-            source_dataset_l,
-            source_dataset_r
-
-        FROM windowed_tokens
-    )
     SELECT
-        match_weight_5 AS match_weight,
-        pow(2, match_weight_5)/(1+pow(2, match_weight_5)) AS match_probability,
-        * EXCLUDE (match_weight_1, match_weight_2, match_weight_3, match_weight_4, match_weight_5)
-    FROM compute_new_mw
+        unique_id_r,
+        unique_id_l,
+
+        map_values(overlapping_tokens_this_l_and_r)
+            .list_transform(x -> 1/(x^2))
+            .list_sum() *  {REWARD_MULTIPLIER}
+        - map_values(tokens_elsewhere_in_block_but_not_this)
+            .length() * {PUNISHMENT_MULTIPLIER}
+        - (0.1 * len(missing_tokens))  as mw_adjustment,
+
+        match_weight AS match_weight_original,
+        match_probability AS match_probability_original,
+        (match_weight_original + mw_adjustment) AS match_weight,
+        pow(2, match_weight)/(1+pow(2, match_weight)) AS match_probability,
+        overlapping_tokens_this_l_and_r,
+        tokens_elsewhere_in_block_but_not_this,
+        missing_tokens,
+        original_address_concat_l,
+        postcode_l,
+        original_address_concat_r,
+        postcode_r,
+
+
+    FROM windowed_tokens
     """
 
     con.execute(sql)
