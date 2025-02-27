@@ -3,7 +3,11 @@
 Extremely fast address matching using a pre-trained [Splink](https://github.com/moj-analytical-services/splink) model.
 
 ```
-Full time taken: 11.05 seconds to match 176,640 messy addresses to 273,832 canonical addresses at a rate of 38,758 addresses per second
+Full time taken: 11.05 seconds
+to match 176,640 messy addresses to 273,832 canonical addresses
+at a rate of 38,758 addresses per second
+
+(On Macbook M4 Max)
 ```
 
 ## Installation
