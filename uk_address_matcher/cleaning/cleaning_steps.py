@@ -106,7 +106,7 @@ def parse_out_flat_position_and_letter(
     flat_letter = r"\b\d{0,4}([A-Za-z])\b"
     leading_letter = r"^\s*\d+([A-Za-z])\b"
 
-    flat_number = r"\bFLAT\s+(\S*\d\S*)\s+\S*\d\S*\b"
+    flat_number = r"\b(FLAT|UNIT|APARTMENT)\s+(\S*\d\S*)\s+\S*\d\S*\b"
 
     sql = f"""
     WITH step1 AS (

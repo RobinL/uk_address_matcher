@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "3kuytppx",
+    "linker_uid": "b5isjwlc",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -76,6 +76,14 @@
                     "fix_u_probability": true
                 },
                 {
+                    "sql_condition": "flat_letter_l = numeric_token_1_r OR flat_letter_r = numeric_token_1_l",
+                    "label_for_charts": "Exact match inverted numbers",
+                    "m_probability": 1,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
                     "sql_condition": "\n            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)\n            or\n            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)\n            ",
                     "label_for_charts": "Exact match",
                     "m_probability": 1,
@@ -112,7 +120,7 @@
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_1",
-                    "tf_adjustment_weight": 1.0
+                    "tf_adjustment_weight": 0.5
                 },
                 {
                     "sql_condition": "\n                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')\n                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')\n                        ",
@@ -122,7 +130,7 @@
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_1",
-                    "tf_adjustment_weight": 1.0
+                    "tf_adjustment_weight": 0.5
                 },
                 {
                     "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
@@ -169,7 +177,7 @@
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_2",
-                    "tf_adjustment_weight": 1.0
+                    "tf_adjustment_weight": 0.5
                 },
                 {
                     "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
@@ -216,7 +224,7 @@
                     "fix_m_probability": false,
                     "fix_u_probability": false,
                     "tf_adjustment_column": "numeric_token_3",
-                    "tf_adjustment_weight": 1.0
+                    "tf_adjustment_weight": 0.5
                 },
                 {
                     "sql_condition": "\"numeric_token_2_l\" = \"numeric_token_3_r\"",
@@ -226,7 +234,7 @@
                     "fix_m_probability": false,
                     "fix_u_probability": false,
                     "tf_adjustment_column": "numeric_token_3",
-                    "tf_adjustment_weight": 1.0
+                    "tf_adjustment_weight": 0.5
                 },
                 {
                     "sql_condition": "\"numeric_token_3_l\" IS NULL OR \"numeric_token_3_r\" IS NULL",
