@@ -16,7 +16,7 @@ yaml_path = "tests/test_addresses.yaml"
 # Prepare data
 messy_addresses, canonical_addresses = prepare_combined_test_data(yaml_path, duckdb_con)
 
-test_block = 9
+test_block = 6
 messy_addresses = messy_addresses.filter(f"test_block = {test_block}")
 canonical_addresses = canonical_addresses.filter(f"test_block = {test_block}")
 
