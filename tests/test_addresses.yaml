@@ -52,3 +52,28 @@ addresses:
       - ["153 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
       - ["FLAT B GROUND FLOOR 163 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
       - ["FLAT B 165 WEXFORD ROAD LONDON", "ZZ1 9ZZ"]
+
+  # Lacking street number but business name
+  - messy_address: ["SUES NAILS RAINBOW LANE LONDON", "AB1 2CD"]
+    canonical_addresses:
+      - ["SUES NAILS 6 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["8 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["9 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["7 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["BIRTCHFIELDS HOUSE RAINBOW ROAD LONDON", "AB1 2CD"]
+
+  # Irrelevant business name
+  - messy_address: ["BURGER PARADISE 9 RAINBOW LANE LONDON", "AB1 2CD"]
+    canonical_addresses:
+      - ["9 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["SUES NAILS 6 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["8 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["7 RAINBOW ROAD LONDON", "AB1 2CD"]
+      - ["BIRTCHFIELDS HOUSE RAINBOW ROAD LONDON", "AB1 2CD"]
+
+    # Based on EPC ID 143135378944
+  - messy_address:
+      ["THE OLD FARM COTTAGE PAD FARM BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
+    canonical_addresses:
+      - ["OLD FARM COTTAGE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
+      - ["PAD FARM HOUSE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]

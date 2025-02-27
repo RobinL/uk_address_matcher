@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "8sba0nul",
+    "linker_uid": "3kuytppx",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -115,7 +115,7 @@
                     "tf_adjustment_weight": 1.0
                 },
                 {
-                    "sql_condition": "\n                        regexp_extract(numeric_token_1_l, '\\d+', 0) = regexp_extract(numeric_token_1_r, '\\d+', 0)\n                        ",
+                    "sql_condition": "\n                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')\n                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')\n                        ",
                     "label_for_charts": "Exact match",
                     "m_probability": 0.95,
                     "u_probability": 0.01,

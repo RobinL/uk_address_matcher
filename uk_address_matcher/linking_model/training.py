@@ -91,7 +91,8 @@ num_1_comparison = {
         },
         {
             "sql_condition": """
-                        regexp_extract(numeric_token_1_l, '\\d+', 0) = regexp_extract(numeric_token_1_r, '\\d+', 0)
+                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
+                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
                         """,
             "label_for_charts": "Exact match",
             "m_probability": 0.95,
