@@ -84,3 +84,13 @@ addresses:
     canonical_addresses:
       - ["OLD FARM COTTAGE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
       - ["PAD FARM HOUSE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
+
+  # Based on EPC id 541046809962
+  # Note this only fails because it's flat A basement, if it were flat b basement
+  # it would be fine
+  - messy_address: ["144 & A HALF PIPER ROAD LONDON", "W14 0AA"]
+    canonical_addresses:
+      - ["144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
+      - ["FLAT A BASEMENT 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
+      - ["FLAT B 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
+      - ["FLAT D 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]

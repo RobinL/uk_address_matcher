@@ -16,7 +16,9 @@ yaml_path = "tests/test_addresses.yaml"
 # Prepare data
 messy_addresses, canonical_addresses = prepare_combined_test_data(yaml_path, duckdb_con)
 
-test_block = 6
+test_block = 7
+USE_BIGRAMS = True
+
 messy_addresses = messy_addresses.filter(f"test_block = {test_block}")
 canonical_addresses = canonical_addresses.filter(f"test_block = {test_block}")
 
@@ -51,8 +53,16 @@ improved_matches = improve_predictions_using_distinguishing_tokens(
     df_predict=predicted_matches,
     con=duckdb_con,
     match_weight_threshold=MATCH_WEIGHT_THRESHOLD_IMPROVE,
+    use_bigrams=USE_BIGRAMS,
 )
 
+
+sql = """
+select distinct concat_ws(' ', original_address_concat_r, postcode_r) as messy_address
+from improved_matches
+"""
+
+duckdb_con.sql(sql).show(max_width=700)
 
 # Is best mrach true match?
 
@@ -71,18 +81,38 @@ and p.unique_id_l = b.unique_id_l
 """
 best_match_id, messy_id, true_match_id = duckdb_con.sql(sql).fetchone()
 
+bi_tri_cols = ""
+if USE_BIGRAMS:
+    bi_tri_cols += """
+    ,
+    overlapping_bigrams_this_l_and_r
+        .map_entries()
+        .list_filter(x -> x.value IN (1))
+        .map_from_entries()
+    AS overlapping_bigrams_this_l_and_r_count_1,
+
+
+    bigrams_elsewhere_in_block_but_not_this
+    """
+
 
 sql = f"""
 select
 match_weight,
-original_address_concat_l,
+match_weight_original,
+mw_adjustment,
+original_address_concat_l as canonical_address,
 case
 when unique_id_l = '{true_match_id}' then '✅'
 else ''
 end as true_match,
-original_address_concat_r,
-overlapping_tokens_this_l_and_r ,
-tokens_elsewhere_in_block_but_not_this ,
+overlapping_tokens_this_l_and_r
+    .map_entries()
+    .list_filter(x -> x.value IN (1))
+    .map_from_entries()
+AS overlapping_tokens_this_l_and_r_count_1,
+tokens_elsewhere_in_block_but_not_this
+{bi_tri_cols},
 missing_tokens
 from improved_matches
 order by match_weight desc
