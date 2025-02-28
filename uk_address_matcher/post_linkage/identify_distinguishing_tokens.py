@@ -55,7 +55,7 @@ def improve_predictions_using_distinguishing_tokens(
         SELECT DISTINCT
             unique_id_r,
 
-            original_address_concat_r
+            concat_ws(' ', original_address_concat_r, postcode_r)
                 .trim()
                 .upper()
                 .regexp_split_to_array('\\s+')
@@ -72,7 +72,17 @@ def improve_predictions_using_distinguishing_tokens(
         -- TOKENS SECTION
         -----------------
 
-        flatten(array_agg((regexp_split_to_array(upper(trim(original_address_concat_l)), '\\s+')))) as tokens_in_block_l,
+
+
+        concat_ws(' ', original_address_concat_l, postcode_l)
+                .trim()
+                .upper()
+                .regexp_split_to_array('\\s+')
+                .array_agg()
+                .flatten()
+                as tokens_in_block_l,
+
+
 
         -- Counts of tokens in canonical addresses within block
         list_aggregate(tokens_in_block_l, 'histogram') AS hist_all_tokens_in_block_l,
@@ -288,8 +298,11 @@ def improve_predictions_using_distinguishing_tokens(
         ifnull(map_values(overlapping_tokens_this_l_and_r)
             .list_transform(x -> 1/(x^2))
             .list_sum() *  {REWARD_MULTIPLIER}, 0)
-        - map_values(tokens_elsewhere_in_block_but_not_this)
-            .length() * {PUNISHMENT_MULTIPLIER}
+
+        -  ifnull(map_values(tokens_elsewhere_in_block_but_not_this)
+            .list_transform(x -> 1/(x^2))
+            .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
+
         - (0.1 * len(missing_tokens))
 
         -- Bigram-based adjustments
@@ -298,8 +311,11 @@ def improve_predictions_using_distinguishing_tokens(
         + ifnull(map_values(overlapping_bigrams_this_l_and_r)
             .list_transform(x -> 1/(x^2))
             .list_sum() * {BIGRAM_REWARD_MULTIPLIER}, 0)
-        - map_values(bigrams_elsewhere_in_block_but_not_this)
-            .length() * {BIGRAM_PUNISHMENT_MULTIPLIER}
+        -  ifnull(map_values(bigrams_elsewhere_in_block_but_not_this)
+            .list_transform(x -> 1/(x^2))
+            .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
+
+
         '''
         if use_bigrams
         else ""
