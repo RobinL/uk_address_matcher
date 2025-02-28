@@ -28,7 +28,8 @@ def get_linker(
     *,
     con: DuckDBPyConnection,
     additional_columns_to_retain: list[str] | None = None,
-    include_full_postcode_block=False,
+    include_full_postcode_block=True,
+    include_outside_postcode_block=True,
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
 ) -> Linker:
     settings_as_dict = _get_model_settings_dict()
@@ -38,8 +39,21 @@ def get_linker(
         settings_as_dict["additional_columns_to_retain"] += additional_columns_to_retain
 
     brs = settings_as_dict["blocking_rules_to_generate_predictions"]
-    if "l.postcode = r.postcode" not in brs and include_full_postcode_block:
-        brs.append({"blocking_rule": "l.postcode = r.postcode"})
+
+    # Check if both blocking rule settings are False
+    if not include_full_postcode_block and not include_outside_postcode_block:
+        raise ValueError(
+            "At least one of 'include_full_postcode_block' or 'include_outside_postcode_block' "
+            "must be True. Cannot proceed without any blocking rules."
+        )
+
+    if not include_full_postcode_block:
+        brs = [br for br in brs if br["blocking_rule"] != 'l."postcode" = r."postcode"']
+
+    if not include_outside_postcode_block:
+        brs = [{"blocking_rule": "l.postcode = r.postcode"}]
+
+    settings_as_dict["blocking_rules_to_generate_predictions"] = brs
 
     settings = SettingsCreator.from_path_or_dict(settings_as_dict)
 

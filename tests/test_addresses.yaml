@@ -85,7 +85,7 @@ addresses:
       - ["OLD FARM COTTAGE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
       - ["PAD FARM HOUSE BADGERCROFT ROAD PIKING", "ZZ1 0ZZ"]
 
-  # Based on EPC id 541046809962
+  # 11. Based on EPC id 541046809962
   # Note this only fails because it's flat A basement, if it were flat b basement
   # it would be fine
   - messy_address: ["144 & A HALF PIPER ROAD LONDON", "W14 0AA"]
@@ -94,3 +94,59 @@ addresses:
       - ["FLAT A BASEMENT 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
       - ["FLAT B 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
       - ["FLAT D 144 AND A HALF PIPER ROAD LONDON", "W14 0AA"]
+
+  # 12.
+  - messy_address: ["74 HIGH STREET NEWPORT HITCHIN", "HH16 8AQ"]
+    canonical_addresses:
+      - ["FLAT 74 HIGH STREET NEWPORT HITCHIN", "HH16 8AQ"]
+      - ["NATURAL NAILS 74 HIGH STREET NEWPORT HITCHIN", "HH16 8AQ"]
+      - ["DAVES 74B HIGH STREET NEWPORT HITCHIN", "HH16 8AQ"]
+
+  # 13. Based on EPC id 163481062950
+  - messy_address: ["29 BEAUWAY COLOURED SANDS", "MK1 1AA"]
+    canonical_addresses:
+      - ["29 BEAUWAY WAVENDON", "MK1 1AA"]
+      - ["29 PARKWAY COLOURED SANDS", "MK1 1AB"]
+      - ["29 TURNPIKE COURT COLOURED SANDS", "MK1 1AC"]
+      - ["29 CHAPEL STREET COLOURED SANDS", "MK1 1AC"]
+      - ["29 TAVISTOCK CLOSE COLOURED SANDS", "MK1 1AC"]
+
+  # 14. Based on EPC id 634498760520
+  - messy_address: ["13 ADELLE DRIVE HISLOP MILTON KEYNES", "MKA 7NP"]
+    canonical_addresses:
+      - ["13 FENTON DRIVE HISLOP MILTON KEYNES", "MKA 7GB"]
+      - ["13 ADELLE ROAD HISLOP", "MKA 7NP"]
+      - ["13 HARRATT CLOSE HISLOP MILTON KEYNES", "MKA 7GD"]
+      - ["13 STEEVES AVENUE HISLOP MILTON KEYNES", "MKA 7GE"]
+
+  # 15.
+  - messy_address:
+      ["ZEBRA HOUSE 25 FLAT 45 GOVERNMENT ROAD ST ALBANS ST ALBANS", "AL1 1AA"]
+    canonical_addresses:
+      - ["FLAT 45 ZEBRA HOUSE 25 GOVERNMENT ROAD ST ALBANS", "AL1 1AA"]
+      - ["FLAT 26 ZEBRA HOUSE 25 GOVERNMENT ROAD ST ALBANS", "AL1 1AA"]
+      - ["45 GOVERNMENT ROAD ST ALBANS", "AL1 1AA"]
+  # 16 based on EPC id a08267aa4a63.  The dev site 'wins' because the 'west street'
+  # part overlaps twice so  tok rel freq comparison comes out better
+  - messy_address: ["11 WEST STREET WAVHAM-BY-SEA WAVHAM-BY-SEA", "AA11 2BB"]
+    canonical_addresses:
+      - [
+          "DEVELOPMENT SITE OF 11 WEST STREET AND REAR HALL WEST STREET WAVHAM-BY-SEA",
+          "AA11 2BB",
+        ]
+      - ["11 WEST STREET WAVHAM-BY-SEA", "AA11 2BB"]
+
+  # 17. Based on EPC id 144198335904
+  # MILTON KEYES is causing too much punishment here!
+  - messy_address: ["15 FRANKLINS CROFT BIRDTON MILTON KEYNES", "MK99 1DD"]
+    canonical_addresses:
+      - ["15 TRINITY ROAD OLD BIRDTON MILTON KEYNES", "MK99 1PD"]
+      - ["15 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
+      - ["28 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
+      - ["1 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
+      - ["3 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
+
+  - messy_address: ["8, CHURCH GARDENS, CAPFIELD, LYNN CAPFIELD", "HA1 1AA"]
+    canonical_addresses:
+      - ["8, CHURCH GARDENS, CAPFIELD", "HA1 1AA"]
+      - ["ANNEXE AT, 8, CHURCH GARDENS, CAPFIELD", "HA1 1AA"]

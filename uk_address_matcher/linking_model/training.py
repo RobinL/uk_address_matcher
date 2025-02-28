@@ -3,6 +3,7 @@
 
 import splink.comparison_level_library as cll
 import splink.comparison_library as cl
+from .blocking import old_blocking_rules
 
 from splink import block_on, SettingsCreator
 
@@ -328,7 +329,7 @@ postcode_comparison = {
         {
             "sql_condition": "levenshtein(postcode_l, postcode_r) <= 1",
             "label_for_charts": "Lev <= 1",
-            "m_probability": 1e6,
+            "m_probability": 10000,
             "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
@@ -336,7 +337,7 @@ postcode_comparison = {
         {
             "sql_condition": "levenshtein(postcode_l, postcode_r) <= 2",
             "label_for_charts": "Lev <=2",
-            "m_probability": 0.5e6,
+            "m_probability": 5000,
             "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
@@ -425,11 +426,12 @@ flat_positional_comparison = {
     "comparison_description": "Flat position comparison",
 }
 
+blocking_rules = old_blocking_rules + [block_on("postcode")]
 
 settings_for_training = SettingsCreator(
     probability_two_random_records_match=3e-8,
     link_type="link_only",
-    blocking_rules_to_generate_predictions=[block_on("postcode")],
+    blocking_rules_to_generate_predictions=blocking_rules,
     comparisons=[
         original_address_concat_comparison,
         flat_positional_comparison,
