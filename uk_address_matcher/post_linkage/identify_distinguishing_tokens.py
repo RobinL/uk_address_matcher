@@ -153,7 +153,7 @@ def improve_predictions_using_distinguishing_tokens(
             -- TOKENS SECTION
             -----------------
 
-            original_address_concat_l
+            concat_ws(' ', original_address_concat_l, postcode_l)
                 .trim()
                 .upper()
                 .regexp_split_to_array('\\s+')
