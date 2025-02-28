@@ -133,7 +133,8 @@ def evaluate_matching_results(matching_results, duckdb_con):
         t.match_weight - r.match_weight AS score_diff_from_top,
         CASE WHEN r.unique_id_l = r.true_match_id THEN 1 ELSE 0 END AS is_correct_match
     FROM results r
-    JOIN top_matches_in_window t ON r.unique_id_r = t.test_block_id;
+    JOIN top_matches_in_window t ON r.unique_id_r = t.test_block_id
+    order by test_block_id, r.match_weight desc;
     """
     # duckdb_con.sql(sql).show(max_width=50000)
 
@@ -241,7 +242,7 @@ def evaluate_matching_results(matching_results, duckdb_con):
             SELECT * FROM messy_record
             UNION ALL SELECT * FROM true_match
             UNION ALL SELECT * FROM false_match
-            ORDER BY record_type
+
             """
 
             details = duckdb_con.execute(mismatch_query).fetchall()
