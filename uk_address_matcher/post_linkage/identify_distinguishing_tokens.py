@@ -7,6 +7,7 @@ def improve_predictions_using_distinguishing_tokens(
     con: DuckDBPyConnection,
     match_weight_threshold: float = -20,
     top_n_matches: int = 5,
+    use_bigrams: bool = True,
 ):
     """
     Improve match predictions by identifying distinguishing tokens between addresses.
@@ -16,6 +17,7 @@ def improve_predictions_using_distinguishing_tokens(
         con: DuckDB connection
         match_weight_threshold: Minimum match weight to consider
         top_n_matches: Number of top matches to consider for each unique_id_r
+        use_bigrams: Whether to use bigram-based matching (default: True)
 
     Returns:
         DuckDBPyRelation: Table with improved match predictions
@@ -83,6 +85,10 @@ def improve_predictions_using_distinguishing_tokens(
                 )
             ) AS hist_overlapping_tokens_r_block_l,
 
+
+
+        {
+        '''
         -----------------
         -- BIGRAMS SECTION
         -----------------
@@ -115,6 +121,10 @@ def improve_predictions_using_distinguishing_tokens(
                 x -> list_contains(bigrams_r, x.key)
             )
         ) AS hist_overlapping_bigrams_r_block_l
+        '''
+        if use_bigrams
+        else ""
+    }
 
         from top_n_matches m
         join tokenise_r t using (unique_id_r)
@@ -164,6 +174,10 @@ def improve_predictions_using_distinguishing_tokens(
             -- missing tokens are tokens in the canonical address but not in the messy address
             list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
+
+
+            {
+        '''
             -----------------
             -- BIGRAMS SECTION
             -----------------
@@ -202,6 +216,10 @@ def improve_predictions_using_distinguishing_tokens(
                     x -> list_contains(bigrams_r_not_in_l, x.key)
                 )
             ) AS bigrams_elsewhere_in_block_but_not_this,
+            '''
+        if use_bigrams
+        else ""
+    }
 
             postcode_l,
             postcode_r
@@ -228,6 +246,10 @@ def improve_predictions_using_distinguishing_tokens(
         hist_all_tokens_in_block_l,
         missing_tokens,
 
+
+
+        {
+        '''
         -----------------
         -- BIGRAMS SECTION
         -----------------
@@ -235,7 +257,11 @@ def improve_predictions_using_distinguishing_tokens(
         overlapping_bigrams_this_l_and_r,
         bigrams_elsewhere_in_block_but_not_this,
         hist_overlapping_bigrams_r_block_l,
-        hist_all_bigrams_in_block_l
+        hist_all_bigrams_in_block_l,
+        '''
+        if use_bigrams
+        else ""
+    }
 
     FROM intermediate
     ORDER BY unique_id_r;
@@ -250,6 +276,7 @@ def improve_predictions_using_distinguishing_tokens(
     PUNISHMENT_MULTIPLIER = 3 * overall_reward_multiplier
     BIGRAM_REWARD_MULTIPLIER = 2 * overall_reward_multiplier
     BIGRAM_PUNISHMENT_MULTIPLIER = 3 * overall_reward_multiplier
+
     sql = f"""
     CREATE OR REPLACE TABLE matches AS
 
@@ -266,11 +293,17 @@ def improve_predictions_using_distinguishing_tokens(
         - (0.1 * len(missing_tokens))
 
         -- Bigram-based adjustments
+        {
+        f'''
         + ifnull(map_values(overlapping_bigrams_this_l_and_r)
             .list_transform(x -> 1/(x^2))
             .list_sum() * {BIGRAM_REWARD_MULTIPLIER}, 0)
         - map_values(bigrams_elsewhere_in_block_but_not_this)
             .length() * {BIGRAM_PUNISHMENT_MULTIPLIER}
+        '''
+        if use_bigrams
+        else ""
+    }
         as mw_adjustment,
 
         match_weight AS match_weight_original,
@@ -283,9 +316,15 @@ def improve_predictions_using_distinguishing_tokens(
         tokens_elsewhere_in_block_but_not_this,
         missing_tokens,
 
+        {
+        '''
         -- Bigram-related fields
         overlapping_bigrams_this_l_and_r,
         bigrams_elsewhere_in_block_but_not_this,
+        '''
+        if use_bigrams
+        else ""
+    }
 
         original_address_concat_l,
         postcode_l,

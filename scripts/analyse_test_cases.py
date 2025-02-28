@@ -16,7 +16,9 @@ yaml_path = "tests/test_addresses.yaml"
 # Prepare data
 messy_addresses, canonical_addresses = prepare_combined_test_data(yaml_path, duckdb_con)
 
-test_block = 10
+test_block = 7
+USE_BIGRAMS = True
+
 messy_addresses = messy_addresses.filter(f"test_block = {test_block}")
 canonical_addresses = canonical_addresses.filter(f"test_block = {test_block}")
 
@@ -45,8 +47,6 @@ predicted_matches = linker.inference.predict(
     experimental_optimisation=True,
 ).as_duckdbpyrelation()
 
-USE_BIGRAMS = True
-USE_TRIGRAMS = False
 
 # Improve predictions (second pass)
 improved_matches = improve_predictions_using_distinguishing_tokens(
@@ -54,7 +54,6 @@ improved_matches = improve_predictions_using_distinguishing_tokens(
     con=duckdb_con,
     match_weight_threshold=MATCH_WEIGHT_THRESHOLD_IMPROVE,
     use_bigrams=USE_BIGRAMS,
-    use_trigrams=USE_TRIGRAMS,
 )
 
 
@@ -94,18 +93,6 @@ if USE_BIGRAMS:
 
 
     bigrams_elsewhere_in_block_but_not_this
-    """
-if USE_TRIGRAMS:
-    bi_tri_cols += """
-    ,
-    overlapping_trigrams_this_l_and_r
-        .map_entries()
-        .list_filter(x -> x.value IN (1))
-        .map_from_entries()
-    AS overlapping_trigrams_this_l_and_r_count_1,
-
-
-    trigrams_elsewhere_in_block_but_not_this
     """
 
 
