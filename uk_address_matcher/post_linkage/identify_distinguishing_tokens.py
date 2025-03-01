@@ -414,7 +414,7 @@ def improve_predictions_using_distinguishing_tokens(
         postcode_l,
         original_address_concat_r,
         postcode_r,
-        tokens_r,
+
 
 
     FROM windowed_tokens
