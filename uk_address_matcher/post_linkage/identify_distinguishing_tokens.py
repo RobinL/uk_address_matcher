@@ -51,6 +51,34 @@ def improve_predictions_using_distinguishing_tokens(
             ORDER BY match_weight DESC
         ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
     ),
+    remove_common_end_tokens AS (
+        SELECT
+            * EXCLUDE (original_address_concat_r, original_address_concat_l),
+
+            original_address_concat_l
+                .trim()
+                .upper()
+                .regexp_split_to_array('\\s+')
+                .list_reverse()
+                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+                .list_reverse()
+                .array_to_string(' ')
+                as original_address_concat_l,
+
+            original_address_concat_r
+                .trim()
+                .upper()
+                .regexp_split_to_array('\\s+')
+                .list_reverse()
+                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+                .list_reverse()
+                .array_to_string(' ')
+                as original_address_concat_r,
+
+        FROM top_n_matches
+    ),
     tokenise_r AS (
         SELECT DISTINCT
             unique_id_r,
@@ -59,9 +87,8 @@ def improve_predictions_using_distinguishing_tokens(
                 .trim()
                 .upper()
                 .regexp_split_to_array('\\s+')
-                -- .list_filter(tok -> tok NOT IN ('FLAT'))
                 as tokens_r
-        FROM top_n_matches
+        FROM remove_common_end_tokens
     ),
     tokens as (
         select
@@ -109,7 +136,7 @@ def improve_predictions_using_distinguishing_tokens(
                 list_slice(tokens_in_block_l, 1, length(tokens_in_block_l) - 1),
                 list_slice(tokens_in_block_l, 2, length(tokens_in_block_l))
             ),
-            tup -> concat_ws(' ', tup[1], tup[2])
+            tup -> ARRAY[tup[1], tup[2]]
         ) AS bigrams_in_block_l,
 
         -- Counts of bigrams in canonical addresses within block
@@ -121,7 +148,7 @@ def improve_predictions_using_distinguishing_tokens(
                 list_slice(tokens_r, 1, length(tokens_r) - 1),
                 list_slice(tokens_r, 2, length(tokens_r))
             ),
-            tup -> concat_ws(' ', tup[1], tup[2])
+            tup -> ARRAY[tup[1], tup[2]]
         ) AS bigrams_r,
 
         -- Filter to only include bigrams that appear in both r and the block
@@ -200,7 +227,7 @@ def improve_predictions_using_distinguishing_tokens(
                     list_slice((tokens_l), 2,
                               length((tokens_l)))
                 ),
-                tup -> concat_ws(' ', tup[1], tup[2])
+                tup -> ARRAY[tup[1], tup[2]]
             ) AS bigrams_l,
 
             t.bigrams_r,
@@ -263,15 +290,54 @@ def improve_predictions_using_distinguishing_tokens(
         -----------------
         -- BIGRAMS SECTION
         -----------------
+        -- Filter out from bigrams tokens already covered in tokens (unigrams) part
 
         overlapping_bigrams_this_l_and_r,
         bigrams_elsewhere_in_block_but_not_this,
         hist_overlapping_bigrams_r_block_l,
         hist_all_bigrams_in_block_l,
+
+        overlapping_bigrams_this_l_and_r
+        .map_entries()
+        .list_filter(x ->
+            NOT (
+                (
+                    map_contains(overlapping_tokens_this_l_and_r, x.key[1])
+                    AND overlapping_tokens_this_l_and_r[x.key[1]] <= x.value
+                )
+                AND
+                (
+                    map_contains(overlapping_tokens_this_l_and_r, x.key[2])
+                    AND overlapping_tokens_this_l_and_r[x.key[2]] <= x.value
+                )
+            )
+        )
+        .map_from_entries() AS overlapping_bigrams_this_l_and_r_filtered,
+
+
+        bigrams_elsewhere_in_block_but_not_this
+        .map_entries()
+         .list_filter(x ->
+            NOT (
+                (
+                    map_contains(tokens_elsewhere_in_block_but_not_this, x.key[1])
+                    AND tokens_elsewhere_in_block_but_not_this[x.key[1]] <= x.value
+                )
+                AND
+                (
+                    map_contains(tokens_elsewhere_in_block_but_not_this, x.key[2])
+                    AND tokens_elsewhere_in_block_but_not_this[x.key[2]] <= x.value
+                )
+            )
+        )
+        .map_from_entries() AS bigrams_elsewhere_in_block_but_not_this_filtered,
+
+
         '''
         if use_bigrams
         else ""
     }
+
 
     FROM intermediate
     ORDER BY unique_id_r;
@@ -308,10 +374,10 @@ def improve_predictions_using_distinguishing_tokens(
         -- Bigram-based adjustments
         {
         f'''
-        + ifnull(map_values(overlapping_bigrams_this_l_and_r)
+        + ifnull(map_values(overlapping_bigrams_this_l_and_r_filtered)
             .list_transform(x -> 1/(x^2))
             .list_sum() * {BIGRAM_REWARD_MULTIPLIER}, 0)
-        -  ifnull(map_values(bigrams_elsewhere_in_block_but_not_this)
+        -  ifnull(map_values(bigrams_elsewhere_in_block_but_not_this_filtered)
             .list_transform(x -> 1)
             .list_sum() *  {BIGRAM_PUNISHMENT_MULTIPLIER}, 0)
 
@@ -337,6 +403,8 @@ def improve_predictions_using_distinguishing_tokens(
         -- Bigram-related fields
         overlapping_bigrams_this_l_and_r,
         bigrams_elsewhere_in_block_but_not_this,
+        overlapping_bigrams_this_l_and_r_filtered,
+        bigrams_elsewhere_in_block_but_not_this_filtered,
         '''
         if use_bigrams
         else ""
@@ -345,7 +413,9 @@ def improve_predictions_using_distinguishing_tokens(
         original_address_concat_l,
         postcode_l,
         original_address_concat_r,
-        postcode_r
+        postcode_r,
+        tokens_r,
+
 
     FROM windowed_tokens
     """
