@@ -1,3 +1,4 @@
+.tmp
 try_*
 secret_data/
 *.wal

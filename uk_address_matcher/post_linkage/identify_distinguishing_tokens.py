@@ -59,7 +59,7 @@ def improve_predictions_using_distinguishing_tokens(
                 .trim()
                 .upper()
                 .regexp_split_to_array('\\s+')
-                .list_filter(tok -> tok NOT IN ('FLAT'))
+                -- .list_filter(tok -> tok NOT IN ('FLAT'))
                 as tokens_r
         FROM top_n_matches
     ),
@@ -157,7 +157,7 @@ def improve_predictions_using_distinguishing_tokens(
                 .trim()
                 .upper()
                 .regexp_split_to_array('\\s+')
-                .list_filter(tok -> tok NOT IN ('FLAT'))
+                -- .list_filter(tok -> tok NOT IN ('FLAT'))
                 AS tokens_l,
             t.tokens_r,
 
@@ -283,9 +283,9 @@ def improve_predictions_using_distinguishing_tokens(
 
     overall_reward_multiplier = 1.5
     REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    PUNISHMENT_MULTIPLIER = 3 * overall_reward_multiplier
+    PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
     BIGRAM_REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    BIGRAM_PUNISHMENT_MULTIPLIER = 3 * overall_reward_multiplier
+    BIGRAM_PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
 
     sql = f"""
     CREATE OR REPLACE TABLE matches AS
@@ -300,7 +300,7 @@ def improve_predictions_using_distinguishing_tokens(
             .list_sum() *  {REWARD_MULTIPLIER}, 0)
 
         -  ifnull(map_values(tokens_elsewhere_in_block_but_not_this)
-            .list_transform(x -> 1/(x^2))
+            .list_transform(x -> 1)
             .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
 
         - (0.1 * len(missing_tokens))
@@ -312,8 +312,8 @@ def improve_predictions_using_distinguishing_tokens(
             .list_transform(x -> 1/(x^2))
             .list_sum() * {BIGRAM_REWARD_MULTIPLIER}, 0)
         -  ifnull(map_values(bigrams_elsewhere_in_block_but_not_this)
-            .list_transform(x -> 1/(x^2))
-            .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
+            .list_transform(x -> 1)
+            .list_sum() *  {BIGRAM_PUNISHMENT_MULTIPLIER}, 0)
 
 
         '''

@@ -145,8 +145,24 @@ addresses:
       - ["28 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
       - ["1 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
       - ["3 FRANKLINS CROFT BIRDTON", "MK99 1DD"]
-
-  - messy_address: ["8, CHURCH GARDENS, CAPFIELD, LYNN CAPFIELD", "HA1 1AA"]
+  # 18
+  - messy_address: ["8, CHURCH GARDENS, CAPFIELD, LYNN", "HA1 1AA"]
     canonical_addresses:
       - ["8, CHURCH GARDENS, CAPFIELD", "HA1 1AA"]
       - ["ANNEXE AT, 8, CHURCH GARDENS, CAPFIELD", "HA1 1AA"]
+  # 19
+  - messy_address:
+      ["APPLE AUCTION HOUSE 12 FRUIT STREET PUDDING LANE LANE", "A1 1AA"]
+    canonical_addresses:
+      - ["APPLE AUCTION HOUSE 12 FRUIT STREET PUDDING LANE LANE", "A1 1AA"]
+      - ["PUDDING STORES PEAR AUCTION HOUSE 13 FRUIT STREET", "A1 1AA"]
+      - ["PEAR HOUSE 12 FRUIT STREET", "A1 1AA"]
+      - ["APPLE HOUSE 12 FRUIT STREET", "A1 1AA"]
+    # 20
+  - messy_address: ["12 FRUIT STREET PUDDING LANE", "A1 1AA"]
+    canonical_addresses:
+      - ["12 FRUIT STREET", "A1 1AA"]
+      - ["13 FRUIT STREET", "A1 1AA"]
+      - ["12 VEG STREET PUDDING LANE", "A1 1AB"]
+      - ["13 VEG STREET PUDDING LANE", "A1 1AB"]
+      - ["1 VEG STREET PUDDING LANE", "A1 1AA"]
