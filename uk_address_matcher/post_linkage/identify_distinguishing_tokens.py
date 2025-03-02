@@ -8,6 +8,7 @@ def improve_predictions_using_distinguishing_tokens(
     match_weight_threshold: float = -20,
     top_n_matches: int = 5,
     use_bigrams: bool = True,
+    additional_columns_to_retain: list[str] | None = None,
 ):
     """
     Improve match predictions by identifying distinguishing tokens between addresses.
@@ -22,18 +23,11 @@ def improve_predictions_using_distinguishing_tokens(
     Returns:
         DuckDBPyRelation: Table with improved match predictions
     """
-    cols = """
-        match_weight,
-        match_probability,
-        source_dataset_l,
-        unique_id_l,
-        source_dataset_r,
-        unique_id_r,
-        original_address_concat_l,
-        original_address_concat_r,
-        postcode_l,
-        postcode_r,
-    """
+
+    add_cols_select = ""
+    if additional_columns_to_retain:
+        for col in additional_columns_to_retain:
+            add_cols_select += f"{col}_l, {col}_r, "
 
     # Create a table with tokenized addresses
     sql_token_and_bigrams = f"""
@@ -259,7 +253,8 @@ def improve_predictions_using_distinguishing_tokens(
     }
 
             postcode_l,
-            postcode_r
+            postcode_r,
+            {add_cols_select}
         FROM top_n_matches m
         left join tokens t using (unique_id_r)
     )
@@ -337,6 +332,7 @@ def improve_predictions_using_distinguishing_tokens(
         if use_bigrams
         else ""
     }
+    {add_cols_select}
 
 
     FROM intermediate
@@ -414,6 +410,7 @@ def improve_predictions_using_distinguishing_tokens(
         postcode_l,
         original_address_concat_r,
         postcode_r,
+        {add_cols_select}
 
 
 

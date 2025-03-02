@@ -7,6 +7,7 @@ def best_matches_with_distinguishability(
     con: DuckDBPyConnection,
     distinguishability_thresholds=[1, 5, 10],
     best_match_only: bool = True,
+    additional_columns_to_retain=None,
 ):
     """
     Finds the best match for each messy address and computes the
@@ -32,6 +33,11 @@ def best_matches_with_distinguishability(
 
     con.register("predict_for_distinguishability", df_predict)
     con.register("addresses_to_match", df_addresses_to_match)
+
+    add_cols_select = ""
+    if additional_columns_to_retain:
+        for col in additional_columns_to_retain:
+            add_cols_select += f"{col}_l, {col}_r, "
 
     if 0 not in distinguishability_thresholds:
         distinguishability_thresholds.append(0)
@@ -92,7 +98,8 @@ def best_matches_with_distinguishability(
         t.match_probability,
         t.match_weight,
         t.distinguishability,
-        COALESCE(t.distinguishability_category, '99: No match') AS distinguishability_category
+        COALESCE(t.distinguishability_category, '99: No match') AS distinguishability_category,
+        {add_cols_select}
     FROM addresses_to_match AS a
     LEFT JOIN categorized_matches AS t
     ON a.unique_id = t.unique_id_r
@@ -131,7 +138,10 @@ def best_matches_summary(
 
     """
     d_list_cat = best_matches_with_distinguishability(
-        df_predict, df_addresses_to_match, con, disinguishability_thresholds
+        df_predict=df_predict,
+        df_addresses_to_match=df_addresses_to_match,
+        con=con,
+        distinguishability_thresholds=disinguishability_thresholds,
     )
     con.register("d_list_cat", d_list_cat)
 
