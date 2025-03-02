@@ -102,3 +102,22 @@ Run an interactive example in your browser:
 
 
 
+## Development
+
+The scripts and tests will run better if you create .vscode/settings.json with the following:
+
+```json
+{
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "-v",
+        "--capture=tee-sys"
+    ]
+}
+```
+
