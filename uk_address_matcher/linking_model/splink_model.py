@@ -59,27 +59,14 @@ def get_linker(
 
     db_api = DuckDBAPI(connection=con)
 
-    # Need to guarantee that the canonical dataset is on the left
-    sql = """
-    select * exclude (source_dataset),
-    '0_'  as source_dataset
-    from df_addresses_to_search_within
-    """
-    df_addresses_to_match_fix = con.sql(sql)
-    con.register("df_addresses_to_match_fix", df_addresses_to_match_fix)
-
-    sql = """
-    select * exclude (source_dataset),
-    '1_' as source_dataset
-    from df_addresses_to_match
-    """
-    df_addresses_to_search_within_fix = con.sql(sql)
-    con.register("df_addresses_to_search_within_fix", df_addresses_to_search_within_fix)
+    con.register("df_addresses_to_match_fix", df_addresses_to_match)
+    con.register("df_addresses_to_search_within_fix", df_addresses_to_search_within)
 
     linker = Linker(
         [df_addresses_to_match, df_addresses_to_search_within],
         settings=settings,
         db_api=db_api,
+        input_table_aliases=["m_", "c_"],
     )
 
     if precomputed_numeric_tf_table is None:
