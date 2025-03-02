@@ -13,6 +13,21 @@ def best_matches_with_distinguishability(
     distinguishability of the match, defined as the difference in match weight
     between the top and next best match
 
+    Args:
+        df_predict: table containing pairwise predictions from either
+            `linker.inference.predict` or
+            `improve_predictions_using_distinguishing_tokens`
+        df_addresses_to_match: raw table containing addresses to be matched
+            in pre-cleaned form cols = (unique_id, address_concat, postcode)
+        con: DuckDB connection for executing SQL queries
+        distinguishability_thresholds: List of thresholds for categorizing match
+            distinguishability. Default is [1, 5, 10].
+        best_match_only: If True, only return the best match for each address.
+            If False, return all matches. Default is True.
+
+    Returns:
+        DuckDBPyRelation: A table containing matched addresses with
+        distinguishability metrics.
     """
 
     con.register("predict_for_distinguishability", df_predict)
@@ -95,6 +110,26 @@ def best_matches_summary(
     disinguishability_thresholds=[1, 5, 10],
     group_by_match_weight_bins=False,
 ):
+    """
+    Generates a summary of match distinguishability categories with counts and percentages.
+
+
+    Args:
+        df_predict: Table containing pairwise predictions from either
+            `linker.inference.predict` or
+            `improve_predictions_using_distinguishing_tokens`
+        df_addresses_to_match: Raw table containing addresses to be matched
+            in pre-cleaned form cols = (unique_id, address_concat, postcode)
+        con: DuckDB connection for executing SQL queries
+        disinguishability_thresholds: List of thresholds for categorizing match
+            distinguishability. Default is [1, 5, 10].
+        group_by_match_weight_bins: If True, further groups results by match weight
+            bins. Default is False.
+
+    Returns:
+        DuckDBPyRelation: A summary table w
+
+    """
     d_list_cat = best_matches_with_distinguishability(
         df_predict, df_addresses_to_match, con, disinguishability_thresholds
     )
