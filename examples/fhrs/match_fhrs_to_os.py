@@ -6,7 +6,7 @@ from uk_address_matcher import (
     get_linker,
 )
 from uk_address_matcher.post_linkage.analyse_results import (
-    distinguishability_summary,
+    best_matches_summary,
     distinguishability_table,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
@@ -142,7 +142,7 @@ df_predict_improved_with_dist = distinguishability_table(
 )
 
 
-dsum_1 = distinguishability_summary(
+dsum_1 = best_matches_summary(
     df_predict=df_predict_ddb, df_addresses_to_match=df_messy_clean, con=con
 )
 dsum_1.show(max_width=500)

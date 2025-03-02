@@ -1,104 +1,19 @@
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 
-def distinguishability_table(
-    df_predict: DuckDBPyRelation,
-    unique_id_r: str = None,
-    human_readable=False,
-    best_match_only=True,
-    distinguishability_thresholds=[1, 5, 10],
-):
-    """
-    Computes the difference in match weights between the top and next-best matches
-    for each unique_id_r, categorizes distinguishability based on thresholds, and
-    returns a filtered table. Supports optional filtering by unique_id_r and
-    selecting only the best match.
-    """
-    if human_readable:
-        select_cols = """
-            unique_id_l,
-            unique_id_r,
-            source_dataset_l,
-            source_dataset_r,
-            original_address_concat_l,
-            original_address_concat_r,
-            postcode_l,
-            postcode_r,
-            match_probability,
-            match_weight,
-            distinguishability,
-            distinguishability_category
-            """
-    else:
-        select_cols = "*"
-
-    # Remove 'where' from the condition itself, as it will be added in the SQL
-    if unique_id_r is not None:
-        uid_condition = f"unique_id_r = '{unique_id_r}'"
-    else:
-        uid_condition = "1=1"
-
-    # Define the best match condition
-    best_match_condition = "rn = 1" if best_match_only else "1=1"
-
-    # Handle distinguishability thresholds
-    if 0 not in distinguishability_thresholds:
-        distinguishability_thresholds.append(0)
-    thres_sorted = sorted(distinguishability_thresholds, reverse=True)
-    d_case_whens = "\n".join(
-        [
-            f"WHEN distinguishability > {d} THEN '{str(index).zfill(2)}: Distinguishability > {d}'"
-            for index, d in enumerate(thres_sorted, start=2)
-        ]
-    )
-    next_label_index = len(thres_sorted) + 2
-    next_label_value = f"{str(next_label_index).zfill(2)}."
-
-    sql = f"""
-    WITH enriched_data AS (
-        SELECT
-            unique_id_r,
-            *,
-            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn,
-            LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight
-        FROM predict_for_distinguishability
-    ),
-    distinguishability_calc AS (
-        SELECT
-            *,
-            match_weight - previous_match_weight AS distinguishability
-        FROM enriched_data
-    ),
-    categorized_data AS (
-        SELECT
-            *,
-            CASE
-                WHEN distinguishability IS NULL THEN '01: One match only'
-                {d_case_whens}
-                WHEN distinguishability = 0 THEN '{next_label_value}: Distinguishability = 0'
-                ELSE '99: error, uncategorized'
-            END AS distinguishability_category
-        FROM distinguishability_calc
-    )
-    SELECT
-        {select_cols}
-    FROM categorized_data
-    WHERE {uid_condition} AND {best_match_condition}
-    ORDER BY unique_id_r, match_weight DESC
-    """
-
-    return df_predict.query("predict_for_distinguishability", sql)
-
-
-def distinguishability_by_id(
+def best_matches_with_distinguishability(
     df_predict: DuckDBPyRelation,
     df_addresses_to_match: DuckDBPyRelation,
     con: DuckDBPyConnection,
     distinguishability_thresholds=[1, 5, 10],
+    df_epc_data: DuckDBPyRelation = None,
+    best_match_only: bool = True,
 ):
     """
     Computes the difference in match weights between the top and next-best matches
     for each unique_id_r, categorizes distinguishability based on thresholds
+
+
     """
     if 0 not in distinguishability_thresholds:
         distinguishability_thresholds.append(0)
@@ -116,6 +31,8 @@ def distinguishability_by_id(
     con.register("predict_for_distinguishability", df_predict)
     con.register("addresses_to_match", df_addresses_to_match)
 
+    rn_filter = "WHERE rn = 1" if best_match_only else ""
+
     sql = f"""
     WITH enriched_data AS (
         SELECT
@@ -129,7 +46,7 @@ def distinguishability_by_id(
             *,
             match_weight - previous_match_weight AS distinguishability
         FROM enriched_data
-        WHERE rn = 1
+        {rn_filter}
     ),
     categorized_matches AS (
         SELECT
@@ -145,14 +62,14 @@ def distinguishability_by_id(
     SELECT
         a.unique_id AS unique_id_r,
         t.unique_id_l,
+        a.address_concat AS address_concat_r,
+        a.postcode AS postcode_r,
         t.original_address_concat_l,
         t.postcode_l,
         t.match_probability,
         t.match_weight,
         t.distinguishability,
-        COALESCE(t.distinguishability_category, '99: No match') AS distinguishability_category,
-        COALESCE(t.original_address_concat_r, a.original_address_concat) AS original_address_concat_r,
-        COALESCE(t.postcode_r, a.postcode) AS postcode_r
+        COALESCE(t.distinguishability_category, '99: No match') AS distinguishability_category
     FROM addresses_to_match AS a
     LEFT JOIN categorized_matches AS t
     ON a.unique_id = t.unique_id_r
@@ -162,7 +79,7 @@ def distinguishability_by_id(
     return con.sql(sql)
 
 
-def distinguishability_summary(
+def best_matches_summary(
     *,
     df_predict: DuckDBPyRelation,
     df_addresses_to_match: DuckDBPyRelation,
@@ -170,7 +87,7 @@ def distinguishability_summary(
     disinguishability_thresholds=[1, 5, 10],
     group_by_match_weight_bins=False,
 ):
-    d_list_cat = distinguishability_by_id(
+    d_list_cat = best_matches_with_distinguishability(
         df_predict, df_addresses_to_match, con, disinguishability_thresholds
     )
     con.register("d_list_cat", d_list_cat)

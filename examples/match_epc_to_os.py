@@ -5,8 +5,8 @@ from uk_address_matcher import (
     get_linker,
 )
 from uk_address_matcher.post_linkage.analyse_results import (
-    distinguishability_summary,
-    distinguishability_table,
+    best_matches_summary,
+    best_matches_with_distinguishability,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
@@ -35,9 +35,11 @@ select
    UPRN_SOURCE as uprn_source
 
 
-from read_csv('{epc_path}')
 
-limit 10000
+from read_csv('{epc_path}', filename=true)
+where lower(filename) like '%hammersmith%'
+
+limit 1000
 
 """
 
@@ -133,20 +135,24 @@ print(
 # Step 5: Inspect results
 # -----------------------------------------------------------------------------
 
-d_table = distinguishability_table(df_predict=df_predict_ddb, best_match_only=True)
+d_table = best_matches_with_distinguishability(
+    df_predict=df_predict_ddb,
+    df_addresses_to_match=df_epc_data,
+    con=con,
+)
+d_table.show(max_width=1000)
 
-
-dsum_1 = distinguishability_summary(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_epc_data_clean, con=con
+dsum_1 = best_matches_summary(
+    df_predict=df_predict_ddb, df_addresses_to_match=df_epc_data, con=con
 )
 dsum_1.show(max_width=500)
 
 
-# -----------------------------------------------------------------------------
-# Step 6: Inspect single rows
-# This code is specific to the EPC data where we have a UPRN from the EPC data
-# that we can compare the the one we found
-# -----------------------------------------------------------------------------
+# # -----------------------------------------------------------------------------
+# # Step 6: Inspect single rows
+# # This code is specific to the EPC data where we have a UPRN from the EPC data
+# # that we can compare the the one we found
+# # -----------------------------------------------------------------------------
 
 sql = """
 CREATE OR REPLACE TABLE matches_with_epc_and_os as

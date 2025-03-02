@@ -3,7 +3,7 @@ import pandas as pd
 from IPython.display import display
 
 from uk_address_matcher.post_linkage.analyse_results import (
-    distinguishability_summary,
+    best_matches_summary,
     distinguishability_table,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
@@ -89,13 +89,13 @@ print(f"Time taken: {end_time - start_time} seconds")
 # -----------------------------------------------------------------------------
 
 print("\nResults before second pass:")
-dsum_1 = distinguishability_summary(
+dsum_1 = best_matches_summary(
     df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
 )
 dsum_1.show(max_width=500, max_rows=20)
 
 print("\nResults after second pass:")
-dsum_2 = distinguishability_summary(
+dsum_2 = best_matches_summary(
     df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
 )
 dsum_2.show(max_width=500, max_rows=20)
