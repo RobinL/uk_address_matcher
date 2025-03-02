@@ -37,7 +37,12 @@ Match them with:
 ```python
 import duckdb
 
-from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq, get_linker
+from uk_address_matcher import (
+    clean_data_using_precomputed_rel_tok_freq,
+    get_linker,
+    best_matches_with_distinguishability,
+    improve_predictions_using_distinguishing_tokens,
+)
 
 p_ch = "./example_data/companies_house_addresess_postcode_overlap.parquet"
 p_fhrs = "./example_data/fhrs_addresses_sample.parquet"
@@ -65,13 +70,23 @@ df_predict = linker.inference.predict(
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
 # Second pass - improve predictions using distinguishing tokens
-from uk_address_matcher.post_linkage.identify_distinguishing_tokens import improve_predictions_using_distinguishing_tokens
 
 df_predict_improved = improve_predictions_using_distinguishing_tokens(
     df_predict=df_predict_ddb,
     con=con,
     match_weight_threshold=-20,
 )
+
+# Find best matches within group and compute distinguishability
+
+best_matches = best_matches_with_distinguishability(
+    df_predict=df_predict_improved,
+    df_addresses_to_match=df_fhrs,
+    con=con,
+)
+
+best_matches
+
 ```
 
 
