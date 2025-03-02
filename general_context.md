@@ -27,6 +27,7 @@ The package then proceeds to:
 # Step 3 details
 
 Note that tokens_r are from the messy address, and tokens_l are from the canonical address.
+```
 ┬─────────────┬─────────────┬────────────────────────────────────────────────┬───────────────────────────────────────────────┬
 │ unique_id_l │ unique_id_r │                        tokens_l                │                                tokens_r       │
 │    int64    │    int64    │                        varchar[]               │                                varchar[]      │
@@ -35,8 +36,8 @@ Note that tokens_r are from the messy address, and tokens_l are from the canonic
 │           3 │         101 │ [71, GUNTERSTONE, ROAD, LONDON]                │ [57, GUNTERSTONE, MESSY, ROAD, LONDON]        │
 │           2 │         101 │ [41, GUNTERSTONE, ROAD, LONDON]                │ [57, GUNTERSTONE, MESSY, ROAD, LONDON]        │
 
-
-
+```
+```
 ┬─────────────┬─────────────┬────────────────────────────────────────────────┬───────────────────────────────────────────────┬
 │ unique_id_l │ unique_id_r │                        tokens_l                │                                tokens_r       │
 │    int64    │    int64    │                        varchar[]               │                                varchar[]      │
@@ -46,25 +47,4 @@ Note that tokens_r are from the messy address, and tokens_l are from the canonic
 │           8 │         202 │ [41, DEEZER, ROAD, LONDON]                     │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │
 │           9 │         202 │ [41, DEEZER, ROAD, LONDON]                     │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │
 
-
-That is, if we have tokens in our messy address that DO NOT appear in the candidate (tokens_l), but DO appear in other candidates, then we should punish this row.
-
-we can do this by creating a new column called 'punishment tokens' as follows:
-
-
-┬─────────────┬─────────────┬────────────────────────────────────────────────┬───────────────────────────────────────────────┬─────────────────────┬
-│ unique_id_l │ unique_id_r │                        tokens_l                │                                tokens_r       │  punishment_tokens  │
-│    int64    │    int64    │                        varchar[]               │                                varchar[]      │      varchar[]      │
-┼─────────────┼─────────────┼────────────────────────────────────────────────┼───────────────────────────────────────────────┼─────────────────────┼
-│           6 │         202 │ [SUES, NAILS DEEZER, ROAD, LONDON]             │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │ []                  │
-│           7 │         202 │ [57, DEEZER, ROAD, LONDON]                     │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │ [SUES, NAILS]       │
-│           8 │         202 │ [41, DEEZER, ROAD, LONDON]                     │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │ [SUES, NAILS]       │
-│           9 │         202 │ [41, DEEZER, ROAD, LONDON]                     │ [SUES, NAILS 71, DEEZER, ROAD, LONDON]        │ [SUES, NAILS]       │
-
-
-If you're matching to a canonical i.e. deduplicated list of things (e.g. addresses), you can run two passes of maching:
-(1).  A standard probabilistic link
-(2). Within each block of candidate matches, perform analysis to find whether there are uniquely distinguishing tokens, or 'punshment tokens'.  For example
-If we have a match on the token 58 AND there's only one address with the 58 token in the candidate matches, then it's almost certain this is the match
-If our messy address contains 58, the candidate match does not, AND there's another candidate match that DOES contain 58, then we should punish this
-If our messy address has tokens that are in NONE of the candidates, these can be ignored
+```
