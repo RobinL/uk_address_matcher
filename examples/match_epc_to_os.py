@@ -82,7 +82,7 @@ end_time = time.time()
 print(f"Time to load/clean: {end_time - overall_start_time} seconds")
 
 # -----------------------------------------------------------------------------
-# Step 3: Link data
+# Step 3: Link data - pass 1
 # -----------------------------------------------------------------------------
 
 
