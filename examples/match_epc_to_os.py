@@ -134,12 +134,16 @@ print(
 # -----------------------------------------------------------------------------
 
 d_table = best_matches_with_distinguishability(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_epc_data, con=con
+    df_predict=df_predict_ddb,
+    df_addresses_to_match=df_epc_data,
+    con=con,
 )
 d_table.show(max_width=1000)
 
 dsum_1 = best_matches_summary(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_epc_data, con=con
+    df_predict=df_predict_ddb,
+    df_addresses_to_match=df_epc_data,
+    con=con,
 )
 dsum_1.show(max_width=500)
 

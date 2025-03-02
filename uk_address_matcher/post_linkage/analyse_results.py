@@ -64,7 +64,7 @@ def best_matches_with_distinguishability(
                     ELSE '99: error, uncategorized'
                 END AS distinguishability_category
             FROM distinguishability_calc
-            {rn_filter}
+
         )
     SELECT
         a.unique_id AS unique_id_r,
