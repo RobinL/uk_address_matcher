@@ -6,8 +6,8 @@ from uk_address_matcher import (
     get_linker,
 )
 from uk_address_matcher.post_linkage.analyse_results import (
-    distinguishability_summary,
-    distinguishability_table,
+    best_matches_summary,
+    best_matches_with_distinguishability,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
@@ -35,44 +35,45 @@ select
     lng as lng
 from read_parquet('{messy_path}')
 order by random()
-limit 1000
+limit 10000
 """
 
 con.execute(sql)
 df_messy = con.table("df_messy")
 
-df_messy
-
-sql = f"""
-create or replace table os as
-select
-    uprn as unique_id,
-    'canonical' as source_dataset,
-   regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
-   postcode,
-    latitude as lat,
-    longitude as lng
-from read_parquet('{full_os_path}')
-where postcode in
-(select distinct postcode from df_messy)
-
-and description != 'Non Addressable Object'
-
-"""
-con.execute(sql)
-df_os = con.table("os")
-
 
 ## If you've pre-cleaned the OS data, you can load it directly without having to re-clean
-# sql = """
-# create or replace view os_clean as
-# select * from read_parquet('secret_data/ord_surv/os_clean.parquet')
-# where postcode in (
-# select distinct postcode from df_messy
-# )
+sql = """
+create or replace view os_clean as
+select * from read_parquet('secret_data/ord_surv/os_clean.parquet')
+where postcode in (
+select distinct postcode from df_messy
+)
+"""
+con.execute(sql)
+df_os_clean = con.table("os_clean")
+
+
+# Otherwise load raw os data and clean it
+# sql = f"""
+# create or replace table os as
+# select
+#     uprn as unique_id,
+#     'canonical' as source_dataset,
+#    regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
+#    postcode,
+#     latitude as lat,
+#     longitude as lng
+# from read_parquet('{full_os_path}')
+# where postcode in
+# (select distinct postcode from df_messy)
+
+# and description != 'Non Addressable Object'
+
 # """
 # con.execute(sql)
-# df_os_clean = con.table("os_clean")
+# df_os = con.table("os")
+# df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
@@ -80,10 +81,10 @@ df_os = con.table("os")
 
 
 messy_count = df_messy.count("*").fetchall()[0][0]
-canonical_count = df_os.count("*").fetchall()[0][0]
+canonical_count = df_os_clean.count("*").fetchall()[0][0]
 
 df_messy_clean = clean_data_using_precomputed_rel_tok_freq(df_messy, con=con)
-df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
+
 
 end_time = time.time()
 print(f"Time to load/clean: {end_time - overall_start_time} seconds")
@@ -97,7 +98,7 @@ linker = get_linker(
     df_addresses_to_match=df_messy_clean,
     df_addresses_to_search_within=df_os_clean,
     con=con,
-    include_full_postcode_block=False,
+    include_full_postcode_block=True,
     include_outside_postcode_block=True,
 )
 
@@ -137,17 +138,18 @@ print(
 # Step 5: Inspect results
 # -----------------------------------------------------------------------------
 
-df_predict_improved_with_dist = distinguishability_table(
-    df_predict=df_predict_ddb, best_match_only=True
+best_matches = best_matches_with_distinguishability(
+    df_predict=df_predict_ddb, df_addresses_to_match=df_messy, con=con
 )
 
 
-dsum_1 = distinguishability_summary(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_messy_clean, con=con
+dsum_1 = best_matches_summary(
+    df_predict=df_predict_ddb, df_addresses_to_match=df_messy, con=con
 )
 dsum_1.show(max_width=500)
 
 
+best_matches.filter("distinguishability_category =  '99: No match'").show(max_width=500)
 # -----------------------------------------------------------------------------
 # Step 6: Compare geocoding of original data vs new matches
 # -----------------------------------------------------------------------------
@@ -155,19 +157,11 @@ dsum_1.show(max_width=500)
 record_number_to_view = 1
 
 sql = """
-WITH best_matches AS (
-    SELECT
-        unique_id_r AS messy_id,
-        unique_id_l AS canonical_id,
-        match_weight,
-        distinguishability
-    FROM df_predict_improved_with_dist
-)
 SELECT
     m.unique_id AS messy_id,
     c.unique_id AS canonical_id,
     m.address_concat AS messy_address,
-    c.address_concat AS canonical_address,
+    bm.original_address_concat_l AS canonical_address,
     m.postcode AS messy_postcode,
     c.postcode AS canonical_postcode,
     m.lat AS messy_lat,
@@ -184,13 +178,9 @@ SELECT
     ) AS distance_km,
     bm.match_weight,
     bm.distinguishability,
-
 FROM df_messy m
-LEFT JOIN best_matches bm ON m.unique_id = bm.messy_id
-LEFT JOIN df_os c ON bm.canonical_id = c.unique_id
-
-
-
+LEFT JOIN best_matches bm ON m.unique_id = bm.unique_id_r
+LEFT JOIN df_os_clean c ON bm.unique_id_l = c.unique_id
 ORDER BY distance_km DESC
 """
 
