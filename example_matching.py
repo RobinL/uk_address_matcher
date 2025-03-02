@@ -87,13 +87,13 @@ print(f"Time taken: {end_time - start_time} seconds")
 
 print("\nResults before second pass:")
 dsum_1 = best_matches_summary(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs_clean, con=con
+    df_predict=df_predict_ddb, df_addresses_to_match=df_fhrs, con=con
 )
 dsum_1.show(max_width=500, max_rows=20)
 
 print("\nResults after second pass:")
 dsum_2 = best_matches_summary(
-    df_predict=df_predict_improved, df_addresses_to_match=df_fhrs_clean, con=con
+    df_predict=df_predict_improved, df_addresses_to_match=df_fhrs, con=con
 )
 dsum_2.show(max_width=500, max_rows=20)
 
@@ -104,8 +104,8 @@ dsum_2.show(max_width=500, max_rows=20)
 
 # Show matches with a weight of >5 and distinguishability of >5
 best_matches = best_matches_with_distinguishability(
-    df_addresses_to_match=df_fhrs,
     df_predict=df_predict_improved,
+    df_addresses_to_match=df_fhrs,
     con=con,
 )
 
