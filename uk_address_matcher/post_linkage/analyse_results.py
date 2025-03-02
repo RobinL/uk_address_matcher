@@ -14,6 +14,10 @@ def best_matches_with_distinguishability(
     between the top and next best match
 
     """
+
+    con.register("predict_for_distinguishability", df_predict)
+    con.register("addresses_to_match", df_addresses_to_match)
+
     if 0 not in distinguishability_thresholds:
         distinguishability_thresholds.append(0)
     thres_sorted = sorted(distinguishability_thresholds, reverse=True)
@@ -26,9 +30,6 @@ def best_matches_with_distinguishability(
     )
     next_label_index = len(thres_sorted) + 2
     next_label_value = f"{str(next_label_index).zfill(2)}."
-
-    con.register("predict_for_distinguishability", df_predict)
-    con.register("addresses_to_match", df_addresses_to_match)
 
     rn_filter = (
         "QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1"

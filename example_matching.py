@@ -4,7 +4,7 @@ from IPython.display import display
 
 from uk_address_matcher.post_linkage.analyse_results import (
     best_matches_summary,
-    distinguishability_table,
+    best_matches_with_distinguishability,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
@@ -24,12 +24,9 @@ pd.options.display.max_colwidth = 1000
 # |      Column       |                     Description                        |
 # +-------------------+--------------------------------------------------------+
 # | unique_id         | Unique identifier for each record                      |
-# |                   |                                                        |
 # | source_dataset    | Populated with a constant string identifying the       |
 # |                   | dataset, e.g. 'epc'                                    |
-# |                   |                                                        |
 # | address_concat    | Full address concatenated as without  postcode         |
-# |                   |                                                        |
 # | postcode          | Postcode                                               |
 # +-------------------+--------------------------------------------------------+
 
@@ -106,25 +103,16 @@ dsum_2.show(max_width=500, max_rows=20)
 # -----------------------------------------------------------------------------
 
 # Show matches with a weight of >5 and distinguishability of >5
-dt = distinguishability_table(df_predict_improved)
+best_matches = best_matches_with_distinguishability(
+    df_addresses_to_match=df_fhrs,
+    df_predict=df_predict_improved,
+    con=con,
+)
 
 best_matches_distinguishability_sql = """
-with matches as (
-SELECT
-    unique_id_r as fhrs_id,
-    original_address_concat_r as fhrs_address,
-    postcode_r as fhrs_postcode,
-    unique_id_l as ch_id,
-    original_address_concat_l as ch_address,
-    postcode_l as ch_postcode,
-    match_weight,
-    distinguishability
-FROM dt
-QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
 
-)
 select *
-from matches
+from best_matches
 where match_weight > 5 and distinguishability > 5
 ORDER BY random()
 LIMIT 20
@@ -193,9 +181,13 @@ SELECT
     concat_ws(' ', original_address_concat_r, postcode_r) as fhrs_address,
     concat_ws(' ', original_address_concat_l, postcode_l) as ch_address,
     match_weight,
-    distinguishing_tokens_1_count_1,
-    distinguishing_tokens_1_count_2,
-    distinguishing_tokens_2_count_1
+    overlapping_tokens_this_l_and_r,
+    tokens_elsewhere_in_block_but_not_this,
+    overlapping_bigrams_this_l_and_r,
+    bigrams_elsewhere_in_block_but_not_this,
+
+
+
 FROM df_predict_improved
 WHERE unique_id_r = '{fhrs_id}'
 ORDER BY match_weight DESC
@@ -203,7 +195,7 @@ LIMIT 5
 """
 
 print(f"\nTop 5 potential matches for FHRS ID {fhrs_id}:")
-con.sql(top_matches_sql).show(max_width=500)
+con.sql(top_matches_sql).show(max_width=5000)
 
 # Get waterfall chart data for the matched pair
 waterfall_sql = f"""
