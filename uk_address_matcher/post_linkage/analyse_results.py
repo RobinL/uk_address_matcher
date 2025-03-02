@@ -6,13 +6,12 @@ def best_matches_with_distinguishability(
     df_addresses_to_match: DuckDBPyRelation,
     con: DuckDBPyConnection,
     distinguishability_thresholds=[1, 5, 10],
-    df_epc_data: DuckDBPyRelation = None,
     best_match_only: bool = True,
 ):
     """
-    Computes the difference in match weights between the top and next-best matches
-    for each unique_id_r, categorizes distinguishability based on thresholds
-
+    Finds the best match for each messy address and computes the
+    distinguishability of the match, defined as the difference in match weight
+    between the top and next best match
 
     """
     if 0 not in distinguishability_thresholds:
@@ -31,34 +30,42 @@ def best_matches_with_distinguishability(
     con.register("predict_for_distinguishability", df_predict)
     con.register("addresses_to_match", df_addresses_to_match)
 
-    rn_filter = "WHERE rn = 1" if best_match_only else ""
+    rn_filter = (
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1"
+        if best_match_only
+        else ""
+    )
+
+    if best_match_only:
+        sort_str = "ORDER BY distinguishability_category ASC, match_weight DESC"
+    else:
+        sort_str = "ORDER BY unique_id_r,  match_weight DESC"
 
     sql = f"""
-    WITH enriched_data AS (
-        SELECT
-            *,
-            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS rn,
-            LEAD(match_weight) OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) AS previous_match_weight
-        FROM predict_for_distinguishability
-    ),
-    top_matches AS (
-        SELECT
-            *,
-            match_weight - previous_match_weight AS distinguishability
-        FROM enriched_data
-        {rn_filter}
-    ),
-    categorized_matches AS (
-        SELECT
-            *,
-            CASE
-                WHEN distinguishability IS NULL THEN '01: One match only'
-                {d_case_whens}
-                WHEN distinguishability = 0 THEN '{next_label_value}: Distinguishability = 0'
-                ELSE '99: error, uncategorized'
-            END AS distinguishability_category
-        FROM top_matches
-    )
+    WITH
+        distinguishability_calc AS (
+            SELECT
+                *,
+                match_weight - LEAD(match_weight) OVER (
+                    PARTITION BY unique_id_r ORDER BY match_weight DESC
+                ) AS distinguishability,
+                COUNT(*) OVER (PARTITION BY unique_id_r) AS match_count
+            FROM predict_for_distinguishability
+            {rn_filter}
+        ),
+        categorized_matches AS (
+            SELECT
+                *,
+                CASE
+                    WHEN match_count = 1 THEN '01: One match only'
+                    WHEN distinguishability IS NULL THEN '{next_label_value}: NaN (last match in group)'
+                    {d_case_whens}
+                    WHEN distinguishability = 0 THEN '{next_label_value}: Distinguishability = 0'
+                    ELSE '99: error, uncategorized'
+                END AS distinguishability_category
+            FROM distinguishability_calc
+            {rn_filter}
+        )
     SELECT
         a.unique_id AS unique_id_r,
         t.unique_id_l,
@@ -73,7 +80,7 @@ def best_matches_with_distinguishability(
     FROM addresses_to_match AS a
     LEFT JOIN categorized_matches AS t
     ON a.unique_id = t.unique_id_r
-    ORDER BY distinguishability_category ASC, match_weight DESC
+    {sort_str}
     """
 
     return con.sql(sql)

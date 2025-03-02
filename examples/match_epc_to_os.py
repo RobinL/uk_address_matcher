@@ -34,12 +34,10 @@ select
    UPRN as uprn,
    UPRN_SOURCE as uprn_source
 
-
-
 from read_csv('{epc_path}', filename=true)
 where lower(filename) like '%hammersmith%'
 
-limit 1000
+limit 100
 
 """
 
@@ -136,9 +134,7 @@ print(
 # -----------------------------------------------------------------------------
 
 d_table = best_matches_with_distinguishability(
-    df_predict=df_predict_ddb,
-    df_addresses_to_match=df_epc_data,
-    con=con,
+    df_predict=df_predict_ddb, df_addresses_to_match=df_epc_data, con=con
 )
 d_table.show(max_width=1000)
 
