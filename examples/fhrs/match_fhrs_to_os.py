@@ -100,6 +100,7 @@ linker = get_linker(
     con=con,
     include_full_postcode_block=True,
     include_outside_postcode_block=True,
+    additional_columns_to_retain=["lat", "lng"],
 )
 
 
@@ -126,6 +127,7 @@ df_predict_improved = improve_predictions_using_distinguishing_tokens(
     match_weight_threshold=-15,
     top_n_matches=5,
     use_bigrams=USE_BIGRAMS,
+    additional_columns_to_retain=["lat", "lng"],
 )
 
 end_time = time.time()
@@ -139,7 +141,10 @@ print(
 # -----------------------------------------------------------------------------
 
 best_matches = best_matches_with_distinguishability(
-    df_predict=df_predict_ddb, df_addresses_to_match=df_messy, con=con
+    df_predict=df_predict_ddb,
+    df_addresses_to_match=df_messy,
+    con=con,
+    additional_columns_to_retain=["lat", "lng"],
 )
 
 
@@ -149,57 +154,51 @@ dsum_1 = best_matches_summary(
 dsum_1.show(max_width=500)
 
 
-best_matches.filter("distinguishability_category =  '99: No match'").show(max_width=500)
 # -----------------------------------------------------------------------------
 # Step 6: Compare geocoding of original data vs new matches
 # -----------------------------------------------------------------------------
+
+best_matches.show(max_width=500)
 
 record_number_to_view = 1
 
 sql = """
 SELECT
-    m.unique_id AS messy_id,
-    c.unique_id AS canonical_id,
-    m.address_concat AS messy_address,
-    bm.original_address_concat_l AS canonical_address,
-    m.postcode AS messy_postcode,
-    c.postcode AS canonical_postcode,
-    m.lat AS messy_lat,
-    m.lng AS messy_lng,
-    c.lat AS canonical_lat,
-    c.lng AS canonical_lng,
+    bm.unique_id_r AS messy_id,
+    bm.unique_id_l AS canonical_id,
+    concat_ws(' ', bm.original_address_concat_l, bm.postcode_l) AS messy_address,
+    concat_ws(' ', bm.address_concat_r, bm.postcode_r) AS canonical_address,
+
+    lat_r, lat_l, lng_r, lng_l,
     -- Calculate great circle distance in kilometers using the Haversine formula
     6371 * 2 * ASIN(
         SQRT(
-            POWER(SIN((RADIANS(c.lat) - RADIANS(m.lat)) / 2), 2) +
-            COS(RADIANS(m.lat)) * COS(RADIANS(c.lat)) *
-            POWER(SIN((RADIANS(c.lng) - RADIANS(m.lng)) / 2), 2)
+            POWER(SIN((RADIANS(lat_l) - RADIANS(lat_r)) / 2), 2) +
+            COS(RADIANS(lat_r)) * COS(RADIANS(lat_l)) *
+            POWER(SIN((RADIANS(lng_l) - RADIANS(lng_r)) / 2), 2)
         )
     ) AS distance_km,
     bm.match_weight,
     bm.distinguishability,
-FROM df_messy m
-LEFT JOIN best_matches bm ON m.unique_id = bm.unique_id_r
-LEFT JOIN df_os_clean c ON bm.unique_id_l = c.unique_id
+from best_matches bm
 ORDER BY distance_km DESC
 """
 
 geocoding_comparison = con.sql(sql)
 
 
-# Convert to pandas DataFrame
 sql = """
 select * from geocoding_comparison
 where match_weight > -2
 and distinguishability > 5
 and distance_km is not null
-
+and distance_km < 5
 """
-df_distances = con.sql(sql).to_df()
+df_distances = con.sql(sql)
 
 # Create histogram of distances
 distance_histogram = (
-    alt.Chart(df_distances)
+    alt.Chart(df_distances.to_df())
     .mark_bar()
     .encode(
         alt.X("distance_km:Q", bin=alt.Bin(maxbins=30), title="Distance (km)"),
@@ -227,7 +226,7 @@ where
 -- they don't have a geocode
 (
 
-    (messy_lat is null or distance_km > 0.05)
+    (lat_r is null or distance_km > 0.05)
     and
     (
     (match_weight > 10 and distinguishability > 8)
@@ -276,9 +275,9 @@ where messy_id = '{record_to_view}'
 )
 select
     'messy' as source,
-    concat(messy_address, ' ', messy_postcode) as address,
-    messy_lat as lat,
-    messy_lng as lng,
+    messy_address as address,
+    lat_r as lat,
+    lng_r as lng,
     match_weight,
     distinguishability,
 
@@ -288,9 +287,9 @@ from t1
 UNION ALL
 select
     'canonical' as source,
-    concat(canonical_address, ' ', canonical_postcode) as address,
-    canonical_lat as lat,
-    canonical_lng as lng,
+    canonical_address as address,
+    lat_l as lat,
+    lng_l as lng,
     match_weight,
     distinguishability,
 
@@ -303,16 +302,16 @@ sql_improved_map = f"""
 SELECT
     messy_address,
     canonical_address,
-    messy_lat,
-    messy_lng,
-    canonical_lat,
-    canonical_lng,
+    lat_r,
+    lng_r,
+    lat_l,
+    lng_l,
     distance_km,
     match_weight,
     distinguishability,
     -- Calculate center point as average of coordinates
-    (messy_lat + canonical_lat) / 2 AS center_lat,
-    (messy_lng + canonical_lng) / 2 AS center_lng
+    (lat_r + lat_l) / 2 AS center_lat,
+    (lng_r + lng_l) / 2 AS center_lng
 FROM geocoding_comparison
 
 where messy_id = '{record_to_view}'
@@ -321,29 +320,27 @@ where messy_id = '{record_to_view}'
 
 map_examples = con.sql(sql_improved_map).to_df()
 
-map_examples
-
 
 for i, row in map_examples.iterrows():
     center_lat = row["center_lat"]
     center_lng = row["center_lng"]
-    messy_lat = row["messy_lat"]
-    messy_lng = row["messy_lng"]
-    canonical_lat = row["canonical_lat"]
-    canonical_lng = row["canonical_lng"]
+    lat_r = row["lat_r"]
+    lng_r = row["lng_r"]
+    lat_l = row["lat_l"]
+    lng_l = row["lng_l"]
 
     map_url = (
         f"https://www.robinlinacre.com/url-map/"
-        f"?marker={messy_lat},{messy_lng}"
-        f"&marker={canonical_lat},{canonical_lng}"
+        f"?marker={lat_r},{lng_r}"
+        f"&marker={lat_l},{lng_l}"
         f"&center={center_lat},{center_lng}"
         f"&zoom=16"
     )
 
     google_maps_url = (
         f"https://www.google.com/maps/dir/?api=1"
-        f"&origin={messy_lat},{messy_lng}"
-        f"&destination={canonical_lat},{canonical_lng}"
+        f"&origin={lat_r},{lng_r}"
+        f"&destination={lat_l},{lng_l}"
     )
 
     print(f"\nDistance: {row['distance_km']:.2f} km")
@@ -351,5 +348,3 @@ for i, row in map_examples.iterrows():
     print(f"Canonical address: {row['canonical_address']}")
     print(f"Map URL (red=messy, blue=canonical) {map_url}")
     print(f"Google Maps directions: {google_maps_url}")
-
-    # Also print map url of just canonical

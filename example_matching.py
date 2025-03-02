@@ -57,7 +57,6 @@ linker = get_linker(
     df_addresses_to_search_within=df_ch_clean,
     con=con,
     include_full_postcode_block=True,
-    additional_columns_to_retain=["original_address_concat"],
 )
 
 df_predict = linker.inference.predict(
