@@ -33,8 +33,7 @@ select
    UPRN as uprn,
    UPRN_SOURCE as uprn_source
 from read_csv('{epc_path}', filename=true)
-where lower(filename) like '%hammersmith%'
-limit 100
+-- where lower(filename) like '%hammersmith%'
 """
 con.execute(sql)
 
@@ -53,7 +52,7 @@ description != 'Non Addressable Object'
 """
 con.execute(sql)
 df_os = con.table("os")
-
+df_os.to_parquet("os.parquet")
 
 df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
 

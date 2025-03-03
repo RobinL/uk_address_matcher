@@ -27,7 +27,6 @@ sql = f"""
 create or replace table df_messy as
 select
     fhrsid as unique_id,
-    'messy' as source_dataset,
     concat_ws(' ', AddressLine1, AddressLine2, AddressLine3, AddressLine4)
         as address_concat,
     PostCode,
