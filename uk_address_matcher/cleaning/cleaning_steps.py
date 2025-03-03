@@ -394,7 +394,6 @@ def final_column_order(
     sql = """
     select
         unique_id,
-        source_dataset,
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
@@ -406,7 +405,6 @@ def final_column_order(
 
         * exclude (
             unique_id,
-            source_dataset,
             numeric_token_1,
             numeric_token_2,
             numeric_token_3,

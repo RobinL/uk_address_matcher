@@ -18,7 +18,6 @@ sql = """
 create or replace table df_messy as
 select
     '1' as unique_id,
-    'messy' as source_dataset,
    '30 London Road Romford ' as address_concat,
    'RM7 9RB' as postcode
 """
@@ -34,7 +33,8 @@ df_messy_clean = clean_data_using_precomputed_rel_tok_freq(df_messy, con=con)
 
 sql = """
 create or replace view os_clean as
-select * from read_parquet('secret_data/ord_surv/os_clean.parquet')
+select *
+from read_parquet('secret_data/ord_surv/os_clean.parquet')
 where postcode in (
 select distinct postcode from df_messy_clean
 )
