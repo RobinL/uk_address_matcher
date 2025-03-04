@@ -28,7 +28,7 @@ def test_match_one():
     env = os.environ.copy()
     # We need to provide a way to override the hardcoded path in match_one.py
     env["OS_CLEAN_PATH"] = (
-        f"read_csv('{os.path.abspath('tests/test_data/os_fake.csv')}', filename=true)"
+        f"read_parquet('{os.path.abspath('tests/test_data/one_clean_row_downing_street.parquet')}')"
     )
 
     result = subprocess.run(
@@ -50,7 +50,7 @@ def test_match_fhrs_to_os():
     env["FHRS_PATH"] = (
         f"read_csv('{os.path.abspath('tests/test_data/fhrs_fake.csv')}', filename=true)"
     )
-    env["OS_CLEAN_PATH"] = (
+    env["FULL_OS_PATH"] = (
         f"read_csv('{os.path.abspath('tests/test_data/os_fake.csv')}', filename=true)"
     )
 

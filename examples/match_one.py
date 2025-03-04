@@ -35,7 +35,7 @@ df_messy_clean = clean_data_using_precomputed_rel_tok_freq(df_messy, con=con)
 # The os.getenv can be ignored, is just so this script can be run in the test suite
 
 full_os_path = os.getenv(
-    "FULL_OS_PATH",
+    "OS_CLEAN_PATH",
     "read_parquet('secret_data/ord_surv/os_clean.parquet')",
 )
 
