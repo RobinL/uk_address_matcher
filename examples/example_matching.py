@@ -1,5 +1,6 @@
 import duckdb
 import pandas as pd
+import os
 from IPython.display import display
 
 from uk_address_matcher.post_linkage.analyse_results import (
@@ -41,6 +42,11 @@ con = duckdb.connect(database=":memory:")
 df_ch = con.read_parquet(p_ch).order("postcode")
 df_fhrs = con.read_parquet(p_fhrs).order("postcode")
 
+# Apply limit if TEST_LIMIT environment variable is set
+if os.getenv("TEST_LIMIT"):
+    df_ch = df_ch.limit(50)
+    df_fhrs = df_fhrs.limit(50)
+
 # -----------------------------------------------------------------------------
 # Step 2: Clean the data/feature engineering to prepare for matching model
 # -----------------------------------------------------------------------------
@@ -57,6 +63,7 @@ linker = get_linker(
     df_addresses_to_search_within=df_ch_clean,
     con=con,
     include_full_postcode_block=True,
+    retain_intermediate_calculation_columns=True,
 )
 
 df_predict = linker.inference.predict(

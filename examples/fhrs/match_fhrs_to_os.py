@@ -1,6 +1,7 @@
 import altair as alt
 import time
 import duckdb
+import os
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
     get_linker,
@@ -14,14 +15,18 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
 )
 
 from IPython.display import display
+
 # -----------------------------------------------------------------------------
 # Step 1: Load data
 # -----------------------------------------------------------------------------
-
 overall_start_time = time.time()
 con = duckdb.connect(":default:")
-messy_path = "secret_data/fhrs/fhrs_data.parquet"
-full_os_path = "secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet"
+
+# The os.getenv can be ignored, is just so this script can be run in the test suite
+messy_path = os.getenv(
+    "FHRS_PATH", "read_parquet('secret_data/fhrs/fhrs_data.parquet')"
+)
+
 
 sql = f"""
 create or replace table df_messy as
@@ -32,7 +37,7 @@ select
     PostCode,
     lat as lat,
     lng as lng
-from read_parquet('{messy_path}')
+from {messy_path}
 order by random()
 limit 10000
 """
@@ -42,37 +47,43 @@ df_messy = con.table("df_messy")
 
 
 ## If you've pre-cleaned the OS data, you can load it directly without having to re-clean
-sql = """
-create or replace view os_clean as
-select * from read_parquet('secret_data/ord_surv/os_clean.parquet')
-where postcode in (
-select distinct postcode from df_messy
-)
-"""
-con.execute(sql)
-df_os_clean = con.table("os_clean")
+# sql = """
+# create or replace view os_clean as
+# select * from read_parquet('secret_data/ord_surv/os_clean.parquet')
+# where postcode in (
+# select distinct postcode from df_messy
+# )
+# """
+# con.execute(sql)
+# df_os_clean = con.table("os_clean")
 
 
 # Otherwise load raw os data and clean it
-# sql = f"""
-# create or replace table os as
-# select
-#     uprn as unique_id,
-#     'canonical' as source_dataset,
-#    regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
-#    postcode,
-#     latitude as lat,
-#     longitude as lng
-# from read_parquet('{full_os_path}')
-# where postcode in
-# (select distinct postcode from df_messy)
 
-# and description != 'Non Addressable Object'
+full_os_path = os.getenv(
+    "FULL_OS_PATH",
+    "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')",
+)
 
-# """
-# con.execute(sql)
-# df_os = con.table("os")
-# df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
+sql = f"""
+create or replace table os as
+select
+    uprn as unique_id,
+    'canonical' as source_dataset,
+   regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
+   postcode,
+    latitude as lat,
+    longitude as lng
+from {full_os_path}
+where postcode in
+(select distinct postcode from df_messy)
+
+and description != 'Non Addressable Object'
+
+"""
+con.execute(sql)
+df_os = con.table("os")
+df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
