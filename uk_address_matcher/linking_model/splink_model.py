@@ -32,6 +32,7 @@ def get_linker(
     include_outside_postcode_block=True,
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
     retain_intermediate_calculation_columns=False,
+    retain_matching_columns=True,
 ) -> Linker:
     settings_as_dict = _get_model_settings_dict()
 
@@ -42,7 +43,7 @@ def get_linker(
     settings_as_dict["retain_intermediate_calculation_columns"] = (
         retain_intermediate_calculation_columns
     )
-
+    settings_as_dict["retain_matching_columns"] = retain_matching_columns
     brs = settings_as_dict["blocking_rules_to_generate_predictions"]
 
     # Check if both blocking rule settings are False
