@@ -101,7 +101,6 @@ df_predict = linker.inference.predict(
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-
 # -----------------------------------------------------------------------------
 # Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
 # described here https://github.com/RobinL/uk_address_matcher/issues/14
