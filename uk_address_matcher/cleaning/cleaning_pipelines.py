@@ -85,9 +85,15 @@ def clean_data_on_the_fly(
 
     materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
     con.register("__address_table_res", res)
+
+    # Check if source_dataset column exists and exclude it if it does
+    has_source_dataset = "source_dataset" in res.columns
+
+    exclude_clause = "EXCLUDE (source_dataset)" if has_source_dataset else ""
+
     sql = f"""
     create or replace temporary table {materialised_cleaned_table_name} as
-    select * from __address_table_res
+    select * {exclude_clause} from __address_table_res
     """
     con.execute(sql)
     return con.table(materialised_cleaned_table_name)
@@ -142,9 +148,15 @@ def clean_data_using_precomputed_rel_tok_freq(
 
     materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
     con.register("__address_table_res", res)
+
+    # Check if source_dataset column exists and exclude it if it does
+    has_source_dataset = "source_dataset" in res.columns
+
+    exclude_clause = "EXCLUDE (source_dataset)" if has_source_dataset else ""
+
     sql = f"""
     create or replace temporary table {materialised_cleaned_table_name} as
-    select * from __address_table_res
+    select * {exclude_clause} from __address_table_res
     """
     con.execute(sql)
     return con.table(materialised_cleaned_table_name)
