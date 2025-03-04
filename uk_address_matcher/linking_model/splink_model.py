@@ -31,6 +31,8 @@ def get_linker(
     include_full_postcode_block=True,
     include_outside_postcode_block=True,
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
+    retain_intermediate_calculation_columns=False,
+    retain_matching_columns=True,
 ) -> Linker:
     settings_as_dict = _get_model_settings_dict()
 
@@ -38,6 +40,10 @@ def get_linker(
         settings_as_dict.setdefault("additional_columns_to_retain", [])
         settings_as_dict["additional_columns_to_retain"] += additional_columns_to_retain
 
+    settings_as_dict["retain_intermediate_calculation_columns"] = (
+        retain_intermediate_calculation_columns
+    )
+    settings_as_dict["retain_matching_columns"] = retain_matching_columns
     brs = settings_as_dict["blocking_rules_to_generate_predictions"]
 
     # Check if both blocking rule settings are False
@@ -59,27 +65,14 @@ def get_linker(
 
     db_api = DuckDBAPI(connection=con)
 
-    # Need to guarantee that the canonical dataset is on the left
-    sql = """
-    select * exclude (source_dataset),
-    '0_'  as source_dataset
-    from df_addresses_to_search_within
-    """
-    df_addresses_to_match_fix = con.sql(sql)
-    con.register("df_addresses_to_match_fix", df_addresses_to_match_fix)
-
-    sql = """
-    select * exclude (source_dataset),
-    '1_' as source_dataset
-    from df_addresses_to_match
-    """
-    df_addresses_to_search_within_fix = con.sql(sql)
-    con.register("df_addresses_to_search_within_fix", df_addresses_to_search_within_fix)
+    con.register("df_addresses_to_match_fix", df_addresses_to_match)
+    con.register("df_addresses_to_search_within_fix", df_addresses_to_search_within)
 
     linker = Linker(
         [df_addresses_to_match, df_addresses_to_search_within],
         settings=settings,
         db_api=db_api,
+        input_table_aliases=["m_", "c_"],
     )
 
     if precomputed_numeric_tf_table is None:

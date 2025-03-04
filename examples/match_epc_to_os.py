@@ -27,29 +27,20 @@ full_os_path = "secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet
 sql = f"""
 create or replace table epc_data_raw as
 select
-    substr(LMK_KEY, 1, 12) as unique_id,
-    'messy' as source_dataset,
+   substr(LMK_KEY, 1, 12) as unique_id,
    concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
    POSTCODE as postcode,
    UPRN as uprn,
    UPRN_SOURCE as uprn_source
-
 from read_csv('{epc_path}', filename=true)
-where lower(filename) like '%hammersmith%'
-
-limit 100
-
+-- where lower(filename) like '%hammersmith%'
 """
-
-
 con.execute(sql)
-
 
 sql = f"""
 create or replace table os as
 select
-    uprn as unique_id,
-    'canonical' as source_dataset,
+   uprn as unique_id,
    regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
    postcode
 from read_parquet('{full_os_path}')
@@ -61,7 +52,7 @@ description != 'Non Addressable Object'
 """
 con.execute(sql)
 df_os = con.table("os")
-
+df_os.to_parquet("os.parquet")
 
 df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
 
