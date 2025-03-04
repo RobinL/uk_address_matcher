@@ -100,7 +100,7 @@ df_predict = linker.inference.predict(
     threshold_match_weight=-100, experimental_optimisation=True
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
-
+df_predict_ddb.show(max_width=1000)
 # -----------------------------------------------------------------------------
 # Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
 # described here https://github.com/RobinL/uk_address_matcher/issues/14
@@ -119,6 +119,7 @@ df_predict_improved = improve_predictions_using_distinguishing_tokens(
     top_n_matches=5,
     use_bigrams=USE_BIGRAMS,
 )
+df_predict_improved.show(max_width=1000)
 
 end_time = time.time()
 print(f"Improve time taken: {end_time - start_time} seconds")
@@ -132,13 +133,6 @@ print(
 # -----------------------------------------------------------------------------
 # Step 5: Inspect results
 # -----------------------------------------------------------------------------
-
-d_table = best_matches_with_distinguishability(
-    df_predict=df_predict_ddb,
-    df_addresses_to_match=df_epc_data,
-    con=con,
-)
-d_table.show(max_width=1000)
 
 dsum_1 = best_matches_summary(
     df_predict=df_predict_ddb,

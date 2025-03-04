@@ -1,4 +1,5 @@
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
+import warnings
 
 
 def best_matches_with_distinguishability(
@@ -33,6 +34,13 @@ def best_matches_with_distinguishability(
 
     con.register("predict_for_distinguishability", df_predict)
     con.register("addresses_to_match", df_addresses_to_match)
+
+    if "mw_adjustment" not in con.table("predict_for_distinguishability").columns:
+        warnings.warn(
+            "\nMost users will wish to pass the result of "
+            "improve_predictions_using_distinguishing_tokens to this function.\n"
+            "You appear to have passed the raw output of linker.inference.predict."
+        )
 
     add_cols_select = ""
     if additional_columns_to_retain:
