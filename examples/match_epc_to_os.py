@@ -120,6 +120,7 @@ df_predict_improved = improve_predictions_using_distinguishing_tokens(
     use_bigrams=USE_BIGRAMS,
 )
 
+
 end_time = time.time()
 print(f"Improve time taken: {end_time - start_time} seconds")
 print(
@@ -132,13 +133,6 @@ print(
 # -----------------------------------------------------------------------------
 # Step 5: Inspect results
 # -----------------------------------------------------------------------------
-
-d_table = best_matches_with_distinguishability(
-    df_predict=df_predict_ddb,
-    df_addresses_to_match=df_epc_data,
-    con=con,
-)
-d_table.show(max_width=1000)
 
 dsum_1 = best_matches_summary(
     df_predict=df_predict_ddb,
