@@ -100,7 +100,6 @@ df_predict = linker.inference.predict(
     threshold_match_weight=-100, experimental_optimisation=True
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
-df_predict_ddb.show(max_width=1000)
 
 # -----------------------------------------------------------------------------
 # Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
