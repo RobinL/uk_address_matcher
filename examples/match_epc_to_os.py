@@ -1,4 +1,5 @@
 import time
+import os
 import duckdb
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
@@ -20,8 +21,15 @@ overall_start_time = time.time()
 
 con = duckdb.connect(":default:")
 
-epc_path = "secret_data/epc/raw/domestic-*/certificates.csv"
-full_os_path = "secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet"
+# The os.getenv can be ignored, is just so this script can be run in the test suite
+epc_path = os.getenv(
+    "EPC_PATH",
+    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=true)",
+)
+full_os_path = os.getenv(
+    "FULL_OS_PATH",
+    "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')",
+)
 
 
 sql = f"""
@@ -32,8 +40,9 @@ select
    POSTCODE as postcode,
    UPRN as uprn,
    UPRN_SOURCE as uprn_source
-from read_csv('{epc_path}', filename=true)
+from {epc_path}
 -- where lower(filename) like '%hammersmith%'
+limit 1000
 """
 con.execute(sql)
 
@@ -43,7 +52,7 @@ select
    uprn as unique_id,
    regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
    postcode
-from read_parquet('{full_os_path}')
+from {full_os_path}
 where postcode in
 (select distinct postcode from epc_data_raw)
 and
@@ -52,7 +61,7 @@ description != 'Non Addressable Object'
 """
 con.execute(sql)
 df_os = con.table("os")
-df_os.to_parquet("os.parquet")
+
 
 df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
 
@@ -83,6 +92,7 @@ linker = get_linker(
     con=con,
     include_full_postcode_block=False,
     include_outside_postcode_block=True,
+    retain_intermediate_calculation_columns=True,
 )
 
 
