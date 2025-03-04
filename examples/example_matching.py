@@ -57,6 +57,7 @@ linker = get_linker(
     df_addresses_to_search_within=df_ch_clean,
     con=con,
     include_full_postcode_block=True,
+    retain_intermediate_calculation_columns=True,
 )
 
 df_predict = linker.inference.predict(
