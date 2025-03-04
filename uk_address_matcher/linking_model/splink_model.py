@@ -31,12 +31,17 @@ def get_linker(
     include_full_postcode_block=True,
     include_outside_postcode_block=True,
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
+    retain_intermediate_calculation_columns=False,
 ) -> Linker:
     settings_as_dict = _get_model_settings_dict()
 
     if additional_columns_to_retain:
         settings_as_dict.setdefault("additional_columns_to_retain", [])
         settings_as_dict["additional_columns_to_retain"] += additional_columns_to_retain
+
+    settings_as_dict["retain_intermediate_calculation_columns"] = (
+        retain_intermediate_calculation_columns
+    )
 
     brs = settings_as_dict["blocking_rules_to_generate_predictions"]
 

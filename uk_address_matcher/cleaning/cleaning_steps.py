@@ -397,8 +397,6 @@ def final_column_order(
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
-        list_transform(token_rel_freq_arr, x -> x.tok) as token_rel_freq_arr_readable,
-        list_transform(common_end_tokens, x -> x.tok) as common_end_tokens_readable,
         token_rel_freq_arr,
         common_end_tokens,
         postcode,
