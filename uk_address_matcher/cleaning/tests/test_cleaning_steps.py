@@ -60,7 +60,7 @@ def test_parse_out_flat_positional():
         {
             "input": "TOP FLOOR FLAT 12A HIGH STREET",
             "expected_flat_positional": "TOP FLOOR",
-            "expected_flat_letter": None,
+            "expected_flat_letter": "A",
         },
         {
             "input": "GROUND FLOOR FLAT B 25 MAIN ROAD",
@@ -70,7 +70,7 @@ def test_parse_out_flat_positional():
         {
             "input": "FIRST FLOOR 15B LONDON ROAD",
             "expected_flat_positional": "FIRST FLOOR",
-            "expected_flat_letter": None,
+            "expected_flat_letter": "B",
         },
         {
             "input": "UNIT C MY HOUSE 120 MY ROAD",

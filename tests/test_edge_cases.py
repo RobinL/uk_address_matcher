@@ -329,7 +329,7 @@ def test_address_matching_combined():
     Stores results in pytest._test_results for test runner access.
     """
     duckdb_con = duckdb.connect(database=":memory:")
-    yaml_path = Path(__file__).parent / "test_addresses.yaml"
+    yaml_path = Path(__file__).parent / "edge_case_addresses.yaml"
 
     # Prepare data
     messy_addresses, canonical_addresses = prepare_combined_test_data(

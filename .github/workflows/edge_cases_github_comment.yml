@@ -1,4 +1,4 @@
-name: Address Matcher Test
+name: Edge cases comment
 
 on:
   pull_request:

@@ -1369,11 +1369,10 @@ wheels = [
 
 [[package]]
 name = "uk-address-matcher"
-version = "1.0.0.dev10"
+version = "1.0.0.dev13"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
-    { name = "pyyaml" },
     { name = "splink" },
     { name = "sqlglot" },
 ]
@@ -1387,13 +1386,13 @@ dev = [
 dev = [
     { name = "pyarrow" },
     { name = "pytest" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.2.0" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.4" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "splink", specifier = "==4.0.7.dev1" },
     { name = "sqlglot", specifier = ">=26.6.0" },
 ]
@@ -1402,6 +1401,7 @@ requires-dist = [
 dev = [
     { name = "pyarrow", specifier = ">=19.0.1" },
     { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

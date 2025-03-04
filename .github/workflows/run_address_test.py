@@ -17,7 +17,7 @@ def run_test():
         # Run the test using pytest and capture the result
         pytest_args = [
             "-xvs",
-            "tests/test_address_matcher.py::test_address_matching_combined",
+            "tests/test_edge_cases.py::test_address_matching_combined",
         ]
         result = pytest.main(pytest_args)
 
