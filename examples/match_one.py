@@ -1,4 +1,5 @@
 import duckdb
+import os
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
     get_linker,
@@ -18,8 +19,8 @@ sql = """
 create or replace table df_messy as
 select
     '1' as unique_id,
-   '30 London Road Romford ' as address_concat,
-   'RM7 9RB' as postcode
+   '10 downing street westminster london' as address_concat,
+   'SW1A 2AA' as postcode
 """
 
 
@@ -31,10 +32,17 @@ messy_count = df_messy.count("*").fetchall()[0][0]
 
 df_messy_clean = clean_data_using_precomputed_rel_tok_freq(df_messy, con=con)
 
-sql = """
+# The os.getenv can be ignored, is just so this script can be run in the test suite
+
+full_os_path = os.getenv(
+    "FULL_OS_PATH",
+    "read_parquet('secret_data/ord_surv/os_clean.parquet')",
+)
+
+sql = f"""
 create or replace view os_clean as
 select *
-from read_parquet('secret_data/ord_surv/os_clean.parquet')
+from {full_os_path}
 where postcode in (
 select distinct postcode from df_messy_clean
 )
