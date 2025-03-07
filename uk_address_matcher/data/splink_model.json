@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "bqmtuazq",
+    "linker_uid": "imnl6o9d",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -708,6 +708,75 @@
                     "label_for_charts": "All other comparisons",
                     "m_probability": 1,
                     "u_probability": 64,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                }
+            ],
+            "comparison_description": "CustomComparison"
+        },
+        {
+            "output_column_name": "common_unique",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\n             len(unique_tokens_l) = 0\n            ",
+                    "label_for_charts": "Null",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 4\n            ",
+                    "label_for_charts": "all unique common 5",
+                    "m_probability": 512,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 3\n            ",
+                    "label_for_charts": "all unique common 4",
+                    "m_probability": 256,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 1\n            ",
+                    "label_for_charts": "all unique common 2",
+                    "m_probability": 64,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 4\n            ",
+                    "label_for_charts": "unique -1 common 5",
+                    "m_probability": 256,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 3\n            ",
+                    "label_for_charts": "unique -1 common 4",
+                    "m_probability": 128,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "\n            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and\n            len(list_intersect(common_tokens_l, all_tokens_r)) > 1\n            ",
+                    "label_for_charts": "unique -1 common 2",
+                    "m_probability": 32,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 1,
+                    "u_probability": 32,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 }

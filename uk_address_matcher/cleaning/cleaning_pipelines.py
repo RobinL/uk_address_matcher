@@ -22,6 +22,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     upper_case_address_and_postcode,
     use_first_unusual_token_if_no_numeric_token,
     get_token_frequeny_table,
+    separate_unique_and_common_tokens,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -36,6 +37,19 @@ QUEUE_PRE_TF = [
     upper_case_address_and_postcode,
     clean_address_string_first_pass,
     derive_original_address_concat,
+    parse_out_flat_position_and_letter,
+    parse_out_numbers,
+    clean_address_string_second_pass,
+    split_numeric_tokens_to_cols,
+    tokenise_address_without_numbers,
+]
+
+QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON = [
+    trim_whitespace_address_and_postcode,
+    upper_case_address_and_postcode,
+    clean_address_string_first_pass,
+    derive_original_address_concat,
+    separate_unique_and_common_tokens,
     parse_out_flat_position_and_letter,
     parse_out_numbers,
     clean_address_string_second_pass,
@@ -156,7 +170,76 @@ def clean_data_using_precomputed_rel_tok_freq(
 
     sql = f"""
     create or replace temporary table {materialised_cleaned_table_name} as
-    select * {exclude_clause} from __address_table_res
+    select * {exclude_clause}   ,
+     NULL::varchar[] as unique_tokens,
+     NULL::varchar[] as common_tokens,
+     regexp_split_to_array(replace(original_address_concat, ',', ' '), '\\s+') as all_tokens
+         from __address_table_res
+    """
+    con.execute(sql)
+    return con.table(materialised_cleaned_table_name)
+
+
+def clean_data_using_precomputed_rel_tok_freq_2(
+    address_table: DuckDBPyRelation,
+    con: DuckDBPyConnection,
+    rel_tok_freq_table: DuckDBPyRelation = None,
+) -> DuckDBPyRelation:
+    # Load the default term frequency table if none is provided
+    if rel_tok_freq_table is None:
+        default_tf_path = (
+            resources.files("uk_address_matcher")
+            / "data"
+            / "address_token_frequencies.parquet"
+        )
+        rel_tok_freq_table = con.read_parquet(str(default_tf_path))
+
+    con.register("rel_tok_freq", rel_tok_freq_table)
+
+    # If the following create temp table is not included
+    # and `address_table` is created from like
+    # select * from read_parquet() order by random()
+    # the rest does not work
+
+    uid = _generate_random_identifier()
+
+    con.register("__address_table_in", address_table)
+
+    materialised_table_name = f"__address_table_{uid}"
+    sql = f"""
+    create or replace temporary table {materialised_table_name} as
+    select * from __address_table_in
+    """
+    con.execute(sql)
+    input_table = con.table(materialised_table_name)
+
+    cleaning_queue = (
+        QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON
+        + [
+            add_term_frequencies_to_address_tokens_using_registered_df,
+        ]
+        + QUEUE_POST_TF
+    )
+
+    res = run_pipeline(
+        input_table,
+        con=con,
+        cleaning_queue=cleaning_queue,
+    )
+
+    materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"
+    con.register("__address_table_res", res)
+
+    # Check if source_dataset column exists and exclude it if it does
+    has_source_dataset = "source_dataset" in res.columns
+
+    exclude_clause = "EXCLUDE (source_dataset)" if has_source_dataset else ""
+
+    sql = f"""
+    create or replace temporary table {materialised_cleaned_table_name} as
+    select * {exclude_clause},
+    regexp_split_to_array(replace(original_address_concat, ',', ' '), '\\s+') as all_tokens,
+     from __address_table_res
     """
     con.execute(sql)
     return con.table(materialised_cleaned_table_name)

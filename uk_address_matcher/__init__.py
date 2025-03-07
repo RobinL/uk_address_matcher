@@ -4,6 +4,7 @@ from uk_address_matcher.linking_model.splink_model import get_linker
 from uk_address_matcher.cleaning.cleaning_pipelines import (
     clean_data_on_the_fly,
     clean_data_using_precomputed_rel_tok_freq,
+    clean_data_using_precomputed_rel_tok_freq_2,
     get_numeric_term_frequencies_from_address_table,
     get_address_token_frequencies_from_address_table,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "get_linker",
     "clean_data_on_the_fly",
     "clean_data_using_precomputed_rel_tok_freq",
+    "clean_data_using_precomputed_rel_tok_freq_2",
     "get_numeric_term_frequencies_from_address_table",
     "get_address_token_frequencies_from_address_table",
     "improve_predictions_using_distinguishing_tokens",

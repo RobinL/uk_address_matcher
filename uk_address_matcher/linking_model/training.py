@@ -426,6 +426,95 @@ flat_positional_comparison = {
     "comparison_description": "Flat position comparison",
 }
 
+
+common_unique_comparison = {
+    "output_column_name": "common_unique",
+    "comparison_levels": [
+        {
+            "sql_condition": """
+             len(unique_tokens_l) = 0
+            """,
+            "label_for_charts": "Null",
+            "is_null_level": True,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 4
+            """,
+            "label_for_charts": "all unique common 5",
+            "m_probability": 512,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 3
+            """,
+            "label_for_charts": "all unique common 4",
+            "m_probability": 256,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 1
+            """,
+            "label_for_charts": "all unique common 2",
+            "m_probability": 64,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 4
+            """,
+            "label_for_charts": "unique -1 common 5",
+            "m_probability": 256,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 3
+            """,
+            "label_for_charts": "unique -1 common 4",
+            "m_probability": 128,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": """
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
+            len(list_intersect(common_tokens_l, all_tokens_r)) > 1
+            """,
+            "label_for_charts": "unique -1 common 2",
+            "m_probability": 32,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": "ELSE",
+            "label_for_charts": "All other comparisons",
+            "m_probability": 1,
+            "u_probability": 32,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+    ],
+    "comparison_description": "Common unique comparison",
+}
+
 blocking_rules = old_blocking_rules + [block_on("postcode")]
 
 settings_for_training = SettingsCreator(
@@ -441,6 +530,7 @@ settings_for_training = SettingsCreator(
         token_rel_freq_arr_comparison,
         common_end_tokens_comparison,
         postcode_comparison,
+        common_unique_comparison,
     ],
     retain_intermediate_calculation_columns=True,
 )

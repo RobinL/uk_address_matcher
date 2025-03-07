@@ -3,6 +3,7 @@ import os
 import duckdb
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
+    clean_data_using_precomputed_rel_tok_freq_2,
     get_linker,
 )
 from uk_address_matcher.post_linkage.analyse_results import (
@@ -19,7 +20,7 @@ overall_start_time = time.time()
 # Step 1: Load data
 # -----------------------------------------------------------------------------
 
-con = duckdb.connect(":default:")
+con = duckdb.connect(":memory:")
 
 # The os.getenv can be ignored, is just so this script can be run in the test suite
 epc_path = os.getenv(
@@ -42,13 +43,11 @@ select
    UPRN_SOURCE as uprn_source
 from {epc_path}
 -- where lower(filename) like '%hammersmith%'
--- limit 1000
+--limit 1000
 """
 con.execute(sql)
 
-con.table("epc_data_raw").filter(
-    "unique_id = substr('206148859132009010820285711068508', 1, 12)"
-).show(max_width=1000)
+# con.table("epc_data_raw").show(max_width=1000)
 
 sql = f"""
 create or replace table os as
@@ -65,14 +64,11 @@ description != 'Non Addressable Object'
 """
 con.execute(sql)
 df_os = con.table("os")
-df_os.filter("unique_id = '34109806'").show(max_width=1000)
+
 
 df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
-
-
 messy_count = df_epc_data.count("*").fetchall()[0][0]
 canonical_count = df_os.count("*").fetchall()[0][0]
-
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
@@ -80,8 +76,17 @@ canonical_count = df_os.count("*").fetchall()[0][0]
 
 
 df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con)
-df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
+df_os_clean = clean_data_using_precomputed_rel_tok_freq_2(df_os, con=con)
 
+sql = """
+select * from df_os_clean
+where unique_id = '34000598'
+"""
+
+con.sql(sql).show(max_width=1000)
+
+# df_epc_data_clean.show(max_width=1000)
+# df_os_clean.show(max_width=1000)
 end_time = time.time()
 print(f"Time to load/clean: {end_time - overall_start_time} seconds")
 
@@ -94,66 +99,23 @@ linker = get_linker(
     df_addresses_to_match=df_epc_data_clean,
     df_addresses_to_search_within=df_os_clean,
     con=con,
-    include_full_postcode_block=False,
+    include_full_postcode_block=True,
     include_outside_postcode_block=True,
     retain_intermediate_calculation_columns=True,
+    use_old_model=False,
 )
 
 
 df_predict = linker.inference.predict(
-    threshold_match_weight=-100, experimental_optimisation=True
+    threshold_match_weight=-25, experimental_optimisation=True
 )
+linker.visualisations.match_weights_chart()
+
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-# -----------------------------------------------------------------------------
-# Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
-# described here https://github.com/RobinL/uk_address_matcher/issues/14
-# -----------------------------------------------------------------------------
-
-
-start_time = time.time()
-
-USE_BIGRAMS = True
-
-
-df_predict_improved = improve_predictions_using_distinguishing_tokens(
-    df_predict=df_predict_ddb,
-    con=con,
-    match_weight_threshold=-15,
-    top_n_matches=5,
-    use_bigrams=USE_BIGRAMS,
-)
-
-
-end_time = time.time()
-print(f"Improve time taken: {end_time - start_time} seconds")
-print(
-    f"Full time taken: {end_time - overall_start_time} seconds to match "
-    f"{messy_count:,.0f} messy addresses to {canonical_count:,.0f} canonical addresses "
-    f"at a rate of {messy_count / (end_time - overall_start_time):,.0f} "
-    "addresses per second"
-)
-
-# -----------------------------------------------------------------------------
-# Step 5: Inspect results
-# -----------------------------------------------------------------------------
-
-dsum_1 = best_matches_summary(
-    df_predict=df_predict_ddb,
-    df_addresses_to_match=df_epc_data,
-    con=con,
-)
-dsum_1.show(max_width=500)
-
-
-# # -----------------------------------------------------------------------------
-# # Step 6: Inspect single rows
-# # This code is specific to the EPC data where we have a UPRN from the EPC data
-# # that we can compare the the one we found
-# # -----------------------------------------------------------------------------
 
 sql = """
-CREATE OR REPLACE TABLE matches_with_epc_and_os as
+CREATE OR REPLACE TABLE matches_with_epc_and_os_predict as
 
 select
     m.*,
@@ -166,7 +128,7 @@ select
         when e.uprn = unique_id_l then 'agree'
         else 'disagree'
     end as ours_theirs_agreement
-from df_predict_improved m
+from df_predict_ddb m
 left join epc_data_raw e on m.unique_id_r = substr(e.unique_id, 1, 12)
 left join df_os_clean o on e.uprn = o.unique_id
 QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) =1
@@ -177,7 +139,7 @@ con.execute(sql)
 
 sql = """
 select ours_theirs_agreement, count(*) as count
-from matches_with_epc_and_os
+from matches_with_epc_and_os_predict
 group by 1
 """
 con.sql(sql).show(max_width=400, max_rows=40)
@@ -190,20 +152,71 @@ print(
 )
 
 
-bi_cols = ""
-if USE_BIGRAMS:
-    bi_cols += """
-    ,
-    overlapping_bigrams_this_l_and_r_filtered,
+# -----------------------------------------------------------------------------
+# Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
+# described here https://github.com/RobinL/uk_address_matcher/issues/14
+# -----------------------------------------------------------------------------
 
-    bigrams_elsewhere_in_block_but_not_this_filtered
-    """
+
+# start_time = time.time()
+
+# USE_BIGRAMS = True
+
+
+# df_predict_improved = improve_predictions_using_distinguishing_tokens(
+#     df_predict=df_predict_ddb,
+#     con=con,
+#     match_weight_threshold=-15,
+#     top_n_matches=5,
+#     use_bigrams=USE_BIGRAMS,
+# )
+
+
+# end_time = time.time()
+# print(f"Improve time taken: {end_time - start_time} seconds")
+# print(
+#     f"Full time taken: {end_time - overall_start_time} seconds to match "
+#     f"{messy_count:,.0f} messy addresses to {canonical_count:,.0f} canonical addresses "
+#     f"at a rate of {messy_count / (end_time - overall_start_time):,.0f} "
+#     "addresses per second"
+
+
+# -----------------------------------------------------------------------------
+# Step 5: Inspect results
+# -----------------------------------------------------------------------------
+
+# dsum_1 = best_matches_summary(
+#     df_predict=df_predict_ddb,
+#     df_addresses_to_match=df_epc_data,
+#     con=con,
+# )
+# dsum_1.show(max_width=500)
+
+
+# dsum_1 = best_matches_summary(
+#     df_predict=df_predict_improved,
+#     df_addresses_to_match=df_epc_data,
+#     con=con,
+# )
+# dsum_1.show(max_width=500)
+
+
+# # -----------------------------------------------------------------------------
+# # Step 6: Inspect single rows
+# # This code is specific to the EPC data where we have a UPRN from the EPC data
+# # that we can compare the the one we found
+# # -----------------------------------------------------------------------------
+
+# %%
+
+bi_cols = ""
 
 
 sql = """
 select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match
-from matches_with_epc_and_os
+from matches_with_epc_and_os_predict
 where ours_theirs_agreement = 'disagree'
+-- and unique_id_r = '521544093112'
 order by random()
 limit 1
 """
@@ -220,6 +233,9 @@ cols = """
     numeric_token_3,
     array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
     array_transform(common_end_tokens, x -> x.tok) as cet_arr,
+    all_tokens,
+    unique_tokens,
+    common_tokens,
     unique_id
     """
 sql = f"""
@@ -254,21 +270,22 @@ con.sql(sql).show(max_width=1000)
 
 sql = f"""
 select
+    unique_id_l,
     concat_ws(' ', original_address_concat_r, postcode_r) as messy_address,
     concat_ws(' ', original_address_concat_l, postcode_l) as our_match,
-    match_weight as match_weight_short,
-    mw_adjustment,
-    match_weight_original as match_weight_orig
+    match_weight as match_weight_short
+    -- mw_adjustment,
+    -- match_weight_original as match_weight_orig
     {bi_cols},
-    overlapping_tokens_this_l_and_r,
-    tokens_elsewhere_in_block_but_not_this ,
-    missing_tokens,
+    -- overlapping_tokens_this_l_and_r,
+    -- tokens_elsewhere_in_block_but_not_this ,
+    -- missing_tokens,
 
 
-from df_predict_improved
+from df_predict_ddb
 where unique_id_r = '{epc_row_id}'
 order by match_weight desc
-
+limit 10
 """
 
 con.sql(sql).show(max_width=1000)
@@ -277,14 +294,80 @@ con.sql(sql).show(max_width=1000)
 sql = f"""
 select *
 from df_predict_ddb
-where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}', '{their_uprn_match}')
+where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}')
 order by match_weight desc
-limit 10
+
 """
 
 res = con.sql(sql)
 
-
-linker.visualisations.waterfall_chart(
-    res.df().to_dict(orient="records"), filter_nulls=False
+print("ours")
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
 )
+
+
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}' and unique_id_l in ( '{their_uprn_match}')
+order by match_weight desc
+
+"""
+
+res = con.sql(sql)
+
+print("Theirs")
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
+
+# %%
+
+
+sql = """
+WITH indexed_data AS (
+    SELECT
+        unique_id,
+        original_address_concat,
+        unique_tokens,
+        common_tokens,
+        all_tokens,
+        ROW_NUMBER() OVER (ORDER BY reverse(original_address_concat)) as row_num
+    FROM df_os_clean
+
+),
+target_position AS (
+    SELECT row_num
+    FROM indexed_data
+    WHERE unique_id = '34000598'
+)
+SELECT
+    original_address_concat,
+    unique_tokens,
+    common_tokens,
+    all_tokens
+FROM indexed_data
+WHERE row_num BETWEEN (SELECT row_num FROM target_position) - 1
+                    AND (SELECT row_num FROM target_position) + 1
+ORDER BY reverse(original_address_concat);
+"""
+
+con.sql(sql).show(max_width=1000, max_rows=100)
+
+
+# %%
+
+
+sql = """
+select * from df_predict_ddb
+where unique_id_r = '521544093112'
+order by match_weight desc
+limit 10
+"""
+
+con.sql(sql).show(max_width=100000, max_rows=100)
