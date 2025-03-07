@@ -72,8 +72,8 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
         ),
         (p, q) -> p / q^{power}
     )"""
-
     return f"({matching_tokens})"
+    # return f"({matching_tokens} * {non_matching_tokens})"
 
 
 num_1_comparison = {
@@ -215,7 +215,7 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.1)
+arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.2)
 
 
 def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):

@@ -125,7 +125,7 @@ df_predict_improved = improve_predictions_using_distinguishing_tokens(
     df_predict=df_predict_ddb,
     con=con,
     match_weight_threshold=1,
-    top_n_matches=5,
+    top_n_matches=10,
     use_bigrams=USE_BIGRAMS,
 )
 
