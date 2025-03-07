@@ -45,35 +45,35 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
         (p, q) -> p * q
     )"""
 
-    # # Second part - divide by frequencies of non-matching tokens
-    # non_matching_tokens = f"""
-    # list_reduce(
-    #     list_prepend(
-    #         1.0,
-    #         list_transform(
-    #             list_concat(
-    #                 array_filter(
-    #                     {column_name}_l,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_r, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 ),
-    #                 array_filter(
-    #                     {column_name}_r,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_l, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 )
-    #             ),
-    #             x -> x.rel_freq
-    #         )
-    #     ),
-    #     (p, q) -> p / q^{power}
-    # )"""
+    # Second part - divide by frequencies of non-matching tokens
+    non_matching_tokens = f"""
+    list_reduce(
+        list_prepend(
+            1.0,
+            list_transform(
+                list_concat(
+                    array_filter(
+                        {column_name}_l,
+                        y -> NOT array_contains(
+                                list_transform({column_name}_r, x -> x.tok),
+                                y.tok
+                            )
+                    ),
+                    array_filter(
+                        {column_name}_r,
+                        y -> NOT array_contains(
+                                list_transform({column_name}_l, x -> x.tok),
+                                y.tok
+                            )
+                    )
+                ),
+                x -> x.rel_freq
+            )
+        ),
+        (p, q) -> p / q^{power}
+    )"""
 
-    return f"{matching_tokens}"
+    return f"({matching_tokens})"
 
 
 num_1_comparison = {
@@ -215,7 +215,7 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.33)
+arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.1)
 
 
 def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
@@ -279,7 +279,7 @@ token_rel_freq_arr_comparison = {
     "comparison_description": "Token relative frequency array",
 }
 
-arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
+arr_red_sql = array_reduce_by_freq("common_end_tokens", 0)
 
 common_end_tokens_comparison = {
     "output_column_name": "common_end_tokens",
@@ -432,28 +432,16 @@ common_unique_comparison = {
     "comparison_levels": [
         {
             "sql_condition": """
-             len(unique_tokens_l) = 0
+             len(unique_tokens_l) = 0 or true
             """,
             "label_for_charts": "Null",
             "is_null_level": True,
         },
         {
             "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 4
+            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l)
             """,
-            "label_for_charts": "all unique common 5",
-            "m_probability": 512,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 3
-            """,
-            "label_for_charts": "all unique common 4",
+            "label_for_charts": "all unique",
             "m_probability": 256,
             "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
@@ -461,44 +449,10 @@ common_unique_comparison = {
         },
         {
             "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 1
+            len(list_intersect(unique_tokens_l, all_tokens_r))  > 0
             """,
-            "label_for_charts": "all unique common 2",
-            "m_probability": 64,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 4
-            """,
-            "label_for_charts": "unique -1 common 5",
-            "m_probability": 256,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 3
-            """,
-            "label_for_charts": "unique -1 common 4",
+            "label_for_charts": "unique - 1",
             "m_probability": 128,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l) -1 and len(unique_tokens_l) -1 > 0 and
-            len(list_intersect(common_tokens_l, all_tokens_r)) > 1
-            """,
-            "label_for_charts": "unique -1 common 2",
-            "m_probability": 32,
             "u_probability": 1,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
@@ -507,7 +461,7 @@ common_unique_comparison = {
             "sql_condition": "ELSE",
             "label_for_charts": "All other comparisons",
             "m_probability": 1,
-            "u_probability": 32,
+            "u_probability": 16,
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
