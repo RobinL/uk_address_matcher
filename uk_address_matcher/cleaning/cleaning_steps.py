@@ -14,6 +14,7 @@ from .regexes import (
     standarise_num_dash_num,
     standarise_num_letter,
     trim,
+    switch_order_of_flat_number_then_letter,
 )
 
 
@@ -72,6 +73,8 @@ def clean_address_string_first_pass(
             separate_letter_num,
             standarise_num_letter,
             move_flat_to_front,
+            # TODO: switch_order_of_flat_number_then_letter seems to make it worse
+            switch_order_of_flat_number_then_letter,
             remove_repeated_tokens,
             trim,
         ],

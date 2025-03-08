@@ -2,6 +2,7 @@ import time
 import duckdb
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
+    clean_data_using_precomputed_rel_tok_freq_2,
     get_linker,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
@@ -83,7 +84,9 @@ print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
 
 df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con)
-df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
+df_os_clean = clean_data_using_precomputed_rel_tok_freq_2(df_os, con=con)
+
+df_os_clean.show(max_width=100000)
 
 df_epc_data_clean
 
@@ -125,8 +128,8 @@ USE_BIGRAMS = True
 df_predict_improved = improve_predictions_using_distinguishing_tokens(
     df_predict=df_predict_ddb,
     con=con,
-    match_weight_threshold=1,
-    top_n_matches=10,
+    match_weight_threshold=-10,
+    top_n_matches=5,
     use_bigrams=USE_BIGRAMS,
 )
 
@@ -241,14 +244,17 @@ con.sql(sql).show(max_width=400, max_rows=40)
 # -----------------------------------------------------------------------------
 # LOOK AT FALSE POSITIVES
 # -----------------------------------------------------------------------------
-
+# %%
 
 # Want to see waterfall for correct and wrong
 
 sql = """
 select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match, correct_uprn as correct_uprn
 from matches_with_epc_and_os
-where truth_status = 'false positive'
+where 1=1
+and truth_status = 'false positive'
+-- and epc_id = '75e0ec7d24503e0770d01fdea3350db494a5418b6d38357ba926c71df8508323'
+and label_confidence = 'epc_splink_agree'
 order by random()
 limit 1
 """
@@ -258,15 +264,24 @@ epc_row_id, our_uprn_match, their_uprn_match, correct_uprn = con.sql(sql).fetcha
 # show original address
 
 sql = f"""
-select address_concat, postcode
+select address_concat as epc_raw_address, postcode as epc_raw_postcode
 from epc_data_raw
 where unique_id = '{epc_row_id}'
 """
 
 con.sql(sql).show()
 
+sql = f"""
+select fulladdress as llm_correct_match
+from {full_os_path}
+ where uprn = '{correct_uprn}'
+"""
+con.sql(sql).show(max_width=100000)
+
+
 cols = """
     concat_ws(' ', original_address_concat, postcode) as original_address_concat,
+    unique_tokens,
     flat_positional,
     flat_letter,
     numeric_token_1,
@@ -274,6 +289,7 @@ cols = """
     numeric_token_3,
     array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
     array_transform(common_end_tokens, x -> x.tok) as cet_arr,
+
     unique_id
     """
 sql = f"""
@@ -327,7 +343,7 @@ con.sql(sql).show(max_width=1000)
 sql = f"""
 select *
 from df_predict_ddb
-where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}', '{correct_uprn}')
+where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}')
 order by match_weight desc
 limit 10
 """
@@ -335,14 +351,50 @@ limit 10
 res = con.sql(sql)
 
 
-linker.visualisations.waterfall_chart(
-    res.df().to_dict(orient="records"), filter_nulls=False
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
+
+# Waterfall
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}' and unique_id_l in ('{correct_uprn}')
+order by match_weight desc
+limit 10
+"""
+
+res = con.sql(sql)
+
+
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
 )
 
 
+# %%
+
 sql = f"""
-select *
+select uprn, fulladdress
 from {full_os_path}
- where uprn = '{correct_uprn}'
+where fulladdress like '%119A%'
+and postcode in
+(select distinct postcode from epc_data_raw)
+and
+description != 'Non Addressable Object'
 """
+
+con.sql(sql).show(max_width=100000)
+
+
+sql = f"""
+select unique_id, address_concat
+from epc_data_raw
+where upper(address_concat) like '%FLAT A 119%'
+"""
+
 con.sql(sql).show(max_width=100000)

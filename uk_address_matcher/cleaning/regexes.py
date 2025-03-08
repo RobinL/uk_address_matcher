@@ -157,3 +157,23 @@ def construct_nested_call(col_name: str, fns: List[Callable]) -> str:
     for f in fns:
         input_str = f(input_str)
     return input_str
+
+
+def switch_order_of_flat_number_then_letter(input: str):
+    """
+    Transforms patterns like "119A" into "flat a 119" while leaving patterns
+    like "B100" unchanged.
+
+    Examples:
+        119A -> flat a 119
+        10B -> flat b 10
+        B100 -> B100 (unchanged)
+
+    Args:
+        input (str): The input string to transform.
+
+    Returns:
+        str: The transformed string.
+    """
+    regex_pattern = r"(\d+)([A-Za-z])\b"
+    return f"regexp_replace({input}, '{regex_pattern}', 'FLAT \\2 \\1', 'g')"
