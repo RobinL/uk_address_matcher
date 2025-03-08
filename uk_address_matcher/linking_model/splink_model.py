@@ -4,6 +4,7 @@ import json
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 
 from splink import DuckDBAPI, Linker, SettingsCreator
+from uk_address_matcher.linking_model.training import settings_for_training
 
 
 def _get_model_settings_dict(use_old_model: bool):
@@ -41,7 +42,6 @@ def get_linker(
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
     retain_intermediate_calculation_columns=False,
     retain_matching_columns=True,
-    use_old_model=False,
 ) -> Linker:
     # Check if either input dataset contains a source_dataset column
     if (
@@ -53,7 +53,8 @@ def get_linker(
             "before calling get_linker as it will be overwritten by the linker."
         )
 
-    settings_as_dict = _get_model_settings_dict(use_old_model)
+    # settings_as_dict = _get_model_settings_dict(use_old_model)
+    settings_as_dict = settings_for_training.get_settings("duckdb").as_dict()
 
     if additional_columns_to_retain:
         settings_as_dict.setdefault("additional_columns_to_retain", [])
