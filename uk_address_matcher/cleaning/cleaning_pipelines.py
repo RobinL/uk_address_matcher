@@ -158,6 +158,7 @@ def clean_data_using_precomputed_rel_tok_freq(
         input_table,
         con=con,
         cleaning_queue=cleaning_queue,
+        # print_intermediate=True,
     )
 
     materialised_cleaned_table_name = f"__address_table_cleaned_{uid}"

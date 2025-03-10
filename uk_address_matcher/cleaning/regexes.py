@@ -176,4 +176,5 @@ def switch_order_of_flat_number_then_letter(input: str):
         str: The transformed string.
     """
     regex_pattern = r"(\d+)([A-Za-z])\b"
-    return f"regexp_replace({input}, '{regex_pattern}', 'FLAT \\2 \\1', 'g')"
+    # return f"regexp_replace({input}, '{regex_pattern}', 'FLAT \\2 \\1', 'g')"
+    return f"regexp_replace({input}, '{regex_pattern}', '\\1 \\2', 'g')"

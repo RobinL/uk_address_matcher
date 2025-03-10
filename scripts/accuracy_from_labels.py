@@ -256,8 +256,8 @@ sql = """
 select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match, correct_uprn as correct_uprn
 from matches_with_epc_and_os
 where 1=1
-and truth_status = 'false positive'
--- and epc_id = '75e0ec7d24503e0770d01fdea3350db494a5418b6d38357ba926c71df8508323'
+--and truth_status = 'false positive'
+and epc_id = '75e0ec7d24503e0770d01fdea3350db494a5418b6d38357ba926c71df8508323'
 and label_confidence = 'epc_splink_agree'
 order by random()
 limit 1
@@ -268,12 +268,21 @@ epc_row_id, our_uprn_match, their_uprn_match, correct_uprn = con.sql(sql).fetcha
 # show original address
 
 sql = f"""
-select address_concat as epc_raw_address, postcode as epc_raw_postcode
+select address_concat as epc_raw_address, postcode as epc_raw_postcode, unique_id
 from epc_data_raw
 where unique_id = '{epc_row_id}'
 """
 
 con.sql(sql).show()
+
+sql = f"""
+select *
+from df_epc_data_clean
+where unique_id = '{epc_row_id}'
+"""
+
+con.sql(sql).show(max_width=100000)
+
 
 sql = f"""
 select fulladdress as llm_correct_match
@@ -354,7 +363,7 @@ limit 10
 
 res = con.sql(sql)
 
-
+print(f"Our match: {our_uprn_match}")
 display(
     linker.visualisations.waterfall_chart(
         res.df().to_dict(orient="records"), filter_nulls=False
@@ -372,7 +381,7 @@ limit 10
 
 res = con.sql(sql)
 
-
+print(f"Correct match: {correct_uprn}")
 display(
     linker.visualisations.waterfall_chart(
         res.df().to_dict(orient="records"), filter_nulls=False
