@@ -40,6 +40,8 @@ where confidence in ('likely', 'certain')
 labels_filtered = con.sql(sql)
 labels_filtered.count("*").fetchall()[0][0]
 
+labels_filtered = labels_filtered.limit(100)
+
 sql = f"""
 create or replace table epc_data_raw as
 select
@@ -86,9 +88,8 @@ print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con)
 df_os_clean = clean_data_using_precomputed_rel_tok_freq_2(df_os, con=con)
 
-df_os_clean.show(max_width=100000)
 
-df_epc_data_clean
+df_os_clean.show(max_width=100000)
 
 end_time = time.time()
 print(f"Time to load/clean: {end_time - overall_start_time} seconds")
@@ -167,7 +168,9 @@ select
 from df_predict_ddb m
 left join epc_data_raw e on m.unique_id_r = e.unique_id
 left join labels_filtered l on m.unique_id_r = l.messy_id
-QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) =1
+QUALIFY ROW_NUMBER()
+OVER (PARTITION BY unique_id_r
+ORDER BY match_weight DESC, unique_id_l) =1
 
 """
 con.execute(sql)

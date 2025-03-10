@@ -45,6 +45,34 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
         (p, q) -> p * q
     )"""
 
+    # col_l = f"list_aggregate({column_name}_l, 'histogram')"
+    # col_r = f"list_aggregate({column_name}_r, 'histogram')"
+
+    matching_tokens = f"""
+    list_reduce(
+        list_prepend(
+        1.0,
+        list_filter(
+            list_transform(
+            flatten(
+                list_transform(
+                map_entries({column_name}_l),
+                entry -> CASE
+                            WHEN COALESCE({column_name}_r[entry.key], 0) > 0
+                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, {column_name}_r[entry.key])))
+                            ELSE list_value()
+                        END
+                )
+            ),
+            x -> x
+            ),
+            x -> x IS NOT NULL
+        )
+        ),
+        (p, q) -> p * q
+    )
+    """
+
     # Second part - divide by frequencies of non-matching tokens
     non_matching_tokens = f"""
     list_reduce(
@@ -262,7 +290,10 @@ token_rel_freq_arr_comparison = {
     "output_column_name": "token_rel_freq_arr",
     "comparison_levels": [
         {
-            "sql_condition": '"token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or length("token_rel_freq_arr_l") = 0 or length("token_rel_freq_arr_r") = 0',
+            "sql_condition": """
+            "token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or
+            length(map_entries(token_rel_freq_arr_l)) = 0 or length(map_entries(token_rel_freq_arr_r)) = 0
+            """,
             "label_for_charts": "Null",
             "is_null_level": True,
         },
@@ -285,7 +316,11 @@ common_end_tokens_comparison = {
     "output_column_name": "common_end_tokens",
     "comparison_levels": [
         {
-            "sql_condition": '"common_end_tokens_l" IS NULL OR "common_end_tokens_r" IS NULL or length("common_end_tokens_l") = 0 or length("common_end_tokens_r") = 0',
+            "sql_condition": """
+            "common_end_tokens_l" IS NULL OR "common_end_tokens_r" IS NULL
+            or length(map_entries("common_end_tokens_l")) = 0
+            or length(map_entries("common_end_tokens_r")) = 0
+            """,
             "label_for_charts": "Null",
             "is_null_level": True,
         },
