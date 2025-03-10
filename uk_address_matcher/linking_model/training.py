@@ -427,6 +427,7 @@ flat_positional_comparison = {
 }
 
 
+# Need to think about this carefully - best to look at false positive examples
 common_unique_comparison = {
     "output_column_name": "common_unique",
     "comparison_levels": [
@@ -437,6 +438,7 @@ common_unique_comparison = {
             "label_for_charts": "Null",
             "is_null_level": True,
         },
+        # TODO:  Here we want to build in logic for 'is the unique token just FLOOR GROUND BASEMENT and so on
         {
             "sql_condition": """
             len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l)
@@ -457,6 +459,7 @@ common_unique_comparison = {
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
+        # Here is that ther'es no overlap but unique tokens without FLOOR GROUP BASEMENT and so on are length 0
         {
             "sql_condition": "ELSE",
             "label_for_charts": "All other comparisons",

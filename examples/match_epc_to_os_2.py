@@ -233,7 +233,7 @@ cols = """
     numeric_token_3,
     array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
     array_transform(common_end_tokens, x -> x.tok) as cet_arr,
-    all_tokens,
+    -- all_tokens,
     unique_tokens,
     common_tokens,
     unique_id
