@@ -400,10 +400,12 @@ def final_column_order(
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
-        list_aggregate(token_rel_freq_arr, 'histogram') as token_rel_freq_arr,
-        list_aggregate(common_end_tokens, 'histogram') as common_end_tokens,
+        list_aggregate(token_rel_freq_arr, 'histogram') as token_rel_freq_arr_hist,
+        list_aggregate(common_end_tokens, 'histogram') as common_end_tokens_hist,
+        token_rel_freq_arr,
         common_end_tokens,
         postcode,
+
 
         * exclude (
             unique_id,

@@ -40,7 +40,7 @@ where confidence in ('likely', 'certain')
 labels_filtered = con.sql(sql)
 labels_filtered.count("*").fetchall()[0][0]
 
-labels_filtered = labels_filtered.limit(100)
+# labels_filtered = labels_filtered.limit(100)
 
 sql = f"""
 create or replace table epc_data_raw as
@@ -106,6 +106,7 @@ linker = get_linker(
     include_full_postcode_block=False,
     include_outside_postcode_block=True,
     retain_intermediate_calculation_columns=True,
+    additional_columns_to_retain=["common_end_tokens", "token_rel_freq_arr"],
 )
 
 
@@ -119,7 +120,7 @@ df_predict_ddb = df_predict.as_duckdbpyrelation()
 # Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
 # described here https://github.com/RobinL/uk_address_matcher/issues/14
 # -----------------------------------------------------------------------------
-
+df_predict_ddb
 
 start_time = time.time()
 

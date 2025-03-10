@@ -243,7 +243,7 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.2)
+arr_red_sql = array_reduce_by_freq("token_rel_freq_arr_hist", 0.2)
 
 
 def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
@@ -291,8 +291,8 @@ token_rel_freq_arr_comparison = {
     "comparison_levels": [
         {
             "sql_condition": """
-            "token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or
-            length(map_entries(token_rel_freq_arr_l)) = 0 or length(map_entries(token_rel_freq_arr_r)) = 0
+            "token_rel_freq_arr_hist_l" IS NULL OR "token_rel_freq_arr_hist_r" IS NULL or
+            length(map_entries(token_rel_freq_arr_hist_l)) = 0 or length(map_entries(token_rel_freq_arr_hist_r)) = 0
             """,
             "label_for_charts": "Null",
             "is_null_level": True,
@@ -310,16 +310,16 @@ token_rel_freq_arr_comparison = {
     "comparison_description": "Token relative frequency array",
 }
 
-arr_red_sql = array_reduce_by_freq("common_end_tokens", 0)
+arr_red_sql = array_reduce_by_freq("common_end_tokens_hist", 0)
 
 common_end_tokens_comparison = {
     "output_column_name": "common_end_tokens",
     "comparison_levels": [
         {
             "sql_condition": """
-            "common_end_tokens_l" IS NULL OR "common_end_tokens_r" IS NULL
-            or length(map_entries("common_end_tokens_l")) = 0
-            or length(map_entries("common_end_tokens_r")) = 0
+            "common_end_tokens_hist_l" IS NULL OR "common_end_tokens_hist_r" IS NULL
+            or length(map_entries("common_end_tokens_hist_l")) = 0
+            or length(map_entries("common_end_tokens_hist_r")) = 0
             """,
             "label_for_charts": "Null",
             "is_null_level": True,
