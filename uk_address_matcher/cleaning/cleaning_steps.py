@@ -545,7 +545,7 @@ def separate_unique_and_common_tokens(
     sql = """
     WITH tokens AS (
         SELECT
-            regexp_split_to_array(replace(address_concat, ',', ' '), '\\s+') AS __tokens,
+            regexp_split_to_array(replace(replace(address_concat, ',', ' '), 'FLAT', ' '), '\\s+') AS __tokens,
             row_number() OVER (ORDER BY reverse(address_concat)) AS row_order,
             *
         FROM ddb_pyrel
@@ -593,10 +593,70 @@ def separate_unique_and_common_tokens(
     SELECT
         * EXCLUDE (__tokens, __prev_tokens, __next_tokens, __token_count, max_common_suffix, next_common_suffix, prev_common_suffix, row_order, common_tokens,unique_tokens),
         COALESCE(unique_tokens, ARRAY[]) AS unique_tokens,
-        COALESCE(common_tokens, ARRAY[]) AS common_tokens
+        COALESCE(common_tokens, ARRAY[]) AS common_tokens,
+
+
     FROM
     with_unique_parts
 
+    """
+
+    return con.sql(sql)
+
+
+def generalise_unique_tokens(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Maps specific tokens to more general categories to create a generalised representation
+    of the unique tokens in an address.
+
+    This function applies the following mappings:
+    - Single letters (A-E) -> UNIT_NUM_LET
+    - Single digits (1-5) -> UNIT_NUM_LET
+    - Floor indicators (FIRST, SECOND, THIRD) -> LEVEL
+    - Position indicators (TOP, FIRST, SECOND, THIRD) -> TOP
+
+    The following tokens are filtered out completely:
+    - FLAT, APARTMENT, UNIT
+
+    Args:
+        ddb_pyrel (DuckDBPyRelation): The input relation with unique_tokens field
+        con (DuckDBPyConnection): The DuckDB connection
+
+    Returns:
+        DuckDBPyRelation: The modified table with generalised_unique_tokens field
+    """
+    sql = """
+    SELECT
+        *,
+        -- First transform tokens according to mapping rules
+        -- Then filter out any empty strings (which represent removed tokens)
+        list_filter(
+            list_transform(unique_tokens, token ->
+                CASE
+                    -- Tokens to filter out completely
+                    WHEN token = 'FLAT' OR token = 'APARTMENT' OR token = 'UNIT' THEN ''
+
+                    -- Map single letters A-E to UNIT_NUM_LET
+                    WHEN token = 'A' OR token = 'B' OR token = 'C' OR token = 'D' OR token = 'E' THEN 'UNIT_NUM_LET'
+
+                    -- Map single digits 1-5 to UNIT_NUM_LET
+                    WHEN token = '1' OR token = '2' OR token = '3' OR token = '4' OR token = '5' THEN 'UNIT_NUM_LET'
+
+                    -- Map floor indicators to LEVEL
+                    WHEN token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'LEVEL'
+
+                    -- Map position indicators to TOP
+                    WHEN token = 'TOP' OR token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'TOP'
+
+                    -- Keep other tokens as they are
+                    ELSE token
+                END
+            ),
+            x -> x != ''  -- Filter out empty strings
+        ) AS generalised_unique_tokens
+    FROM ddb_pyrel
     """
 
     return con.sql(sql)

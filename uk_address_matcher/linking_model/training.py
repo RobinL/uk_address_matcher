@@ -461,6 +461,21 @@ flat_positional_comparison = {
     "comparison_description": "Flat position comparison",
 }
 
+list_transform_generalise_all_tokens_r = """
+list_filter(
+            list_transform(all_tokens_r, token ->
+                CASE
+                    WHEN token = 'FLAT' OR token = 'APARTMENT' OR token = 'UNIT' THEN ''
+                    WHEN token = 'A' OR token = 'B' OR token = 'C' OR token = 'D' OR token = 'E' THEN 'UNIT_NUM_LET'
+                    WHEN token = '1' OR token = '2' OR token = '3' OR token = '4' OR token = '5' THEN 'UNIT_NUM_LET'
+                    WHEN token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'LEVEL'
+                    WHEN token = 'TOP' OR token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'TOP'
+                    ELSE token
+                END
+            ),
+            x -> x != ''
+        )
+"""
 
 # Need to think about this carefully - best to look at false positive examples
 common_unique_comparison = {
@@ -468,7 +483,7 @@ common_unique_comparison = {
     "comparison_levels": [
         {
             "sql_condition": """
-             len(unique_tokens_l) = 0 or true
+             len(unique_tokens_l) = 0
             """,
             "label_for_charts": "Null",
             "is_null_level": True,
@@ -476,7 +491,12 @@ common_unique_comparison = {
         # TODO:  Here we want to build in logic for 'is the unique token just FLOOR GROUND BASEMENT and so on
         {
             "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  = len(unique_tokens_l)
+            len(
+                list_intersect(
+                    unique_tokens_l,
+                    list_filter(all_tokens_r, token -> not list_contains(common_tokens_l, token))
+                )
+            )  = len(unique_tokens_l)
             """,
             "label_for_charts": "all unique",
             "m_probability": 256,
@@ -486,7 +506,11 @@ common_unique_comparison = {
         },
         {
             "sql_condition": """
-            len(list_intersect(unique_tokens_l, all_tokens_r))  > 0
+            len(
+                list_intersect(
+                    unique_tokens_l, list_filter(all_tokens_r, token -> not list_contains(common_tokens_l, token))
+                )
+            )  > 0
             """,
             "label_for_charts": "unique - 1",
             "m_probability": 128,
@@ -494,7 +518,26 @@ common_unique_comparison = {
             "fix_m_probability": toggle_m_probability_fix,
             "fix_u_probability": toggle_u_probability_fix,
         },
-        # Here is that ther'es no overlap but unique tokens without FLOOR GROUP BASEMENT and so on are length 0
+        {
+            "sql_condition": f"""
+            len(list_intersect(generalised_unique_tokens_l, {list_transform_generalise_all_tokens_r}))  = len(unique_tokens_l)
+            """,
+            "label_for_charts": "all unique generalised",
+            "m_probability": 8,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
+        {
+            "sql_condition": f"""
+            len(list_intersect(generalised_unique_tokens_l, {list_transform_generalise_all_tokens_r}))  > 0
+            """,
+            "label_for_charts": "unique generalised - 1",
+            "m_probability": 4,
+            "u_probability": 1,
+            "fix_m_probability": toggle_m_probability_fix,
+            "fix_u_probability": toggle_u_probability_fix,
+        },
         {
             "sql_condition": "ELSE",
             "label_for_charts": "All other comparisons",

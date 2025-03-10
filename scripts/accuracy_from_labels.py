@@ -86,10 +86,9 @@ print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
 
 df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con)
+
 df_os_clean = clean_data_using_precomputed_rel_tok_freq_2(df_os, con=con)
 
-
-df_os_clean.show(max_width=100000)
 
 end_time = time.time()
 print(f"Time to load/clean: {end_time - overall_start_time} seconds")
@@ -106,7 +105,11 @@ linker = get_linker(
     include_full_postcode_block=False,
     include_outside_postcode_block=True,
     retain_intermediate_calculation_columns=True,
-    additional_columns_to_retain=["common_end_tokens", "token_rel_freq_arr"],
+    additional_columns_to_retain=[
+        "common_end_tokens",
+        "token_rel_freq_arr",
+        "common_tokens",
+    ],
 )
 
 
@@ -115,7 +118,7 @@ df_predict = linker.inference.predict(
 )
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-# display(linker.visualisations.match_weights_chart())
+display(linker.visualisations.match_weights_chart())
 # -----------------------------------------------------------------------------
 # Step 4: Pass 2: There's an optimisation we can do post-linking to improve score
 # described here https://github.com/RobinL/uk_address_matcher/issues/14
@@ -250,14 +253,15 @@ con.sql(sql).show(max_width=400, max_rows=40)
 # -----------------------------------------------------------------------------
 # %%
 
+print("=" * 200)
 # Want to see waterfall for correct and wrong
 
 sql = """
 select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match, correct_uprn as correct_uprn
 from matches_with_epc_and_os
 where 1=1
---and truth_status = 'false positive'
-and epc_id = '75e0ec7d24503e0770d01fdea3350db494a5418b6d38357ba926c71df8508323'
+and truth_status = 'false positive'
+--and epc_id = '732941539062014031115561564858454'
 and label_confidence = 'epc_splink_agree'
 order by random()
 limit 1
@@ -295,6 +299,7 @@ con.sql(sql).show(max_width=100000)
 cols = """
     concat_ws(' ', original_address_concat, postcode) as original_address_concat,
     unique_tokens,
+    generalised_unique_tokens,
     flat_positional,
     flat_letter,
     numeric_token_1,
@@ -351,6 +356,18 @@ order by match_weight desc
 
 con.sql(sql).show(max_width=1000)
 
+sql = f"""
+select
+    *
+
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}'
+order by match_weight desc
+limit 5
+"""
+
+con.sql(sql).show(max_width=10000)
+
 
 # Waterfall
 sql = f"""
@@ -388,26 +405,26 @@ display(
     )
 )
 
+sql = f"""
+select 'correct' as source, uprn, fulladdress
+from {full_os_path}
+where uprn = '{correct_uprn}'
+UNION ALL
+select 'our_match' as source, uprn, fulladdress
+from {full_os_path}
+where uprn = '{our_uprn_match}'
+"""
+
+con.sql(sql).show(max_width=100000)
+
 
 # %%
 
-sql = f"""
-select uprn, fulladdress
-from {full_os_path}
-where fulladdress like '%119A%'
-and postcode in
-(select distinct postcode from epc_data_raw)
-and
-description != 'Non Addressable Object'
-"""
 
-con.sql(sql).show(max_width=100000)
+# sql = f"""
+# select unique_id, address_concat
+# from epc_data_raw
+# where upper(address_concat) like '%FLAT A 119%'
+# """
 
-
-sql = f"""
-select unique_id, address_concat
-from epc_data_raw
-where upper(address_concat) like '%FLAT A 119%'
-"""
-
-con.sql(sql).show(max_width=100000)
+# con.sql(sql).show(max_width=100000)

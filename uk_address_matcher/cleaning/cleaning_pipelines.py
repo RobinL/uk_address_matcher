@@ -23,6 +23,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     use_first_unusual_token_if_no_numeric_token,
     get_token_frequeny_table,
     separate_unique_and_common_tokens,
+    generalise_unique_tokens,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -50,6 +51,7 @@ QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON = [
     clean_address_string_first_pass,
     derive_original_address_concat,
     separate_unique_and_common_tokens,
+    generalise_unique_tokens,
     parse_out_flat_position_and_letter,
     parse_out_numbers,
     clean_address_string_second_pass,
@@ -174,6 +176,7 @@ def clean_data_using_precomputed_rel_tok_freq(
     select * {exclude_clause}   ,
      NULL::varchar[] as unique_tokens,
      NULL::varchar[] as common_tokens,
+     NULL::varchar[] as generalised_unique_tokens,
      regexp_split_to_array(replace(original_address_concat, ',', ' '), '\\s+') as all_tokens
          from __address_table_res
     """
