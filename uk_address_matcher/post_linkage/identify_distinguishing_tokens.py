@@ -203,6 +203,7 @@ def improve_predictions_using_distinguishing_tokens(
             ) AS tokens_elsewhere_in_block_but_not_this,
 
             -- missing tokens are tokens in the canonical address but not in the messy address
+            -- e.g. 'annex at'
             list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
 
