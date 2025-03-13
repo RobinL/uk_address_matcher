@@ -16,11 +16,17 @@ def duckdb_map_to_dict(map_object):
 
 
 def generate_test_data(
-    messy_address: str, canonical_addresses: list[str]
+    messy_address: str,
+    canonical_addresses: list[str],
+    common_end_token: str | None = None,
 ) -> list[dict]:
     """Generate test data for a messy address and its canonical counterparts."""
-    last_token = messy_address.split()[-1]
-    common_end_tokens_r = [{"tok": last_token, "rel_freq": 0.0004}]
+    # Set common_end_tokens_r based on whether a common_end_token is provided
+    common_end_tokens_r = (
+        [{"tok": common_end_token, "rel_freq": 0.0004}]
+        if common_end_token is not None
+        else []
+    )
     data = []
     for i, canonical_address in enumerate(canonical_addresses, start=1):
         row = {
@@ -40,14 +46,19 @@ def generate_test_data(
     return data
 
 
-def run_assertions(messy_address: str, canonical_data: list[dict], show=False) -> None:
+def run_assertions(
+    messy_address: str,
+    canonical_data: list[dict],
+    common_end_token: str | None = None,
+    show: bool = False,
+) -> None:
     """Run assertions for a messy address against its canonical data."""
     con = duckdb.connect()
     try:
         # Extract canonical addresses from the input data
         canonical_addresses = [item["address"] for item in canonical_data]
         # Generate test data and create a DuckDB table
-        data = generate_test_data(messy_address, canonical_addresses)
+        data = generate_test_data(messy_address, canonical_addresses, common_end_token)
         df = pd.DataFrame(data)
         df_ddb = con.sql("select * from df")
         if show:
@@ -70,7 +81,7 @@ def run_assertions(messy_address: str, canonical_data: list[dict], show=False) -
             if not assertions:
                 continue
 
-            # Updated SQL query to include 'missing_tokens'
+            # SQL query including all relevant columns
             sql = f"""
             select overlapping_tokens_this_l_and_r,
                    tokens_elsewhere_in_block_but_not_this,
@@ -98,7 +109,7 @@ def run_assertions(messy_address: str, canonical_data: list[dict], show=False) -
             bigrams_elsewhere_f_dict = duckdb_map_to_dict(bigrams_elsewhere_filtered)
             # missing_tokens_list is already a list, no conversion needed
 
-            # Assertion loop with added condition for 'missing_tokens'
+            # Assertion loop with conditions for all testable columns
             for column, checks in assertions.items():
                 if column == "overlapping_tokens_this_l_and_r":
                     map_dict = overlap_tokens_dict
@@ -136,6 +147,9 @@ def run_assertions(messy_address: str, canonical_data: list[dict], show=False) -
         con.close()
 
 
+### Test Functions
+
+
 def test_scenario_one():
     messy_address = "10 X Y Z"
     canonical_data = [
@@ -159,7 +173,7 @@ def test_scenario_one():
             },
         },
     ]
-    run_assertions(messy_address, canonical_data)
+    run_assertions(messy_address, canonical_data, common_end_token="D")
 
 
 def test_scenario_two():
@@ -198,7 +212,7 @@ def test_scenario_two():
             },
         },
     ]
-    run_assertions(messy_address, canonical_data)
+    run_assertions(messy_address, canonical_data, common_end_token="D")
 
 
 def test_scenario_three():
@@ -227,4 +241,4 @@ def test_scenario_three():
             },
         },
     ]
-    run_assertions(messy_address, canonical_data, show=True)
+    run_assertions(messy_address, canonical_data)
