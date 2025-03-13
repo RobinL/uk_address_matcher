@@ -39,20 +39,49 @@ def generate_test_data(
 
 
 def test_improve_predictions_using_distinguishing_tokens():
-    # Create a connection
     con = duckdb.connect()
 
     messy_address = "9 A B C D"
-    canonical_addresses = ["9 A C D", "9 B C D", "8 B A C D Z"]
-    # Analysis:
-    # The token A is present in messy and two candidates
-    # The token 9 is present in messy and two candidiates
-    # The bigram 9 A is present in messy and one candidate
-    # The bigram 9 A is missing from the two other candidates
-    # C is not present in the true match, but is present in two other candidates
-    # D is a common end token
 
-    # Generate test data programmatically
+    canonical_data = [
+        {
+            "address": "9 A C D",
+            "assertions": {
+                "overlapping_tokens_this_l_and_r": [
+                    ("A", 2),  # Token A appears in messy and two candidates
+                    ("9", 2),  # Token 9 appears in messy and two candidates
+                    (
+                        "D",
+                        None,
+                    ),  # D should not be in overlapping tokens (it's common end token)
+                ],
+                "overlapping_bigrams_this_l_and_r_filtered": [
+                    (("9", "A"), 1),  # Bigram "9 A" is ONLY in this candidate
+                ],
+            },
+        },
+        {
+            "address": "9 B C D",
+            "assertions": {
+                "overlapping_bigrams_this_l_and_r_filtered": [
+                    (("B", "C"), 1),  # Bigram "B C" is ONLY in this candidate
+                ],
+            },
+        },
+        {
+            "address": "8 B A C D Z",
+            "assertions": {
+                "bigrams_elsewhere_in_block_but_not_this_filtered": [
+                    (("9", "A"), 1),  # Bigram "9 A" is missing from this candidate
+                ],
+            },
+        },
+    ]
+
+    # Extract canonical addresses for test data generation
+    canonical_addresses = [item["address"] for item in canonical_data]
+
+    # Generate test data
     data = generate_test_data(messy_address, canonical_addresses)
     df = pd.DataFrame(data)
     df_ddb = con.sql("select * from df")
@@ -66,36 +95,50 @@ def test_improve_predictions_using_distinguishing_tokens():
         use_bigrams=True,
     )
 
-    # Tests remain unchanged
-    sql = """
-    select overlapping_tokens_this_l_and_r, overlapping_bigrams_this_l_and_r_filtered
-    from df_improved
-    where unique_id_r = 'r1'
-    and unique_id_l = 'l1'
-    """
-    overlapping_tokens_this_l_and_r, overlapping_bigrams_this_l_and_r_filtered = (
-        con.sql(sql).fetchone()
-    )
+    # Perform assertions for each canonical address with expected outcomes
+    for i, item in enumerate(canonical_data, start=1):
+        unique_id_l = f"l{i}"
+        assertions = item["assertions"]
+        if not assertions:
+            continue  # Skip if no assertions are defined
 
-    assert (
-        overlapping_tokens_this_l_and_r["A"] == 2
-    )  # Token A in messy and two candidates
-    assert (
-        overlapping_tokens_this_l_and_r["9"] == 2
-    )  # Token 9 not uniquely distinguishing
-    assert "D" not in overlapping_tokens_this_l_and_r
+        # Fetch relevant columns for this unique_id_l using full column names
+        sql = f"""
+        select overlapping_tokens_this_l_and_r,
+               overlapping_bigrams_this_l_and_r_filtered,
+               bigrams_elsewhere_in_block_but_not_this_filtered
+        from df_improved
+        where unique_id_l = '{unique_id_l}'
+        """
+        row = con.sql(sql).fetchone()
+        overlap_tokens, overlap_bigrams_filtered, bigrams_elsewhere_filtered = row
 
-    overlapping_bigrams_as_dict = duckdb_map_to_dict(
-        overlapping_bigrams_this_l_and_r_filtered
-    )
-    assert overlapping_bigrams_as_dict[("9", "A")] == 1  # Bigram "9 A" in one candidate
+        # Convert the fetched data into dictionaries
+        overlap_tokens_dict = dict(overlap_tokens)
+        overlap_bigrams_f_dict = duckdb_map_to_dict(overlap_bigrams_filtered)
+        bigrams_elsewhere_f_dict = duckdb_map_to_dict(bigrams_elsewhere_filtered)
 
-    sql = """
-    select bigrams_elsewhere_in_block_but_not_this_filtered
-    from df_improved
-    where unique_id_r = 'r1'
-    and unique_id_l = 'l3'
-    """
-    bigrams_elsewhere_in_block_but_not_this_filtered = con.sql(sql).fetchone()
-    bi_as_dict = duckdb_map_to_dict(bigrams_elsewhere_in_block_but_not_this_filtered)
-    assert bi_as_dict[("9", "A")] == 1  # Bigram "9 A" missing from this candidate
+        # Check each assertion
+        for column, checks in assertions.items():
+            if column == "overlapping_tokens_this_l_and_r":
+                map_dict = overlap_tokens_dict
+            elif column == "overlapping_bigrams_this_l_and_r_filtered":
+                map_dict = overlap_bigrams_f_dict
+            elif column == "bigrams_elsewhere_in_block_but_not_this_filtered":
+                map_dict = bigrams_elsewhere_f_dict
+            else:
+                continue  # Skip unrecognized columns
+
+            for key, expected in checks:
+                if expected is None:
+                    assert key not in map_dict, (
+                        f"{key} should not be in {column} for {unique_id_l}"
+                    )
+                else:
+                    actual = map_dict.get(key)
+                    assert actual == expected, (
+                        f"{key} in {column} for {unique_id_l} should be {expected}, got {actual}"
+                    )
+
+    # Close the connection
+    con.close()
