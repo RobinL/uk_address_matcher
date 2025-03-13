@@ -203,6 +203,7 @@ def improve_predictions_using_distinguishing_tokens(
             ) AS tokens_elsewhere_in_block_but_not_this,
 
             -- missing tokens are tokens in the canonical address but not in the messy address
+            -- e.g. 'annex at'
             list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
 
@@ -240,13 +241,15 @@ def improve_predictions_using_distinguishing_tokens(
             -- Bigrams in r but not in this l
             list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l) as bigrams_r_not_in_l,
 
-            -- Bigrams that appear elsewhere in the block but not in this l
-            map_from_entries(
-                list_filter(
-                    map_entries(hist_all_bigrams_in_block_l),
-                    x -> list_contains(bigrams_r_not_in_l, x.key)
-                )
-            ) AS bigrams_elsewhere_in_block_but_not_this,
+            map_from_entries(list_distinct(list_transform(
+                list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l),
+                bg -> {'key': bg, 'value': true}
+            ))) as bigrams_r_not_in_l_map,
+
+
+
+
+
             '''
         if use_bigrams
         else ""
@@ -259,6 +262,13 @@ def improve_predictions_using_distinguishing_tokens(
         left join tokens t using (unique_id_r)
     )
     SELECT
+      -- Bigrams that appear elsewhere in the block but not in this l
+            map_from_entries(
+                list_filter(
+                    map_entries(hist_all_bigrams_in_block_l),
+                    x -> map_contains(bigrams_r_not_in_l_map, x.key)
+                )
+            ) AS bigrams_elsewhere_in_block_but_not_this,
         unique_id_l,
         unique_id_r,
         match_weight,
