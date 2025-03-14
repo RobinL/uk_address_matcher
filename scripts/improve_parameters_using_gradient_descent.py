@@ -167,7 +167,14 @@ def black_box(
     when truth_status = 'false positive'
         then (-1* truth_status_numeric) - 1.0
     else truth_status_numeric
-    end as score
+    end as score,
+    case
+    when truth_status = 'true positive'
+        then 1.0
+    when truth_status = 'false positive'
+        then 0.0
+    else 0.0
+    end as truth_status_binary
     from joined_labels
 
 
@@ -191,7 +198,10 @@ def black_box(
     # ).show(max_width=100000)
 
     score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
-    # print(f"Score: {score:,.2f}")
+    num_matches = con.sql(
+        "select sum(truth_status_binary) from truth_status"
+    ).fetchall()[0][0]
+
     return score
 
 
@@ -236,13 +246,6 @@ param_config = {
 }
 
 
-# Get default parameter values from black_box function signature
-black_box_defaults = {
-    param.name: param.default
-    for param in inspect.signature(black_box).parameters.values()
-    if param.default is not inspect.Parameter.empty
-}
-
 # Extract parameters to optimize
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
@@ -253,7 +256,7 @@ perturb_scale = np.array([param_config[name]["perturb"] for name in param_names]
 
 # Define the reward function
 def black_box_reward(params):
-    params_dict = dict(black_box_defaults)
+    params_dict = {}
     for name, config in param_config.items():
         if not config["optimize"]:
             params_dict[name] = config["initial"]
@@ -298,7 +301,7 @@ def create_chart(history_df, iteration):
 
     # Create the faceted chart with the combined layers
     facet_chart = (
-        combined_chart.properties(width=300, height=150)
+        combined_chart.properties(height=150)
         .facet(row=alt.Row("variable:N", sort=variable_order, title=None))
         .resolve_scale(y="independent")
         .properties(title="Parameter Values by Iteration")
