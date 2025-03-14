@@ -49,7 +49,7 @@ def improve_predictions_using_distinguishing_tokens(
     FROM good_matches
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY unique_id_r
-        ORDER BY match_weight DESC
+        ORDER BY match_weight, unique_id_l DESC
     ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
     """
     top_n_matches = con.sql(sql_top_n_matches)
@@ -364,7 +364,7 @@ def improve_predictions_using_distinguishing_tokens(
     {add_cols_select}
 
     FROM intermediate
-    ORDER BY unique_id_r
+    ORDER BY unique_id_r, unique_id_l
     """
 
     windowed_tokens = con.sql(sql_final)
