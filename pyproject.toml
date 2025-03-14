@@ -1,15 +1,15 @@
 [project]
 name = "uk_address_matcher"
-version = "1.0.0.dev15"
+version = "1.0.0.dev16"
 description = "A package for matching UK addresses using a pretrained Splink model"
 authors = [{name = "Robin Linacre", email = "robinlinacre@hotmail.com"}]
 readme = "readme.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
-    "duckdb>=1.2.0",
+    "duckdb==1.2.1",
     "splink==4.0.7.dev1",
-    "sqlglot>=26.6.0",
+    "sqlglot==26.6.0",
 ]
 
 [project.urls]
