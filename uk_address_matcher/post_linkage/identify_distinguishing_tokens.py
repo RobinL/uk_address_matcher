@@ -275,6 +275,8 @@ def improve_predictions_using_distinguishing_tokens(
             )
         ) AS tokens_elsewhere_in_block_but_not_this,
 
+     {
+        '''
       -- Bigrams that appear elsewhere in the block but not in this l
         map_from_entries(
             list_filter(
@@ -282,6 +284,10 @@ def improve_predictions_using_distinguishing_tokens(
                 x -> map_contains(bigrams_r_not_in_l_map, x.key)
             )
         ) AS bigrams_elsewhere_in_block_but_not_this,
+        '''
+        if use_bigrams
+        else ""
+    }
         unique_id_l,
         unique_id_r,
         match_weight,
