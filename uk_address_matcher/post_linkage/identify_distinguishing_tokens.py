@@ -29,71 +29,81 @@ def improve_predictions_using_distinguishing_tokens(
         for col in additional_columns_to_retain:
             add_cols_select += f"{col}_l, {col}_r, "
 
-    # Create a table with tokenized addresses
-    sql_token_and_bigrams = f"""
+    # Split the large SQL query into separate CTE steps
 
-    WITH good_matches AS (
-        SELECT *
-        FROM df_predict
-        WHERE match_weight > {match_weight_threshold}
-    ),
-    top_n_matches AS (
-        SELECT *
-        FROM good_matches
-        QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY unique_id_r
-            ORDER BY match_weight DESC
-        ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
-    ),
-    remove_common_end_tokens AS (
-        SELECT
-            * EXCLUDE (original_address_concat_r, original_address_concat_l),
+    # Step 1: Create good_matches CTE
+    sql_good_matches = f"""
+    SELECT *
+    FROM df_predict
+    WHERE match_weight > {match_weight_threshold}
+    """
+    good_matches = con.sql(sql_good_matches)
 
-            original_address_concat_l
-                .trim()
-                .upper()
-                .regexp_split_to_array('\\s+')
-                .list_reverse()
-                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
-                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
-                .list_reverse()
-                .array_to_string(' ')
-                as original_address_concat_l,
+    # Step 2: Create top_n_matches CTE
+    sql_top_n_matches = f"""
+    SELECT *
+    FROM good_matches
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY unique_id_r
+        ORDER BY match_weight DESC
+    ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
+    """
+    top_n_matches = con.sql(sql_top_n_matches)
 
-            original_address_concat_r
-                .trim()
-                .upper()
-                .regexp_split_to_array('\\s+')
-                .list_reverse()
-                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
-                .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
-                .list_reverse()
-                .array_to_string(' ')
-                as original_address_concat_r,
+    # Step 3: Create remove_common_end_tokens CTE
+    sql_remove_common_end_tokens = """
+    SELECT
+        * EXCLUDE (original_address_concat_r, original_address_concat_l),
 
-        FROM top_n_matches
-    ),
-    tokenise_r AS (
-        SELECT DISTINCT
-            unique_id_r,
+        original_address_concat_l
+            .trim()
+            .upper()
+            .regexp_split_to_array('\\s+')
+            .list_reverse()
+            .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+            .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+            .list_reverse()
+            .array_to_string(' ')
+            as original_address_concat_l,
 
-            concat_ws(' ', original_address_concat_r, postcode_r)
-                .trim()
-                .upper()
-                .regexp_split_to_array('\\s+')
-                as tokens_r
-        FROM remove_common_end_tokens
-    ),
-    tokens as (
-        select
+        original_address_concat_r
+            .trim()
+            .upper()
+            .regexp_split_to_array('\\s+')
+            .list_reverse()
+            .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+            .list_filter((tok, i) -> not (i = 1 and list_contains(common_end_tokens_r.list_transform(x -> x.tok), tok)))
+            .list_reverse()
+            .array_to_string(' ')
+            as original_address_concat_r
+
+    FROM top_n_matches
+    """
+    remove_common_end_tokens = con.sql(sql_remove_common_end_tokens)
+
+    # Step 4: Create tokenise_r CTE
+    sql_tokenise_r = """
+    SELECT DISTINCT
+        unique_id_r,
+
+        concat_ws(' ', original_address_concat_r, postcode_r)
+            .trim()
+            .upper()
+            .regexp_split_to_array('\\s+')
+            as tokens_r
+    FROM remove_common_end_tokens
+    """
+    tokenise_r = con.sql(sql_tokenise_r)
+
+    # Step 5: Create tokens CTE
+    sql_tokens = f"""
+    SELECT
         t.unique_id_r,
         t.tokens_r,
 
         -----------------
         -- TOKENS SECTION
         -----------------
-
-
 
         concat_ws(' ', original_address_concat_l, postcode_l)
                 .trim()
@@ -102,8 +112,6 @@ def improve_predictions_using_distinguishing_tokens(
                 .array_agg()
                 .flatten()
                 as tokens_in_block_l,
-
-
 
         -- Counts of tokens in canonical addresses within block
         list_aggregate(tokens_in_block_l, 'histogram') AS hist_all_tokens_in_block_l,
@@ -115,8 +123,6 @@ def improve_predictions_using_distinguishing_tokens(
                     x -> list_contains(tokens_r, x.key)
                 )
             ) AS hist_overlapping_tokens_r_block_l,
-
-
 
         {
         '''
@@ -157,118 +163,118 @@ def improve_predictions_using_distinguishing_tokens(
         else ""
     }
 
-        from top_n_matches m
-        join tokenise_r t using (unique_id_r)
-        group by t.unique_id_r, t.tokens_r
-    ),
-    intermediate AS (
-        SELECT
-            match_weight,
-            match_probability,
-            unique_id_l,
-            m.unique_id_r,
-            original_address_concat_l,
-            original_address_concat_r,
+    FROM top_n_matches m
+    JOIN tokenise_r t USING (unique_id_r)
+    GROUP BY t.unique_id_r, t.tokens_r
+    """
+    tokens = con.sql(sql_tokens)
 
-            -----------------
-            -- TOKENS SECTION
-            -----------------
+    # Step 6: Create intermediate CTE
+    sql_intermediate = f"""
+    SELECT
+        match_weight,
+        match_probability,
+        unique_id_l,
+        m.unique_id_r,
+        original_address_concat_l,
+        original_address_concat_r,
 
-            concat_ws(' ', original_address_concat_l, postcode_l)
-                .trim()
-                .upper()
-                .regexp_split_to_array('\\s+')
-                -- .list_filter(tok -> tok NOT IN ('FLAT'))
-                AS tokens_l,
-            t.tokens_r,
+        -----------------
+        -- TOKENS SECTION
+        -----------------
 
-            -- Filter out any tokens not in l block!
-            map_from_entries(
-                list_filter(
-                    map_entries(hist_overlapping_tokens_r_block_l),
-                    x -> list_contains(tokens_l, x.key)
-                )
-            ) AS overlapping_tokens_this_l_and_r,
+        concat_ws(' ', original_address_concat_l, postcode_l)
+            .trim()
+            .upper()
+            .regexp_split_to_array('\\s+')
+            -- .list_filter(tok -> tok NOT IN ('FLAT'))
+            AS tokens_l,
+        t.tokens_r,
 
-            t.hist_all_tokens_in_block_l,
-            t.hist_overlapping_tokens_r_block_l,
+        -- Filter out any tokens not in l block!
+        map_from_entries(
+            list_filter(
+                map_entries(hist_overlapping_tokens_r_block_l),
+                x -> list_contains(tokens_l, x.key)
+            )
+        ) AS overlapping_tokens_this_l_and_r,
 
-            list_filter(t.tokens_r, tok -> tok NOT IN tokens_l) as tokens_r_not_in_l,
+        t.hist_all_tokens_in_block_l,
+        t.hist_overlapping_tokens_r_block_l,
 
-            map_from_entries(
-                list_filter(
-                    map_entries(hist_all_tokens_in_block_l),
-                    x -> list_contains(tokens_r_not_in_l, x.key)
-                )
-            ) AS tokens_elsewhere_in_block_but_not_this,
+        list_filter(t.tokens_r, tok -> tok NOT IN tokens_l) as tokens_r_not_in_l,
 
-            -- missing tokens are tokens in the canonical address but not in the messy address
-            -- e.g. 'annex at'
-            list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
+        map_from_entries(
+            list_filter(
+                map_entries(hist_all_tokens_in_block_l),
+                x -> list_contains(tokens_r_not_in_l, x.key)
+            )
+        ) AS tokens_elsewhere_in_block_but_not_this,
 
+        -- missing tokens are tokens in the canonical address but not in the messy address
+        -- e.g. 'annex at'
+        list_filter(tokens_l, t -> t NOT IN tokens_r) AS missing_tokens,
 
-
-            {
+        {
         '''
-            -----------------
-            -- BIGRAMS SECTION
-            -----------------
+        -----------------
+        -- BIGRAMS SECTION
+        -----------------
 
-            -- Create bigrams from tokens_l
-            list_transform(
-                list_zip(
-                    list_slice((tokens_l), 1,
-                              length((tokens_l)) - 1),
-                    list_slice((tokens_l), 2,
-                              length((tokens_l)))
-                ),
-                tup -> ARRAY[tup[1], tup[2]]
-            ) AS bigrams_l,
+        -- Create bigrams from tokens_l
+        list_transform(
+            list_zip(
+                list_slice((tokens_l), 1,
+                          length((tokens_l)) - 1),
+                list_slice((tokens_l), 2,
+                          length((tokens_l)))
+            ),
+            tup -> ARRAY[tup[1], tup[2]]
+        ) AS bigrams_l,
 
-            t.bigrams_r,
+        t.bigrams_r,
 
-            -- Filter to only include bigrams that appear in both this l and r
-            map_from_entries(
-                list_filter(
-                    map_entries(hist_overlapping_bigrams_r_block_l),
-                    x -> list_contains(bigrams_l, x.key)
-                )
-            ) AS overlapping_bigrams_this_l_and_r,
+        -- Filter to only include bigrams that appear in both this l and r
+        map_from_entries(
+            list_filter(
+                map_entries(hist_overlapping_bigrams_r_block_l),
+                x -> list_contains(bigrams_l, x.key)
+            )
+        ) AS overlapping_bigrams_this_l_and_r,
 
-            t.hist_all_bigrams_in_block_l,
-            t.hist_overlapping_bigrams_r_block_l,
+        t.hist_all_bigrams_in_block_l,
+        t.hist_overlapping_bigrams_r_block_l,
 
-            -- Bigrams in r but not in this l
-            list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l) as bigrams_r_not_in_l,
+        -- Bigrams in r but not in this l
+        list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l) as bigrams_r_not_in_l,
 
-            map_from_entries(list_distinct(list_transform(
-                list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l),
-                bg -> {'key': bg, 'value': true}
-            ))) as bigrams_r_not_in_l_map,
-
-
-
-
-
-            '''
+        map_from_entries(list_distinct(list_transform(
+            list_filter(t.bigrams_r, bg -> bg NOT IN bigrams_l),
+            bg -> {'key': bg, 'value': true}
+        ))) as bigrams_r_not_in_l_map,
+        '''
         if use_bigrams
         else ""
     }
 
-            postcode_l,
-            postcode_r,
-            {add_cols_select}
-        FROM top_n_matches m
-        left join tokens t using (unique_id_r)
-    )
+        postcode_l,
+        postcode_r,
+        {add_cols_select}
+    FROM top_n_matches m
+    LEFT JOIN tokens t USING (unique_id_r)
+    """
+    intermediate = con.sql(sql_intermediate)
+
+    # Step 7: Final query
+    sql_final = f"""
     SELECT
       -- Bigrams that appear elsewhere in the block but not in this l
-            map_from_entries(
-                list_filter(
-                    map_entries(hist_all_bigrams_in_block_l),
-                    x -> map_contains(bigrams_r_not_in_l_map, x.key)
-                )
-            ) AS bigrams_elsewhere_in_block_but_not_this,
+        map_from_entries(
+            list_filter(
+                map_entries(hist_all_bigrams_in_block_l),
+                x -> map_contains(bigrams_r_not_in_l_map, x.key)
+            )
+        ) AS bigrams_elsewhere_in_block_but_not_this,
         unique_id_l,
         unique_id_r,
         match_weight,
@@ -287,8 +293,6 @@ def improve_predictions_using_distinguishing_tokens(
         hist_overlapping_tokens_r_block_l,
         hist_all_tokens_in_block_l,
         missing_tokens,
-
-
 
         {
         '''
@@ -336,20 +340,17 @@ def improve_predictions_using_distinguishing_tokens(
             )
         )
         .map_from_entries() AS bigrams_elsewhere_in_block_but_not_this_filtered,
-
-
         '''
         if use_bigrams
         else ""
     }
     {add_cols_select}
 
-
     FROM intermediate
-    ORDER BY unique_id_r;
+    ORDER BY unique_id_r
     """
 
-    windowed_tokens = con.sql(sql_token_and_bigrams)
+    windowed_tokens = con.sql(sql_final)
 
     # Calculate new match weights based on distinguishing tokens and bigrams
 
