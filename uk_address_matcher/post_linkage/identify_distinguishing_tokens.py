@@ -13,6 +13,7 @@ def improve_predictions_using_distinguishing_tokens(
     PUNISHMENT_MULTIPLIER=1.5,
     BIGRAM_REWARD_MULTIPLIER=3,
     BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
+    MISSING_TOKEN_PENALTY=0.1,
 ):
     """
     Improve match predictions by identifying distinguishing tokens between addresses.
@@ -387,7 +388,7 @@ def improve_predictions_using_distinguishing_tokens(
             .list_transform(x -> 1)
             .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
 
-        - (0.1 * len(missing_tokens))
+        - (len(missing_tokens) * {MISSING_TOKEN_PENALTY})
 
         -- Bigram-based adjustments
         {

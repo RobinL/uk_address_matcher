@@ -18,6 +18,7 @@ def black_box(
     PUNISHMENT_MULTIPLIER=1.5,
     BIGRAM_REWARD_MULTIPLIER=3,
     BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
+    MISSING_TOKEN_PENALTY=0.1,
 ):
     con = duckdb.connect(":memory:")
 
@@ -197,6 +198,7 @@ initial_params = {
     "PUNISHMENT_MULTIPLIER": 1.5,
     "BIGRAM_REWARD_MULTIPLIER": 3,
     "BIGRAM_PUNISHMENT_MULTIPLIER": 1.5,
+    "MISSING_TOKEN_PENALTY": 0.1,
 }
 
 import numpy as np
@@ -208,14 +210,15 @@ param_names = [
     "PUNISHMENT_MULTIPLIER",
     "BIGRAM_REWARD_MULTIPLIER",
     "BIGRAM_PUNISHMENT_MULTIPLIER",
+    "MISSING_TOKEN_PENALTY",
 ]
 initial_params_array = [initial_params[name] for name in param_names]
 
 # Define parameter bounds - keep minimum values for punishment multipliers
 lower_bounds = np.array(
-    [-30, 0, 0.2, 0, 0.2]
+    [-30, 0, 0.2, 0, 0.2, 0.01]
 )  # Minimum of 0.2 for punishment multipliers
-upper_bounds = np.array([5, 20, 20, 20, 20])
+upper_bounds = np.array([5, 20, 20, 20, 20, 1])
 
 
 # Define the reward function to interface with black_box
@@ -224,11 +227,11 @@ def black_box_reward(params):
     return black_box(**params_dict)
 
 
-# Set hyperparameters
-alpha = 0.0005  # Learning rate
-alpha_decay = 0.99  # Learning rate decay factor
-min_alpha = 0.00001  # Minimum learning rate
-momentum = 0.2  # Momentum factor
+# Set hyperparameters - more aggressive
+alpha = 0.001  # Doubled learning rate
+alpha_decay = 0.995  # Slower decay
+min_alpha = 0.0001  # Higher minimum learning rate
+momentum = 0.3  # Increased momentum
 num_iterations = 100  # Number of iterations
 
 # Initialize parameters
@@ -236,8 +239,10 @@ params = np.array(initial_params_array)
 num_params = len(params)
 velocity = np.zeros(num_params)
 
-# Set perturbation scale for each parameter
-perturb_scale = np.array([0.5, 0.2, 0.2, 0.2, 0.2])  # Fixed perturbation scales
+# Set perturbation scale for each parameter - larger for faster exploration
+perturb_scale = np.array(
+    [1.0, 0.5, 0.5, 0.5, 0.5, 0.05]
+)  # Added perturbation scale for MISSING_TOKEN_PENALTY
 
 # Compute and log initial score
 initial_score = black_box_reward(params)
