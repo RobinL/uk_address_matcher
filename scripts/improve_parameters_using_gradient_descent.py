@@ -9,6 +9,8 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
 import logging
+import inspect
+import numpy as np
 
 
 def black_box(
@@ -191,47 +193,83 @@ def black_box(
     return score
 
 
-# initial_params
-initial_params = {
-    "IMPROVE_DISTINGUISHING_MWT": -10,
-    "REWARD_MULTIPLIER": 3,
-    "PUNISHMENT_MULTIPLIER": 1.5,
-    "BIGRAM_REWARD_MULTIPLIER": 3,
-    "BIGRAM_PUNISHMENT_MULTIPLIER": 1.5,
-    "MISSING_TOKEN_PENALTY": 0.1,
+# Unified parameter configuration
+param_config = {
+    "IMPROVE_DISTINGUISHING_MWT": {
+        "initial": -10,
+        "optimize": False,
+        "bounds": (-30, 5),
+        "perturb": 1.0,
+    },
+    "REWARD_MULTIPLIER": {
+        "initial": 3,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 0.5,
+    },
+    "PUNISHMENT_MULTIPLIER": {
+        "initial": 1.5,
+        "optimize": True,
+        "bounds": (0.2, 20),
+        "perturb": 0.5,
+    },
+    "BIGRAM_REWARD_MULTIPLIER": {
+        "initial": 3,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 0.5,
+    },
+    "BIGRAM_PUNISHMENT_MULTIPLIER": {
+        "initial": 1.5,
+        "optimize": True,
+        "bounds": (0.2, 20),
+        "perturb": 0.5,
+    },
+    "MISSING_TOKEN_PENALTY": {
+        "initial": 0.1,
+        "optimize": True,
+        "bounds": (0.01, 10),
+        "perturb": 0.05,
+    },
 }
 
-import numpy as np
+# Get default parameter values from black_box function signature
+black_box_defaults = {
+    param.name: param.default
+    for param in inspect.signature(black_box).parameters.values()
+    if param.default is not inspect.Parameter.empty
+}
 
-# Define parameter names and initial values
-param_names = [
-    "IMPROVE_DISTINGUISHING_MWT",
-    "REWARD_MULTIPLIER",
-    "PUNISHMENT_MULTIPLIER",
-    "BIGRAM_REWARD_MULTIPLIER",
-    "BIGRAM_PUNISHMENT_MULTIPLIER",
-    "MISSING_TOKEN_PENALTY",
-]
-initial_params_array = [initial_params[name] for name in param_names]
-
-# Define parameter bounds - keep minimum values for punishment multipliers
-lower_bounds = np.array(
-    [-30, 0, 0.2, 0, 0.2, 0.01]
-)  # Minimum of 0.2 for punishment multipliers
-upper_bounds = np.array([5, 20, 20, 20, 20, 1])
+# Extract parameters to optimize
+param_names = [name for name, config in param_config.items() if config["optimize"]]
+initial_params_array = [param_config[name]["initial"] for name in param_names]
+lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names])
+upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
+perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
 
 # Define the reward function to interface with black_box
 def black_box_reward(params):
-    params_dict = dict(zip(param_names, params))
+    # Start with default values from black_box function
+    params_dict = dict(black_box_defaults)
+
+    # Update with initial values for parameters not being optimized
+    for name, config in param_config.items():
+        if not config["optimize"]:
+            params_dict[name] = config["initial"]
+
+    # Update with optimized values for parameters being optimized
+    optimized_params = dict(zip(param_names, params))
+    params_dict.update(optimized_params)
+
     return black_box(**params_dict)
 
 
-# Set hyperparameters - more aggressive
-alpha = 0.001  # Doubled learning rate
-alpha_decay = 0.995  # Slower decay
-min_alpha = 0.0001  # Higher minimum learning rate
-momentum = 0.3  # Increased momentum
+# Set hyperparameters
+alpha = 0.001  # Learning rate
+alpha_decay = 0.995  # Decay rate
+min_alpha = 0.0001  # Minimum learning rate
+momentum = 0.3  # Momentum
 num_iterations = 100  # Number of iterations
 
 # Initialize parameters
@@ -239,10 +277,15 @@ params = np.array(initial_params_array)
 num_params = len(params)
 velocity = np.zeros(num_params)
 
-# Set perturbation scale for each parameter - larger for faster exploration
-perturb_scale = np.array(
-    [1.0, 0.5, 0.5, 0.5, 0.5, 0.05]
-)  # Added perturbation scale for MISSING_TOKEN_PENALTY
+# Print which parameters are being optimized
+print("Parameter configuration:")
+for name, config in param_config.items():
+    status = "OPTIMIZING" if config["optimize"] else "FIXED (using initial value)"
+    print(f"  {name}: {status}, initial value: {config['initial']}")
+    if config["optimize"]:
+        print(
+            f"    bounds: {config['bounds']}, perturbation scale: {config['perturb']}"
+        )
 
 # Compute and log initial score
 initial_score = black_box_reward(params)
@@ -306,11 +349,22 @@ for iteration in range(num_iterations):
         break
 
 # Print final results
-print(
-    f"Optimization completed. Best Score: {best_score:,.2f}, Best Params: {best_params.tolist()}"
-)
+print(f"Optimization completed. Best Score: {best_score:,.2f}")
 print(f"Parameter names: {param_names}")
-print(f"Final best parameters dictionary:")
+print(f"Final best parameters:")
+
+# Create the final parameters dictionary with all parameters (optimized and non-optimized)
+final_params_dict = {}
+for name, config in param_config.items():
+    if not config["optimize"]:
+        final_params_dict[name] = config["initial"]
+
+# Update with optimized values
 best_params_dict = dict(zip(param_names, best_params))
-for name, value in best_params_dict.items():
-    print(f"  {name}: {value:.4f}")
+final_params_dict.update(best_params_dict)
+
+# Print all parameters, indicating which ones were optimized
+for name, value in final_params_dict.items():
+    optimized = param_config[name]["optimize"]
+    status = "OPTIMIZED" if optimized else "FIXED (used initial value)"
+    print(f"  {name}: {value:.4f} - {status}")
