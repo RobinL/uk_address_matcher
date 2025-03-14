@@ -1,5 +1,5 @@
 import numpy as np
-import inspect
+import os
 import pandas as pd
 import altair as alt
 from IPython.display import display, clear_output
@@ -14,6 +14,88 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
 )
 import logging
 
+if os.path.exists("del.duckdb"):
+    os.remove("del.duckdb")
+con_disk = duckdb.connect("del.duckdb")
+
+epc_path = "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=true)"
+
+full_os_path = (
+    "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
+)
+
+labels_path = "read_csv('secret_data/epc/labels_2000.csv', all_varchar=true)"
+
+sql = f"""
+create or replace table labels_filtered as
+select * from {labels_path}
+where confidence = 'epc_splink_agree'
+and hash(messy_id) % 10 = 0 and 1=2
+UNION ALL
+select * from {labels_path}
+where confidence in ('likely', 'certain')
+limit 1000
+
+"""
+con_disk.execute(sql)
+labels_filtered = con_disk.table("labels_filtered")
+labels_filtered.count("*").fetchall()[0][0]
+
+sql = f"""
+create or replace table epc_data_raw as
+select
+LMK_KEY as unique_id,
+concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
+POSTCODE as postcode,
+UPRN as uprn,
+UPRN_SOURCE as uprn_source
+from {epc_path}
+where unique_id in (select messy_id from labels_filtered)
+
+"""
+con_disk.execute(sql)
+
+sql = f"""
+create or replace table os as
+select
+uprn as unique_id,
+regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
+postcode
+from {full_os_path}
+where postcode in
+(select distinct postcode from epc_data_raw)
+and
+description != 'Non Addressable Object'
+
+"""
+con_disk.execute(sql)
+df_os = con_disk.table("os")
+
+df_epc_data = con_disk.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
+
+# messy_count = df_epc_data.count("*").fetchall()[0][0]
+# canonical_count = df_os.count("*").fetchall()[0][0]
+# print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
+
+# -----------------------------------------------------------------------------
+# Step 2: Clean data
+# -----------------------------------------------------------------------------
+
+df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con_disk)
+sql = """
+create table epc_data_clean as
+select * from df_epc_data_clean
+"""
+con_disk.execute(sql)
+
+
+df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con_disk)
+sql = """
+create table os_clean as
+select * from df_os_clean
+"""
+con_disk.execute(sql)
+
 
 def black_box(
     *,
@@ -25,73 +107,41 @@ def black_box(
     MISSING_TOKEN_PENALTY=0.1,
 ):
     con = duckdb.connect(":memory:")
+    sql = "attach 'del.duckdb' as cleaned;"
+    con.execute(sql)
 
-    epc_path = (
-        "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=true)"
-    )
-
-    full_os_path = "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
-
-    labels_path = "read_csv('secret_data/epc/labels_2000.csv', all_varchar=true)"
-
-    sql = f"""
-    select * from {labels_path}
-    where confidence = 'epc_splink_agree'
-    and hash(messy_id) % 10 = 0
-    UNION ALL
-    select * from {labels_path}
-    where confidence in ('likely', 'certain')
+    sql = """
+    create table labels_filtered as
+    select * from cleaned.labels_filtered
     """
-    labels_filtered = con.sql(sql)
-    labels_filtered.count("*").fetchall()[0][0]
+    con.execute(sql)
+    labels_filtered = con.table("labels_filtered")
 
-    sql = f"""
-    create or replace table epc_data_raw as
-    select
-    LMK_KEY as unique_id,
-    concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
-    POSTCODE as postcode,
-    UPRN as uprn,
-    UPRN_SOURCE as uprn_source
-    from {epc_path}
-    where unique_id in (select messy_id from labels_filtered)
+    sql = """
+    create table df_epc_data_clean as
+    select * from cleaned.epc_data_clean
+    """
+    con.execute(sql)
+    df_epc_data_clean = con.table("df_epc_data_clean")
 
+    sql = """
+
+    create table df_os_clean as
+    select * from cleaned.os_clean
+    """
+    con.execute(sql)
+    df_os_clean = con.table("df_os_clean")
+
+    sql = """
+    create table epc_data_raw as
+    select * from cleaned.epc_data_raw
     """
     con.execute(sql)
 
-    sql = f"""
-    create or replace table os as
-    select
-    uprn as unique_id,
-    regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
-    postcode
-    from {full_os_path}
-    where postcode in
-    (select distinct postcode from epc_data_raw)
-    and
-    description != 'Non Addressable Object'
+    df_epc_data = con.table("epc_data_raw")
 
-    """
-    con.execute(sql)
-    df_os = con.table("os")
-
-    df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
-
-    # messy_count = df_epc_data.count("*").fetchall()[0][0]
-    # canonical_count = df_os.count("*").fetchall()[0][0]
-    # print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
-
-    # -----------------------------------------------------------------------------
-    # Step 2: Clean data
-    # -----------------------------------------------------------------------------
-
-    df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con)
-
-    df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
-
-    # -----------------------------------------------------------------------------
-    # Step 3: Link data - pass 1
-    # -----------------------------------------------------------------------------
+    con.execute("detach cleaned")
+    df_os_clean = con.table("df_os_clean")
 
     linker = get_linker(
         df_addresses_to_match=df_epc_data_clean,
@@ -170,10 +220,10 @@ def black_box(
     end as score,
     case
     when truth_status = 'true positive'
-        then 1.0
+        then 1.0::float
     when truth_status = 'false positive'
-        then 0.0
-    else 0.0
+        then 0.0::float
+    else 0.0::float
     end as truth_status_binary
     from joined_labels
 
@@ -202,10 +252,56 @@ def black_box(
         "select sum(truth_status_binary) from truth_status"
     ).fetchall()[0][0]
 
-    return score
+    return {"score": score, "num_matches": num_matches}
 
 
-# Unified parameter configuration
+def get_params_dict(params):
+    params_dict = {
+        name: config["initial"]
+        for name, config in param_config.items()
+        if not config["optimize"]
+    }
+    optimized_params = dict(zip(param_names, params))
+    params_dict.update(optimized_params)
+    return params_dict
+
+
+def black_box_reward(params):
+    params_dict = get_params_dict(params)
+    result = black_box(**params_dict)
+    return result["score"]
+
+
+def create_chart(history_df, iteration):
+    line_chart = (
+        alt.Chart(history_df)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("iteration:O", title="Iteration"),
+            y=alt.Y("value:Q", title="Value", scale=alt.Scale(zero=False)),
+        )
+    )
+    text_chart = (
+        alt.Chart(history_df)
+        .mark_text(align="left", baseline="middle", dx=7, dy=-7, fontSize=10)
+        .encode(
+            x=alt.X("iteration:O"),
+            y=alt.Y("value:Q"),
+            text=alt.Text("value:Q", format=".3f"),
+        )
+    )
+    combined_chart = alt.layer(line_chart, text_chart, data=history_df)
+    variable_order = ["score", "num_matches"] + list(param_config.keys())
+    facet_chart = (
+        combined_chart.properties(height=150)
+        .facet(row=alt.Row("variable:N", sort=variable_order, title=None))
+        .resolve_scale(y="independent")
+        .properties(title="Parameter Values by Iteration")
+    )
+    return facet_chart
+
+
+# Parameter configuration and initialization remain unchanged
 param_config = {
     "IMPROVE_DISTINGUISHING_MWT": {
         "initial": -10,
@@ -244,85 +340,22 @@ param_config = {
         "perturb": 0.05,
     },
 }
-
-
-# Extract parameters to optimize
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
 lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names])
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-
-# Define the reward function
-def black_box_reward(params):
-    params_dict = {}
-    for name, config in param_config.items():
-        if not config["optimize"]:
-            params_dict[name] = config["initial"]
-    optimized_params = dict(zip(param_names, params))
-    params_dict.update(optimized_params)
-    return black_box(**params_dict)
-
-
-def create_chart(history_df, iteration):
-    # Create a line chart with points
-    line_chart = (
-        alt.Chart(history_df)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("iteration:Q", title="Iteration"),
-            y=alt.Y("value:Q", title="Value", scale=alt.Scale(zero=False)),
-        )
-    )
-
-    # Create a text chart for the labels
-    text_chart = (
-        alt.Chart(history_df)
-        .mark_text(
-            align="left",
-            baseline="middle",
-            dx=7,  # Offset the text to the right of the points
-            dy=-7,
-            fontSize=10,
-        )
-        .encode(
-            x=alt.X("iteration:Q"),
-            y=alt.Y("value:Q"),
-            text=alt.Text("value:Q", format=".3f"),  # Format to 3 decimal places
-        )
-    )
-
-    # Combine the line chart and text chart
-    combined_chart = alt.layer(line_chart, text_chart, data=history_df)
-
-    # Define facet order
-    variable_order = ["score"] + list(param_config.keys())
-
-    # Create the faceted chart with the combined layers
-    facet_chart = (
-        combined_chart.properties(height=150)
-        .facet(row=alt.Row("variable:N", sort=variable_order, title=None))
-        .resolve_scale(y="independent")
-        .properties(title="Parameter Values by Iteration")
-    )
-
-    return facet_chart
-
-
-# Set hyperparameters
 alpha = 0.001
 alpha_decay = 0.995
 min_alpha = 0.0001
 momentum = 0.3
-num_iterations = 100  # Adjust as needed
+num_iterations = 100
 
-# Initialize parameters
 params = np.array(initial_params_array)
 num_params = len(params)
 velocity = np.zeros(num_params)
 
-# Print initial configuration
 print("Parameter configuration:")
 for name, config in param_config.items():
     status = "OPTIMIZING" if config["optimize"] else "FIXED (using initial value)"
@@ -332,20 +365,27 @@ for name, config in param_config.items():
             f"    bounds: {config['bounds']}, perturbation scale: {config['perturb']}"
         )
 
-# Compute and log initial score
-initial_score = black_box_reward(params)
+# Initial computation
+initial_params_dict = get_params_dict(params)
+initial_result = black_box(**initial_params_dict)
+initial_score = initial_result["score"]
+initial_num_matches = initial_result["num_matches"]
+
 print(f"Initial Score: {initial_score:,.2f}")
+print(f"Initial Num Matches: {initial_num_matches:,.0f}")
 best_score = initial_score
 best_params = params.copy()
 
-# Initialize history list with initial values (iteration -1)
-history = [{"iteration": -1, "variable": "score", "value": initial_score}]
+history = [
+    {"iteration": -1, "variable": "score", "value": initial_score},
+    {"iteration": -1, "variable": "num_matches", "value": initial_num_matches},
+]
 for name in param_config:
     history.append(
         {"iteration": -1, "variable": name, "value": param_config[name]["initial"]}
     )
 
-# SPSA optimization loop with chart display
+# Optimization loop
 for iteration in range(num_iterations):
     alpha = max(alpha * alpha_decay, min_alpha)
     delta = np.random.choice([-1, 1], size=num_params) * perturb_scale
@@ -363,10 +403,15 @@ for iteration in range(num_iterations):
     velocity = momentum * velocity + alpha * gradient
     params -= velocity
     params = np.clip(params, lower_bounds, upper_bounds)
-    score = black_box_reward(params)
+    params_dict = get_params_dict(params)
+    result = black_box(**params_dict)
+    score = result["score"]
+    num_matches = result["num_matches"]
 
-    # Append to history
     history.append({"iteration": iteration, "variable": "score", "value": score})
+    history.append(
+        {"iteration": iteration, "variable": "num_matches", "value": num_matches}
+    )
     for name in param_config:
         if param_config[name]["optimize"]:
             value = params[param_names.index(name)]
@@ -374,15 +419,14 @@ for iteration in range(num_iterations):
             value = param_config[name]["initial"]
         history.append({"iteration": iteration, "variable": name, "value": value})
 
-    # Create DataFrame and display chart
     history_df = pd.DataFrame(history)
-    clear_output(wait=True)  # Clear previous chart
+    clear_output(wait=True)
     chart = create_chart(history_df, iteration)
     display(chart)
 
-    # Log details
     print(f"  Parameters (after update): {params.tolist()}")
     print(f"Score: {score:,.2f}")
+    print(f"Num Matches: {num_matches:,.0f}")
     param_change_magnitude = np.linalg.norm(velocity)
     print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
     print(f"  Velocity: {velocity.tolist()}")
@@ -396,7 +440,7 @@ for iteration in range(num_iterations):
         print(f"Converged at iteration {iteration} - parameter changes too small")
         break
 
-# Print final results
+# Final results
 print(f"Optimization completed. Best Score: {best_score:,.2f}")
 print(f"Parameter names: {param_names}")
 print("Final best parameters:")
