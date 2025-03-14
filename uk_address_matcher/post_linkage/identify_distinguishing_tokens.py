@@ -202,14 +202,14 @@ def improve_predictions_using_distinguishing_tokens(
         t.hist_all_tokens_in_block_l,
         t.hist_overlapping_tokens_r_block_l,
 
-        list_filter(t.tokens_r, tok -> tok NOT IN tokens_l) as tokens_r_not_in_l,
+        --list_filter(t.tokens_r, tok -> tok NOT IN tokens_l) as tokens_r_not_in_l,
 
-        map_from_entries(
-            list_filter(
-                map_entries(hist_all_tokens_in_block_l),
-                x -> list_contains(tokens_r_not_in_l, x.key)
-            )
-        ) AS tokens_elsewhere_in_block_but_not_this,
+        map_from_entries(list_distinct(list_transform(
+            list_filter(t.tokens_r, tok -> tok NOT IN tokens_l),
+            tok -> {{"key": tok, 'value': true}}
+        ))) as tokens_r_not_in_l_map,
+
+
 
         -- missing tokens are tokens in the canonical address but not in the messy address
         -- e.g. 'annex at'
@@ -268,6 +268,13 @@ def improve_predictions_using_distinguishing_tokens(
     # Step 7: Final query
     sql_final = f"""
     SELECT
+        map_from_entries(
+            list_filter(
+                map_entries(hist_all_tokens_in_block_l),
+                x -> map_contains(tokens_r_not_in_l_map, x.key)
+            )
+        ) AS tokens_elsewhere_in_block_but_not_this,
+
       -- Bigrams that appear elsewhere in the block but not in this l
         map_from_entries(
             list_filter(
