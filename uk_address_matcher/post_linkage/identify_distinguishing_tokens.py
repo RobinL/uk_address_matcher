@@ -9,6 +9,10 @@ def improve_predictions_using_distinguishing_tokens(
     top_n_matches: int = 5,
     use_bigrams: bool = True,
     additional_columns_to_retain: list[str] | None = None,
+    REWARD_MULTIPLIER=3,
+    PUNISHMENT_MULTIPLIER=1.5,
+    BIGRAM_REWARD_MULTIPLIER=3,
+    BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
 ):
     """
     Improve match predictions by identifying distinguishing tokens between addresses.
@@ -366,12 +370,6 @@ def improve_predictions_using_distinguishing_tokens(
     windowed_tokens = con.sql(sql_final)
 
     # Calculate new match weights based on distinguishing tokens and bigrams
-
-    overall_reward_multiplier = 1.5
-    REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
-    BIGRAM_REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    BIGRAM_PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
 
     sql = f"""
     CREATE OR REPLACE TABLE matches AS
