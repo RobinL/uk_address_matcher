@@ -199,7 +199,6 @@ initial_params = {
     "BIGRAM_PUNISHMENT_MULTIPLIER": 1.5,
 }
 
-
 import numpy as np
 
 # Define parameter names and initial values
@@ -212,7 +211,7 @@ param_names = [
 ]
 initial_params_array = [initial_params[name] for name in param_names]
 
-# Define parameter bounds - setting minimum values for punishment multipliers
+# Define parameter bounds - keep minimum values for punishment multipliers
 lower_bounds = np.array(
     [-30, 0, 0.2, 0, 0.2]
 )  # Minimum of 0.2 for punishment multipliers
@@ -225,32 +224,20 @@ def black_box_reward(params):
     return black_box(**params_dict)
 
 
-# Set hyperparameters - much more conservative
-alpha = 0.0001  # Much smaller initial learning rate
+# Set hyperparameters
+alpha = 0.0005  # Learning rate
 alpha_decay = 0.99  # Learning rate decay factor
 min_alpha = 0.00001  # Minimum learning rate
-momentum = 0.1  # Lower momentum to prevent overshooting
+momentum = 0.2  # Momentum factor
 num_iterations = 100  # Number of iterations
-
-
-# Function to normalize gradients (clip by norm)
-def clip_gradient(grad, max_norm=1.0):
-    norm = np.linalg.norm(grad)
-    if norm > max_norm:
-        return grad * (max_norm / norm)
-    return grad
-
 
 # Initialize parameters
 params = np.array(initial_params_array)
 num_params = len(params)
 velocity = np.zeros(num_params)
 
-# Fixed perturbation scales based on parameter magnitudes
-# Use smaller perturbations for parameters with greater sensitivity
-base_perturb = np.array([0.1, 0.05, 0.05, 0.05, 0.05])  # Customize per parameter
-perturb_scale = base_perturb * np.abs(params)  # Scale by parameter magnitude
-min_perturb = 0.01 * np.abs(initial_params_array)  # Minimum perturbation size
+# Set perturbation scale for each parameter
+perturb_scale = np.array([0.5, 0.2, 0.2, 0.2, 0.2])  # Fixed perturbation scales
 
 # Compute and log initial score
 initial_score = black_box_reward(params)
@@ -263,66 +250,34 @@ for iteration in range(num_iterations):
     # Apply learning rate decay
     alpha = max(alpha * alpha_decay, min_alpha)
 
-    # Use non-zero minimum perturbation to avoid tiny denominators
-    current_perturb = np.maximum(perturb_scale, min_perturb)
-
     # Generate perturbation vector
-    delta = np.random.choice([-1, 1], size=num_params) * current_perturb
+    delta = np.random.choice([-1, 1], size=num_params) * perturb_scale
 
     # Ensure perturbed parameters stay within bounds
     params_plus = np.clip(params + delta, lower_bounds, upper_bounds)
     params_minus = np.clip(params - delta, lower_bounds, upper_bounds)
 
-    # Recalculate effective delta after clipping
-    effective_delta = (params_plus - params_minus) / 2.0
-    # Avoid division by zero
-    effective_delta = np.where(
-        np.abs(effective_delta) < 1e-10,
-        1e-10 * np.sign(effective_delta),
-        effective_delta,
-    )
-
     # Evaluate the function at perturbed points
     reward_plus = black_box_reward(params_plus)
     reward_minus = black_box_reward(params_minus)
 
-    # Estimate gradient and clip to reasonable values
-    raw_gradient = -(reward_plus - reward_minus) / (2 * effective_delta)
-    gradient = clip_gradient(raw_gradient, max_norm=5.0)  # Limit gradient magnitude
+    # Estimate gradient
+    gradient = -(reward_plus - reward_minus) / (2 * delta)
 
     # Log gradient and current parameters
     print(f"  Iteration {iteration}:")
-    print(f"    Raw Gradient: {raw_gradient.tolist()}")
-    print(f"    Clipped Gradient: {gradient.tolist()}")
+    print(f"    Gradient: {gradient.tolist()}")
     print(f"    Parameters (before update): {params.tolist()}")
     print(f"    Current alpha: {alpha:.6f}")
 
-    # Apply per-parameter adaptive learning rates
-    # Parameters with larger gradients get smaller learning rates
-    adaptive_alpha = alpha / (1.0 + np.abs(gradient))
-
     # Update velocity with momentum
-    velocity = momentum * velocity + adaptive_alpha * gradient
+    velocity = momentum * velocity + alpha * gradient
 
     # Update parameters
     params -= velocity
 
     # Clip parameters to bounds
-    old_params = params.copy()
     params = np.clip(params, lower_bounds, upper_bounds)
-
-    # If parameters hit bounds, reflect velocity
-    at_bound = (params == lower_bounds) | (params == upper_bounds)
-    hit_bound = at_bound & (old_params != params)
-    velocity[hit_bound] = -0.5 * velocity[hit_bound]  # Partial reflection
-
-    # Update perturbation scale conservatively
-    perturb_scale = 0.98 * perturb_scale + 0.02 * np.minimum(
-        0.1 * np.abs(params), np.abs(gradient)
-    )
-    # Cap maximum perturbation to avoid huge steps
-    max_perturb = 0.05 * np.abs(params)
-    perturb_scale = np.minimum(perturb_scale, max_perturb)
 
     # Calculate parameter change magnitude
     param_change_magnitude = np.linalg.norm(velocity)
@@ -332,7 +287,6 @@ for iteration in range(num_iterations):
     print(f"  Parameters (after update): {params.tolist()}")
     print(f"Score: {score:,.2f}")
     print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
-    print(f"  Perturbation Scale: {perturb_scale.tolist()}")
     print(f"  Velocity: {velocity.tolist()}")
 
     # Check for best parameters
@@ -342,7 +296,7 @@ for iteration in range(num_iterations):
         print(f"New best score found: {best_score:,.2f}")
 
     # Early stopping if very small parameter changes
-    if param_change_magnitude < 1e-6 and iteration > 10:
+    if param_change_magnitude < 1e-5 and iteration > 10:
         print(f"Converged at iteration {iteration} - parameter changes too small")
         break
 
