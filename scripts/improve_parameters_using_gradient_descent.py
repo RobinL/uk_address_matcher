@@ -217,6 +217,11 @@ def black_box(
     # print(df_with_distinguishability.count("*").fetchall()[0][0])
     # print(labels_filtered.count("*").fetchall()[0][0])
 
+    max_score = con.sql("select max(match_weight) from truth_status").fetchall()[0][0]
+    min_score = con.sql("select min(match_weight) from truth_status").fetchall()[0][0]
+
+    # Join on match weight of true matches
+
     squish = 1.5
     sql = f"""
     CREATE OR REPLACE TABLE truth_status as
@@ -237,11 +242,13 @@ def black_box(
     left join labels_filtered l on m.unique_id_r = l.messy_id
     )
     select *,
+
     case
     when distinguishability_category = '01: One match only' then 1.0
     when distinguishability_category = '99: No match' then 0.0
     else (pow({squish}, distinguishability))/(1+pow({squish}, distinguishability))
     end as truth_status_numeric,
+
     case
     when truth_status = 'true positive'
         then  truth_status_numeric  + 1.0
@@ -249,6 +256,7 @@ def black_box(
         then (-1* truth_status_numeric) - 1.0
     else truth_status_numeric
     end as score,
+
     case
     when truth_status = 'true positive'
         then 1.0::float
@@ -256,6 +264,7 @@ def black_box(
         then 0.0::float
     else 0.0::float
     end as truth_status_binary
+
     from joined_labels
 
 
