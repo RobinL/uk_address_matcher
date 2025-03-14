@@ -4,6 +4,7 @@
 import splink.comparison_level_library as cll
 import splink.comparison_library as cl
 from .blocking import old_blocking_rules
+from splink.internals.misc import match_weight_to_bayes_factor
 
 from splink import block_on, SettingsCreator
 
@@ -77,11 +78,11 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
 
 
 def get_num_1_comparison(
-    WEIGHT_1=95,
-    WEIGHT_2=95,
-    WEIGHT_3=4,
-    WEIGHT_4=1 / 16,
-    WEIGHT_5=1 / 256,
+    WEIGHT_1=6.57,
+    WEIGHT_2=6.57,
+    WEIGHT_3=2,
+    WEIGHT_4=-4,
+    WEIGHT_5=-8,
 ):
     num_1_comparison = {
         "output_column_name": "numeric_token_1",
@@ -90,7 +91,7 @@ def get_num_1_comparison(
             {
                 "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
                 "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_1,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_1),
                 "u_probability": 1,
                 "tf_adjustment_column": "numeric_token_1",
                 "tf_adjustment_weight": 0.5,
@@ -103,7 +104,7 @@ def get_num_1_comparison(
                             = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
                             """,
                 "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_2,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_2),
                 "u_probability": 1,
                 "tf_adjustment_column": "numeric_token_1",
                 "tf_adjustment_weight": 0.5,
@@ -113,7 +114,7 @@ def get_num_1_comparison(
             {
                 "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
                 "label_for_charts": "Exact match inverted numbers",
-                "m_probability": WEIGHT_3,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_3),
                 "u_probability": 1,
                 "fix_m_probability": toggle_m_probability_fix,
                 "fix_u_probability": toggle_u_probability_fix,
@@ -121,11 +122,13 @@ def get_num_1_comparison(
             {
                 "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
                 "label_for_charts": "Null",
-                "m_probability": WEIGHT_4,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_4),
                 "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
             },
             cll.ElseLevel().configure(
-                m_probability=WEIGHT_5,
+                m_probability=match_weight_to_bayes_factor(WEIGHT_5),
                 u_probability=1,
                 fix_m_probability=True,
                 fix_u_probability=True,
@@ -137,10 +140,10 @@ def get_num_1_comparison(
 
 
 def get_num_2_comparison(
-    WEIGHT_1=0.8 / 0.001,
-    WEIGHT_2=1,
-    WEIGHT_3=1 / 16,
-    WEIGHT_4=1 / 256,
+    WEIGHT_1=6.57,
+    WEIGHT_2=0,
+    WEIGHT_3=-2,
+    WEIGHT_4=-4,
 ):
     num_2_comparison = {
         "output_column_name": "numeric_token_2",
@@ -154,7 +157,7 @@ def get_num_2_comparison(
             {
                 "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
                 "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_1,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_1),
                 "u_probability": 1,
                 "tf_adjustment_column": "numeric_token_2",
                 "tf_adjustment_weight": 0.5,
@@ -164,7 +167,7 @@ def get_num_2_comparison(
             {
                 "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
                 "label_for_charts": "Exact match inverted numbers",
-                "m_probability": WEIGHT_2,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_2),
                 "u_probability": 1,
                 "fix_m_probability": toggle_m_probability_fix,
                 "fix_u_probability": toggle_u_probability_fix,
@@ -173,13 +176,13 @@ def get_num_2_comparison(
             {
                 "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
                 "label_for_charts": "Null",
-                "m_probability": WEIGHT_3,
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_3),
                 "u_probability": 1,
                 "fix_m_probability": toggle_m_probability_fix,
                 "fix_u_probability": toggle_u_probability_fix,
             },
             cll.ElseLevel().configure(
-                m_probability=WEIGHT_4,
+                m_probability=match_weight_to_bayes_factor(WEIGHT_4),
                 u_probability=1,
                 fix_m_probability=True,
                 fix_u_probability=True,
@@ -254,120 +257,6 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
     # )"""
 
     return f"{matching_tokens}"
-
-
-def get_num_1_comparison(
-    WEIGHT_1=95,
-    WEIGHT_2=95,
-    WEIGHT_3=4,
-    WEIGHT_4=1 / 16,
-    WEIGHT_5=1 / 256,
-):
-    num_1_comparison = {
-        "output_column_name": "numeric_token_1",
-        "comparison_levels": [
-            cll.NullLevel("numeric_token_1"),
-            {
-                "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
-                "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_1,
-                "u_probability": 1,
-                "tf_adjustment_column": "numeric_token_1",
-                "tf_adjustment_weight": 0.5,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            {
-                "sql_condition": """
-                            nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
-                            = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
-                            """,
-                "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_2,
-                "u_probability": 1,
-                "tf_adjustment_column": "numeric_token_1",
-                "tf_adjustment_weight": 0.5,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            {
-                "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
-                "label_for_charts": "Exact match inverted numbers",
-                "m_probability": WEIGHT_3,
-                "u_probability": 1,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            {
-                "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
-                "label_for_charts": "Null",
-                "m_probability": WEIGHT_4,
-                "u_probability": 1,
-            },
-            cll.ElseLevel().configure(
-                m_probability=WEIGHT_5,
-                u_probability=1,
-                fix_m_probability=True,
-                fix_u_probability=True,
-            ),
-        ],
-        "comparison_description": "numeric_token_1",
-    }
-    return num_1_comparison
-
-
-def get_num_2_comparison(
-    WEIGHT_1=0.8 / 0.001,
-    WEIGHT_2=1,
-    WEIGHT_3=1 / 16,
-    WEIGHT_4=1 / 256,
-):
-    num_2_comparison = {
-        "output_column_name": "numeric_token_2",
-        "comparison_levels": [
-            # Note and
-            {
-                "sql_condition": '"numeric_token_2_l" IS NULL AND "numeric_token_2_r" IS NULL',
-                "label_for_charts": "Null",
-                "is_null_level": True,
-            },
-            {
-                "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
-                "label_for_charts": "Exact match",
-                "m_probability": WEIGHT_1,
-                "u_probability": 1,
-                "tf_adjustment_column": "numeric_token_2",
-                "tf_adjustment_weight": 0.5,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            {
-                "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
-                "label_for_charts": "Exact match inverted numbers",
-                "m_probability": WEIGHT_2,
-                "u_probability": 1,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            # One has a num 2 and the other does not
-            {
-                "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
-                "label_for_charts": "Null",
-                "m_probability": WEIGHT_3,
-                "u_probability": 1,
-                "fix_m_probability": toggle_m_probability_fix,
-                "fix_u_probability": toggle_u_probability_fix,
-            },
-            cll.ElseLevel().configure(
-                m_probability=WEIGHT_4,
-                u_probability=1,
-                fix_m_probability=True,
-                fix_u_probability=True,
-            ),
-        ],
-        "comparison_description": "numeric_token_2",
-    }
-    return num_2_comparison
 
 
 num_3_comparison = {

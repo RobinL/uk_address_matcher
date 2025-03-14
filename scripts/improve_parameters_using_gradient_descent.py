@@ -32,11 +32,12 @@ sql = f"""
 create or replace table labels_filtered as
 select * from {labels_path}
 where confidence = 'epc_splink_agree'
-and hash(messy_id) % 10 = 0 and 1=2
+and hash(messy_id) % 10 = 0
+-- and 1=2
 UNION ALL
 select * from {labels_path}
 where confidence in ('likely', 'certain')
-limit 100
+-- limit 100
 
 """
 con_disk.execute(sql)
@@ -107,6 +108,15 @@ def black_box(
     BIGRAM_REWARD_MULTIPLIER=3,
     BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
     MISSING_TOKEN_PENALTY=0.1,
+    NUM_1_WEIGHT_1=95,
+    NUM_1_WEIGHT_2=95,
+    NUM_1_WEIGHT_3=4,
+    NUM_1_WEIGHT_4=1 / 16,
+    NUM_1_WEIGHT_5=1 / 256,
+    NUM_2_WEIGHT_1=0.8 / 0.001,
+    NUM_2_WEIGHT_2=1,
+    NUM_2_WEIGHT_3=1 / 16,
+    NUM_2_WEIGHT_4=1 / 256,
 ):
     con = duckdb.connect(":memory:")
     sql = "attach 'del.duckdb' as cleaned;"
@@ -147,30 +157,39 @@ def black_box(
 
     settings = get_settings_for_training(
         num_1_weights={
-            "WEIGHT_1": 95,
+            "WEIGHT_1": NUM_1_WEIGHT_1,
+            "WEIGHT_2": NUM_1_WEIGHT_2,
+            "WEIGHT_3": NUM_1_WEIGHT_3,
+            "WEIGHT_4": NUM_1_WEIGHT_4,
+            "WEIGHT_5": NUM_1_WEIGHT_5,
         },
         num_2_weights={
-            "WEIGHT_1": 0.8 / 0.001,
+            "WEIGHT_1": NUM_2_WEIGHT_1,
+            "WEIGHT_2": NUM_2_WEIGHT_2,
+            "WEIGHT_3": NUM_2_WEIGHT_3,
+            "WEIGHT_4": NUM_2_WEIGHT_4,
         },
     )
+    # import json
+
+    # print(json.dumps(settings.get_settings("duckdb").as_dict(), indent=4))
+    logging.getLogger("splink").setLevel(logging.WARNING)
 
     linker = get_linker(
         df_addresses_to_match=df_epc_data_clean,
         df_addresses_to_search_within=df_os_clean,
         con=con,
-        include_full_postcode_block=False,
+        include_full_postcode_block=True,
         include_outside_postcode_block=True,
         retain_intermediate_calculation_columns=True,
         settings=settings,
     )
-    logging.getLogger("splink").setLevel(logging.WARNING)
-
+    c = linker.visualisations.match_weights_chart()
+    # display(c)
     df_predict = linker.inference.predict(
         threshold_match_weight=-50, experimental_optimisation=True
     )
     df_predict_ddb = df_predict.as_duckdbpyrelation()
-
-    display(linker.visualisations.match_weights_chart())
 
     USE_BIGRAMS = True
 
@@ -245,14 +264,14 @@ def black_box(
 
     # print(con.table("truth_status").count("*").fetchall()[0][0])
 
-    sql = """
-    select * from truth_status
-    where 1=1 and
-    unique_id_r = '53242442132009020316233502068709' and unique_id_l = '34094897'
+    # sql = """
+    # select * from truth_status
+    # where 1=1 and
+    # unique_id_r = '53242442132009020316233502068709' and unique_id_l = '34094897'
 
-    order by random()
-    limit 10
-    """
+    # order by random()
+    # limit 10
+    # """
     # con.sql(sql).show(max_width=100000)
 
     # con.table("truth_status").filter(
@@ -263,6 +282,13 @@ def black_box(
     num_matches = con.sql(
         "select sum(truth_status_binary) from truth_status"
     ).fetchall()[0][0]
+
+    sql = """
+    select truth_status, count(*) as count, count(*)/(select count(*) from truth_status) as pct
+    from truth_status
+    group by truth_status
+    """
+    con.sql(sql).show(max_width=100000)
 
     return {"score": score, "num_matches": num_matches}
 
@@ -303,10 +329,30 @@ def create_chart(history_df, iteration):
         )
     )
     combined_chart = alt.layer(line_chart, text_chart, data=history_df)
-    variable_order = ["score", "num_matches"] + list(param_config.keys())
+
+    # Define variable order with categories
+    metrics = ["score", "num_matches"]
+    optimization_params = [
+        name for name, config in param_config.items() if config["optimize"]
+    ]
+    fixed_params = [
+        name
+        for name, config in param_config.items()
+        if not config["optimize"] and name not in metrics
+    ]
+
+    variable_order = metrics + optimization_params + fixed_params
+
+    # Filter to only show metrics and optimized parameters by default
+    filtered_df = history_df[history_df["variable"].isin(metrics + optimization_params)]
+
     facet_chart = (
-        combined_chart.properties(height=150)
-        .facet(row=alt.Row("variable:N", sort=variable_order, title=None))
+        combined_chart.properties(height=50)
+        .facet(
+            row=alt.Row("variable:N", sort=variable_order, title=None).header(
+                labelAngle=0, labelAlign="left"
+            )
+        )
         .resolve_scale(y="independent")
         .properties(title="Parameter Values by Iteration")
     )
@@ -350,6 +396,60 @@ param_config = {
         "optimize": True,
         "bounds": (0.01, 10),
         "perturb": 0.05,
+    },
+    "NUM_1_WEIGHT_1": {
+        "initial": 6.57,
+        "optimize": True,
+        "bounds": (1, 30),
+        "perturb": 1.0,
+    },
+    "NUM_1_WEIGHT_2": {
+        "initial": 6.57,
+        "optimize": True,
+        "bounds": (1, 30),
+        "perturb": 1.0,
+    },
+    "NUM_1_WEIGHT_3": {
+        "initial": 2,
+        "optimize": True,
+        "bounds": (0.1, 20),
+        "perturb": 1.0,
+    },
+    "NUM_1_WEIGHT_4": {
+        "initial": -4,
+        "optimize": True,
+        "bounds": (-10, 1),
+        "perturb": 1.0,
+    },
+    "NUM_1_WEIGHT_5": {
+        "initial": -8,
+        "optimize": True,
+        "bounds": (-20, -0.1),
+        "perturb": 1.0,
+    },
+    "NUM_2_WEIGHT_1": {
+        "initial": 6.57,
+        "optimize": True,
+        "bounds": (1, 20),
+        "perturb": 1.0,
+    },
+    "NUM_2_WEIGHT_2": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (-5, 10),
+        "perturb": 1.0,
+    },
+    "NUM_2_WEIGHT_3": {
+        "initial": -2,
+        "optimize": True,
+        "bounds": (-10, 0),
+        "perturb": 1.0,
+    },
+    "NUM_2_WEIGHT_4": {
+        "initial": -4,
+        "optimize": True,
+        "bounds": (-10, 1),
+        "perturb": 1.0,
     },
 }
 param_names = [name for name, config in param_config.items() if config["optimize"]]
@@ -463,8 +563,37 @@ final_params_dict = {
 }
 best_params_dict = dict(zip(param_names, best_params))
 final_params_dict.update(best_params_dict)
-for name, value in final_params_dict.items():
-    status = (
-        "OPTIMIZED" if param_config[name]["optimize"] else "FIXED (used initial value)"
-    )
-    print(f"  {name}: {value:.4f} - {status}")
+
+# Group parameters by category for better readability
+print("\nOptimized Parameters:")
+for name in param_names:
+    value = best_params_dict[name]
+    print(f"  {name}: {value:.4f}")
+
+print("\nFixed Parameters:")
+fixed_params = {
+    name: value for name, value in final_params_dict.items() if name not in param_names
+}
+# Group numeric token weights
+num_1_weights = {k: v for k, v in fixed_params.items() if k.startswith("NUM_1_")}
+num_2_weights = {k: v for k, v in fixed_params.items() if k.startswith("NUM_2_")}
+other_fixed = {
+    k: v
+    for k, v in fixed_params.items()
+    if not (k.startswith("NUM_1_") or k.startswith("NUM_2_"))
+}
+
+if other_fixed:
+    print("  Other:")
+    for name, value in other_fixed.items():
+        print(f"    {name}: {value:.4f}")
+
+if num_1_weights:
+    print("  Numeric Token 1 Weights:")
+    for name, value in sorted(num_1_weights.items()):
+        print(f"    {name}: {value:.4f}")
+
+if num_2_weights:
+    print("  Numeric Token 2 Weights:")
+    for name, value in sorted(num_2_weights.items()):
+        print(f"    {name}: {value:.4f}")
