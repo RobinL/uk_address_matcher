@@ -283,14 +283,15 @@ def black_box(
         "select sum(truth_status_binary) from truth_status"
     ).fetchall()[0][0]
 
-    sql = """
-    select truth_status, count(*) as count, count(*)/(select count(*) from truth_status) as pct
-    from truth_status
-    group by truth_status
-    """
-    con.sql(sql).show(max_width=100000)
+    num_non_matches = con.sql(
+        "select count(*) from truth_status where truth_status = 'false positive'"
+    ).fetchall()[0][0]
 
-    return {"score": score, "num_matches": num_matches}
+    return {
+        "score": score,
+        "num_matches": num_matches,
+        "num_non_matches": num_non_matches,
+    }
 
 
 def get_params_dict(params):
@@ -331,7 +332,7 @@ def create_chart(history_df, iteration):
     combined_chart = alt.layer(line_chart, text_chart, data=history_df)
 
     # Define variable order with categories
-    metrics = ["score", "num_matches"]
+    metrics = ["score", "num_matches", "num_non_matches"]
     optimization_params = [
         name for name, config in param_config.items() if config["optimize"]
     ]
@@ -482,15 +483,18 @@ initial_params_dict = get_params_dict(params)
 initial_result = black_box(**initial_params_dict)
 initial_score = initial_result["score"]
 initial_num_matches = initial_result["num_matches"]
+initial_num_non_matches = initial_result["num_non_matches"]
 
 print(f"Initial Score: {initial_score:,.2f}")
 print(f"Initial Num Matches: {initial_num_matches:,.0f}")
+print(f"Initial Num Non Matches: {initial_num_non_matches:,.0f}")
 best_score = initial_score
 best_params = params.copy()
 
 history = [
     {"iteration": -1, "variable": "score", "value": initial_score},
     {"iteration": -1, "variable": "num_matches", "value": initial_num_matches},
+    {"iteration": -1, "variable": "num_non_matches", "value": initial_num_non_matches},
 ]
 for name in param_config:
     history.append(
@@ -519,10 +523,18 @@ for iteration in range(num_iterations):
     result = black_box(**params_dict)
     score = result["score"]
     num_matches = result["num_matches"]
+    num_non_matches = result["num_non_matches"]
 
     history.append({"iteration": iteration, "variable": "score", "value": score})
     history.append(
         {"iteration": iteration, "variable": "num_matches", "value": num_matches}
+    )
+    history.append(
+        {
+            "iteration": iteration,
+            "variable": "num_non_matches",
+            "value": num_non_matches,
+        }
     )
     for name in param_config:
         if param_config[name]["optimize"]:
