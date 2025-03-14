@@ -76,102 +76,298 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
     return f"{matching_tokens}"
 
 
-num_1_comparison = {
-    "output_column_name": "numeric_token_1",
-    "comparison_levels": [
-        cll.NullLevel("numeric_token_1"),
-        {
-            "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
-            "label_for_charts": "Exact match",
-            "m_probability": 0.95,
-            "u_probability": 0.01,
-            "tf_adjustment_column": "numeric_token_1",
-            "tf_adjustment_weight": 0.5,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
-                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
-                        """,
-            "label_for_charts": "Exact match",
-            "m_probability": 0.95,
-            "u_probability": 0.01,
-            "tf_adjustment_column": "numeric_token_1",
-            "tf_adjustment_weight": 0.5,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
-            "label_for_charts": "Exact match inverted numbers",
-            "m_probability": 4,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
-            "label_for_charts": "Null",
-            "m_probability": 1,
-            "u_probability": 16,
-        },
-        cll.ElseLevel().configure(
-            m_probability=1,
-            u_probability=256,
-            fix_m_probability=True,
-            fix_u_probability=True,
-        ),
-    ],
-    "comparison_description": "numeric_token_1",
-}
+def get_num_1_comparison(
+    WEIGHT_1=95,
+    WEIGHT_2=95,
+    WEIGHT_3=4,
+    WEIGHT_4=1 / 16,
+    WEIGHT_5=1 / 256,
+):
+    num_1_comparison = {
+        "output_column_name": "numeric_token_1",
+        "comparison_levels": [
+            cll.NullLevel("numeric_token_1"),
+            {
+                "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_1,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_1",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": """
+                            nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
+                            = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
+                            """,
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_2,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_1",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
+                "label_for_charts": "Exact match inverted numbers",
+                "m_probability": WEIGHT_3,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
+                "label_for_charts": "Null",
+                "m_probability": WEIGHT_4,
+                "u_probability": 1,
+            },
+            cll.ElseLevel().configure(
+                m_probability=WEIGHT_5,
+                u_probability=1,
+                fix_m_probability=True,
+                fix_u_probability=True,
+            ),
+        ],
+        "comparison_description": "numeric_token_1",
+    }
+    return num_1_comparison
 
-num_2_comparison = {
-    "output_column_name": "numeric_token_2",
-    "comparison_levels": [
-        # Note and
-        {
-            "sql_condition": '"numeric_token_2_l" IS NULL AND "numeric_token_2_r" IS NULL',
-            "label_for_charts": "Null",
-            "is_null_level": True,
-        },
-        {
-            "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
-            "label_for_charts": "Exact match",
-            "m_probability": 0.8,
-            "u_probability": 0.001,
-            "tf_adjustment_column": "numeric_token_2",
-            "tf_adjustment_weight": 0.5,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
-            "label_for_charts": "Exact match inverted numbers",
-            "m_probability": 1,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        # One has a num 2 and the other does not
-        {
-            "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
-            "label_for_charts": "Null",
-            "m_probability": 1,
-            "u_probability": 16,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        cll.ElseLevel().configure(
-            m_probability=1,
-            u_probability=256,
-            fix_m_probability=True,
-            fix_u_probability=True,
+
+def get_num_2_comparison(
+    WEIGHT_1=0.8 / 0.001,
+    WEIGHT_2=1,
+    WEIGHT_3=1 / 16,
+    WEIGHT_4=1 / 256,
+):
+    num_2_comparison = {
+        "output_column_name": "numeric_token_2",
+        "comparison_levels": [
+            # Note and
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL AND "numeric_token_2_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
+            {
+                "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_1,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_2",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
+                "label_for_charts": "Exact match inverted numbers",
+                "m_probability": WEIGHT_2,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            # One has a num 2 and the other does not
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
+                "label_for_charts": "Null",
+                "m_probability": WEIGHT_3,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            cll.ElseLevel().configure(
+                m_probability=WEIGHT_4,
+                u_probability=1,
+                fix_m_probability=True,
+                fix_u_probability=True,
+            ),
+        ],
+        "comparison_description": "numeric_token_2",
+    }
+    return num_2_comparison
+
+
+original_address_concat_comparison = cl.ExactMatch(
+    "original_address_concat",
+).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
+
+
+def array_reduce_by_freq(column_name: str, power: float) -> str:
+    """Generate SQL for reducing arrays by frequency.
+
+    Args:
+        column_name: Name of the column containing arrays to compare
+        power: Power to raise the denominator to in the second reduction
+
+    Returns:
+        SQL string for comparing arrays by frequency
+    """
+    # First part - multiply frequencies of matching tokens
+    matching_tokens = f"""
+    list_reduce(
+        list_prepend(
+            1.0,
+            list_transform(
+                {column_name}_l,
+                x -> CASE
+                        WHEN array_contains(
+                            list_transform({column_name}_r, y -> y.tok),
+                            x.tok
+                        )
+                        THEN x.rel_freq
+                        ELSE 1.0
+                    END
+            )
         ),
-    ],
-    "comparison_description": "numeric_token_2",
-}
+        (p, q) -> p * q
+    )"""
+
+    # # Second part - divide by frequencies of non-matching tokens
+    # non_matching_tokens = f"""
+    # list_reduce(
+    #     list_prepend(
+    #         1.0,
+    #         list_transform(
+    #             list_concat(
+    #                 array_filter(
+    #                     {column_name}_l,
+    #                     y -> NOT array_contains(
+    #                             list_transform({column_name}_r, x -> x.tok),
+    #                             y.tok
+    #                         )
+    #                 ),
+    #                 array_filter(
+    #                     {column_name}_r,
+    #                     y -> NOT array_contains(
+    #                             list_transform({column_name}_l, x -> x.tok),
+    #                             y.tok
+    #                         )
+    #                 )
+    #             ),
+    #             x -> x.rel_freq
+    #         )
+    #     ),
+    #     (p, q) -> p / q^{power}
+    # )"""
+
+    return f"{matching_tokens}"
+
+
+def get_num_1_comparison(
+    WEIGHT_1=95,
+    WEIGHT_2=95,
+    WEIGHT_3=4,
+    WEIGHT_4=1 / 16,
+    WEIGHT_5=1 / 256,
+):
+    num_1_comparison = {
+        "output_column_name": "numeric_token_1",
+        "comparison_levels": [
+            cll.NullLevel("numeric_token_1"),
+            {
+                "sql_condition": '"numeric_token_1_l" = "numeric_token_1_r"',
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_1,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_1",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": """
+                            nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')
+                            = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')
+                            """,
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_2,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_1",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
+                "label_for_charts": "Exact match inverted numbers",
+                "m_probability": WEIGHT_3,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": '"numeric_token_1_l" IS NULL OR "numeric_token_1_r" IS NULL',
+                "label_for_charts": "Null",
+                "m_probability": WEIGHT_4,
+                "u_probability": 1,
+            },
+            cll.ElseLevel().configure(
+                m_probability=WEIGHT_5,
+                u_probability=1,
+                fix_m_probability=True,
+                fix_u_probability=True,
+            ),
+        ],
+        "comparison_description": "numeric_token_1",
+    }
+    return num_1_comparison
+
+
+def get_num_2_comparison(
+    WEIGHT_1=0.8 / 0.001,
+    WEIGHT_2=1,
+    WEIGHT_3=1 / 16,
+    WEIGHT_4=1 / 256,
+):
+    num_2_comparison = {
+        "output_column_name": "numeric_token_2",
+        "comparison_levels": [
+            # Note and
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL AND "numeric_token_2_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
+            {
+                "sql_condition": '"numeric_token_2_l" = "numeric_token_2_r"',
+                "label_for_charts": "Exact match",
+                "m_probability": WEIGHT_1,
+                "u_probability": 1,
+                "tf_adjustment_column": "numeric_token_2",
+                "tf_adjustment_weight": 0.5,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
+                "label_for_charts": "Exact match inverted numbers",
+                "m_probability": WEIGHT_2,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            # One has a num 2 and the other does not
+            {
+                "sql_condition": '"numeric_token_2_l" IS NULL OR "numeric_token_2_r" IS NULL',
+                "label_for_charts": "Null",
+                "m_probability": WEIGHT_3,
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            cll.ElseLevel().configure(
+                m_probability=WEIGHT_4,
+                u_probability=1,
+                fix_m_probability=True,
+                fix_u_probability=True,
+            ),
+        ],
+        "comparison_description": "numeric_token_2",
+    }
+    return num_2_comparison
 
 
 num_3_comparison = {
@@ -428,19 +624,28 @@ flat_positional_comparison = {
 
 blocking_rules = old_blocking_rules + [block_on("postcode")]
 
-settings_for_training = SettingsCreator(
-    probability_two_random_records_match=3e-8,
-    link_type="link_only",
-    blocking_rules_to_generate_predictions=blocking_rules,
-    comparisons=[
-        original_address_concat_comparison,
-        flat_positional_comparison,
-        num_1_comparison,
-        num_2_comparison,
-        num_3_comparison,
-        token_rel_freq_arr_comparison,
-        common_end_tokens_comparison,
-        postcode_comparison,
-    ],
-    retain_intermediate_calculation_columns=True,
-)
+
+def get_settings_for_training(
+    num_1_weights=None,
+    num_2_weights=None,
+):
+    num_1_weights = num_1_weights or {}
+    num_2_weights = num_2_weights or {}
+
+    settings_for_training = SettingsCreator(
+        probability_two_random_records_match=3e-8,
+        link_type="link_only",
+        blocking_rules_to_generate_predictions=blocking_rules,
+        comparisons=[
+            original_address_concat_comparison,
+            flat_positional_comparison,
+            get_num_1_comparison(**num_1_weights),
+            get_num_2_comparison(**num_2_weights),
+            num_3_comparison,
+            token_rel_freq_arr_comparison,
+            common_end_tokens_comparison,
+            postcode_comparison,
+        ],
+        retain_intermediate_calculation_columns=True,
+    )
+    return settings_for_training

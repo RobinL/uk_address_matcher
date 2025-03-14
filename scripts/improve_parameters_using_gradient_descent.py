@@ -12,6 +12,8 @@ from uk_address_matcher import (
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
+from uk_address_matcher.linking_model.training import get_settings_for_training
+
 import logging
 
 if os.path.exists("del.duckdb"):
@@ -34,7 +36,7 @@ and hash(messy_id) % 10 = 0 and 1=2
 UNION ALL
 select * from {labels_path}
 where confidence in ('likely', 'certain')
-limit 1000
+limit 100
 
 """
 con_disk.execute(sql)
@@ -143,6 +145,15 @@ def black_box(
     con.execute("detach cleaned")
     df_os_clean = con.table("df_os_clean")
 
+    settings = get_settings_for_training(
+        num_1_weights={
+            "WEIGHT_1": 95,
+        },
+        num_2_weights={
+            "WEIGHT_1": 0.8 / 0.001,
+        },
+    )
+
     linker = get_linker(
         df_addresses_to_match=df_epc_data_clean,
         df_addresses_to_search_within=df_os_clean,
@@ -150,6 +161,7 @@ def black_box(
         include_full_postcode_block=False,
         include_outside_postcode_block=True,
         retain_intermediate_calculation_columns=True,
+        settings=settings,
     )
     logging.getLogger("splink").setLevel(logging.WARNING)
 
@@ -158,7 +170,7 @@ def black_box(
     )
     df_predict_ddb = df_predict.as_duckdbpyrelation()
 
-    # display(linker.visualisations.match_weights_chart())
+    display(linker.visualisations.match_weights_chart())
 
     USE_BIGRAMS = True
 
