@@ -8,9 +8,17 @@ from uk_address_matcher import (
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
+import logging
 
 
-def black_box():
+def black_box(
+    *,
+    IMPROVE_DISTINGUISHING_MWT,
+    REWARD_MULTIPLIER=3,
+    PUNISHMENT_MULTIPLIER=1.5,
+    BIGRAM_REWARD_MULTIPLIER=3,
+    BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
+):
     con = duckdb.connect(":memory:")
 
     epc_path = (
@@ -65,9 +73,9 @@ def black_box():
 
     df_epc_data = con.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
 
-    messy_count = df_epc_data.count("*").fetchall()[0][0]
-    canonical_count = df_os.count("*").fetchall()[0][0]
-    print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
+    # messy_count = df_epc_data.count("*").fetchall()[0][0]
+    # canonical_count = df_os.count("*").fetchall()[0][0]
+    # print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
     # -----------------------------------------------------------------------------
     # Step 2: Clean data
@@ -89,6 +97,7 @@ def black_box():
         include_outside_postcode_block=True,
         retain_intermediate_calculation_columns=True,
     )
+    logging.getLogger("splink").setLevel(logging.WARNING)
 
     df_predict = linker.inference.predict(
         threshold_match_weight=-50, experimental_optimisation=True
@@ -102,9 +111,13 @@ def black_box():
     df_predict_improved = improve_predictions_using_distinguishing_tokens(
         df_predict=df_predict_ddb,
         con=con,
-        match_weight_threshold=-10,
+        match_weight_threshold=IMPROVE_DISTINGUISHING_MWT,
         top_n_matches=5,
         use_bigrams=USE_BIGRAMS,
+        REWARD_MULTIPLIER=REWARD_MULTIPLIER,
+        PUNISHMENT_MULTIPLIER=PUNISHMENT_MULTIPLIER,
+        BIGRAM_REWARD_MULTIPLIER=BIGRAM_REWARD_MULTIPLIER,
+        BIGRAM_PUNISHMENT_MULTIPLIER=BIGRAM_PUNISHMENT_MULTIPLIER,
     )
 
     df_with_distinguishability = best_matches_with_distinguishability(
@@ -115,8 +128,8 @@ def black_box():
         best_match_only=True,
     )
 
-    print(df_with_distinguishability.count("*").fetchall()[0][0])
-    print(labels_filtered.count("*").fetchall()[0][0])
+    # print(df_with_distinguishability.count("*").fetchall()[0][0])
+    # print(labels_filtered.count("*").fetchall()[0][0])
 
     squish = 1.5
     sql = f"""
@@ -147,7 +160,7 @@ def black_box():
     when truth_status = 'true positive'
         then  truth_status_numeric  + 1.0
     when truth_status = 'false positive'
-        then -1* truth_status_numeric - 1.0
+        then (-1* truth_status_numeric) - 1.0
     else truth_status_numeric
     end as score
     from joined_labels
@@ -156,25 +169,140 @@ def black_box():
     """
     con.execute(sql)
 
-    print(con.table("truth_status").count("*").fetchall()[0][0])
+    # print(con.table("truth_status").count("*").fetchall()[0][0])
 
     sql = """
     select * from truth_status
-    where 1=1
-    -- unique_id_r = '53242442132009020316233502068709' and unique_id_l = '34094897'
+    where 1=1 and
+    unique_id_r = '53242442132009020316233502068709' and unique_id_l = '34094897'
 
     order by random()
     limit 10
     """
-    con.sql(sql).show(max_width=100000)
+    # con.sql(sql).show(max_width=100000)
 
-    con.table("truth_status").filter(
-        "lower(distinguishability_category) like '%no match%'"
-    ).show(max_width=100000)
+    # con.table("truth_status").filter(
+    #     "lower(distinguishability_category) like '%no match%'"
+    # ).show(max_width=100000)
 
     score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
-    print(f"Score: {score:,.2f}")
+    # print(f"Score: {score:,.2f}")
     return score
 
 
-black_box()
+# initial_params
+initial_params = {
+    "IMPROVE_DISTINGUISHING_MWT": -10,
+    "REWARD_MULTIPLIER": 3,
+    "PUNISHMENT_MULTIPLIER": 1.5,
+    "BIGRAM_REWARD_MULTIPLIER": 3,
+    "BIGRAM_PUNISHMENT_MULTIPLIER": 1.5,
+}
+
+# black_box(**initial_params)
+
+import numpy as np
+
+# Define parameter names and initial values
+param_names = [
+    "IMPROVE_DISTINGUISHING_MWT",
+    "REWARD_MULTIPLIER",
+    "PUNISHMENT_MULTIPLIER",
+    "BIGRAM_REWARD_MULTIPLIER",
+    "BIGRAM_PUNISHMENT_MULTIPLIER",
+]
+initial_params_array = [initial_params[name] for name in param_names]
+
+# Define parameter bounds
+lower_bounds = np.array([-30, 0, 0, 0, 0])
+upper_bounds = np.array([5, 20, 20, 20, 20])
+
+
+# Define the reward function to interface with black_box
+def black_box_reward(params):
+    params_dict = dict(zip(param_names, params))
+    return black_box(**params_dict)
+
+
+# Set hyperparameters
+alpha = 0.001  # Reduced learning rate
+alpha_decay = 0.99  # Learning rate decay factor
+min_alpha = 0.0001  # Minimum learning rate
+momentum = 0.2  # Reduced momentum factor
+num_iterations = 100  # Number of iterations
+
+# Initialize parameters
+params = np.array(initial_params_array)
+num_params = len(params)
+velocity = np.zeros(num_params)
+perturb_scale = 0.001 * np.abs(params)  # Initial perturbation reduced to 1%
+
+# Compute and log initial score
+initial_score = black_box_reward(params)
+print(f"Initial Score: {initial_score:,.2f}")
+best_score = initial_score
+best_params = params.copy()
+
+# SPSA optimization loop
+for iteration in range(num_iterations):
+    # Apply learning rate decay
+    alpha = max(alpha * alpha_decay, min_alpha)
+
+    # Generate perturbation vector
+    delta = np.random.choice([-1, 1], size=num_params) * perturb_scale
+
+    # Ensure perturbed parameters stay within bounds
+    params_plus = np.clip(params + delta, lower_bounds, upper_bounds)
+    params_minus = np.clip(params - delta, lower_bounds, upper_bounds)
+
+    # Evaluate the function at perturbed points
+    reward_plus = black_box_reward(params_plus)
+    reward_minus = black_box_reward(params_minus)
+
+    # Estimate gradient for minimization of -score (i.e., maximization of score)
+    gradient = -(reward_plus - reward_minus) / (2 * delta)
+
+    # Log gradient and current parameters at every iteration
+    print(f"  Iteration {iteration}:")
+    print(f"    Gradient: {gradient.tolist()}")
+    print(f"    Parameters (before update): {params.tolist()}")
+    print(f"    Current alpha: {alpha:.6f}")
+
+    # Update velocity with momentum
+    velocity = momentum * velocity + alpha * gradient
+
+    # Update parameters (minimizing -score moves params to maximize score)
+    params -= velocity
+
+    # Clip parameters to ensure they stay within bounds
+    params = np.clip(params, lower_bounds, upper_bounds)
+
+    # Adapt perturbation scale based on gradient magnitude, more conservatively
+    perturb_scale = 0.95 * perturb_scale + 0.05 * np.abs(gradient)
+
+    # Calculate parameter change magnitude
+    param_change_magnitude = np.linalg.norm(velocity)
+
+    # Log updated parameters and additional details at every iteration
+    score = black_box_reward(params)
+    print(f"  Parameters (after update): {params.tolist()}")
+    print(f"Score: {score:,.2f}")
+    print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
+    print(f"  Perturbation Scale: {perturb_scale.tolist()}")
+    print(f"  Velocity: {velocity.tolist()}")
+
+    # Check for best parameters
+    if score > best_score:
+        best_score = score
+        best_params = params.copy()
+        print(f"New best score found: {best_score:,.2f}")
+
+# Print final results
+print(
+    f"Optimization completed. Best Score: {best_score:,.2f}, Best Params: {best_params.tolist()}"
+)
+print(f"Parameter names: {param_names}")
+print(f"Final best parameters dictionary:")
+best_params_dict = dict(zip(param_names, best_params))
+for name, value in best_params_dict.items():
+    print(f"  {name}: {value:.4f}")
