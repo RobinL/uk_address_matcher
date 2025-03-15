@@ -136,7 +136,7 @@ def black_box(
     REL_FREQ_DELTA_WEIGHT_4=0.25,
     REL_FREQ_PUNISHMENT_MULTIPLIER=0.33,
     FIRST_N_TOKENS_WEIGHT_1=10,
-    FIRST_N_TOKENS_WEIGHT_2=0,
+    FIRST_N_TOKENS_WEIGHT_2=5,
     FIRST_N_TOKENS_WEIGHT_3=0,
     FIRST_N_TOKENS_WEIGHT_4=0,
     FIRST_N_TOKENS_WEIGHT_5=-2,
@@ -260,13 +260,13 @@ def black_box(
         MISSING_TOKEN_PENALTY=MISSING_TOKEN_PENALTY,
     )
 
-    df_with_distinguishability = best_matches_with_distinguishability(
-        df_predict=df_predict_improved,
-        df_addresses_to_match=df_epc_data,
-        con=con,
-        distinguishability_thresholds=[1, 5, 10],
-        best_match_only=True,
-    )
+    # df_with_distinguishability = best_matches_with_distinguishability(
+    #     df_predict=df_predict_improved,
+    #     df_addresses_to_match=df_epc_data,
+    #     con=con,
+    #     distinguishability_thresholds=[1, 5, 10],
+    #     best_match_only=True,
+    # )
     # ===================================
     # ===================================
     # ===================================
@@ -293,91 +293,143 @@ def black_box(
     # print(df_with_distinguishability.count("*").fetchall()[0][0])
     # print(labels_filtered.count("*").fetchall()[0][0])
 
-    # max_score = con.sql("select max(match_weight) from truth_status").fetchall()[0][0]
-    # min_score = con.sql("select min(match_weight) from truth_status").fetchall()[0][0]
-
     # Join on match weight of true matches
 
-    squish = 1.5
-    sql = f"""
-    CREATE OR REPLACE TABLE truth_status as
+    # squish = 1.5
+    # sql = f"""
+    # CREATE OR REPLACE TABLE truth_status as
 
-    with joined_labels as (
-    select
-        m.*,
-        e.uprn as epc_uprn,
-        e.uprn_source as epc_source,
-        l.correct_uprn as correct_uprn,
-        l.confidence as label_confidence,
-        case
-            when m.unique_id_l = l.correct_uprn then 'true positive'
-            else 'false positive'
-        end as truth_status
-    from df_with_distinguishability m
-    left join epc_data_raw e on m.unique_id_r = e.unique_id
-    left join labels_filtered l on m.unique_id_r = l.messy_id
+    # with joined_labels as (
+    # select
+    #     m.*,
+    #     e.uprn as epc_uprn,
+    #     e.uprn_source as epc_source,
+    #     l.correct_uprn as correct_uprn,
+    #     l.confidence as label_confidence,
+    #     case
+    #         when m.unique_id_l = l.correct_uprn then 'true positive'
+    #         else 'false positive'
+    #     end as truth_status
+    # from df_with_distinguishability m
+    # left join epc_data_raw e on m.unique_id_r = e.unique_id
+    # left join labels_filtered l on m.unique_id_r = l.messy_id
+    # )
+    # select *,
+
+    # case
+    # when distinguishability_category = '01: One match only' then 1.0
+    # when distinguishability_category = '99: No match' then 0.0
+    # else (pow({squish}, distinguishability))/(1+pow({squish}, distinguishability))
+    # end as truth_status_numeric,
+
+    # case
+    # when truth_status = 'true positive'
+    #     then  truth_status_numeric  + 2.0
+    # when truth_status = 'false positive'
+    #     then (-1* truth_status_numeric) - 2.0
+    # else truth_status_numeric
+    # end as score,
+
+    # case
+    # when truth_status = 'true positive'
+    #     then 1.0::float
+    # when truth_status = 'false positive'
+    #     then 0.0::float
+    # else 0.0::float
+    # end as truth_status_binary
+
+    # from joined_labels
+
+    # """
+    # con.execute(sql)
+
+    # score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
+    # num_labels = con.sql("select count(*) from labels_filtered").fetchall()[0][0]
+    # score = score / num_labels
+    # num_matches = con.sql(
+    #     "select sum(truth_status_binary) from truth_status"
+    # ).fetchall()[0][0]
+
+    # num_non_matches = con.sql(
+    #     "select count(*) from truth_status where truth_status = 'false positive'"
+    # ).fetchall()[0][0]
+
+    sql = """
+    create or replace table to_score as
+    WITH weight_bounds AS (
+        SELECT
+            MIN(match_weight) AS min_weight,
+            MAX(match_weight) AS max_weight
+        FROM df_predict_improved
+    ),
+    improved_with_labels AS (
+        SELECT
+            p.unique_id_r,
+            p.unique_id_l,
+            (p.match_weight - w.min_weight) / NULLIF(w.max_weight - w.min_weight, 0) AS normalized_match_weight,
+            l.correct_uprn
+        FROM df_predict_improved p
+        CROSS JOIN weight_bounds w
+        LEFT JOIN labels_filtered l ON p.unique_id_r = l.messy_id
+    ),
+    ranked AS (
+        SELECT
+            unique_id_r,
+            unique_id_l,
+            normalized_match_weight,
+            correct_uprn,
+            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY normalized_match_weight DESC) AS row_num
+        FROM improved_with_labels
+    ),
+    aggregated AS (
+        SELECT
+            unique_id_r,
+            MAX(normalized_match_weight) AS best_match_weight,
+            MAX(CASE WHEN row_num = 1 THEN unique_id_l END) AS best_match_id,
+            MAX(CASE WHEN unique_id_l = correct_uprn THEN normalized_match_weight END) AS true_match_weight,
+            MAX(CASE WHEN unique_id_l = correct_uprn THEN unique_id_l END) AS true_match_id,
+            MAX(CASE WHEN row_num = 2 THEN normalized_match_weight END) AS second_best_match_weight
+        FROM ranked
+        GROUP BY unique_id_r
     )
-    select *,
-
-    case
-    when distinguishability_category = '01: One match only' then 1.0
-    when distinguishability_category = '99: No match' then 0.0
-    else (pow({squish}, distinguishability))/(1+pow({squish}, distinguishability))
-    end as truth_status_numeric,
-
-    case
-    when truth_status = 'true positive'
-        then  truth_status_numeric  + 2.0
-    when truth_status = 'false positive'
-        then (-1* truth_status_numeric) - 2.0
-    else truth_status_numeric
-    end as score,
-
-    case
-    when truth_status = 'true positive'
-        then 1.0::float
-    when truth_status = 'false positive'
-        then 0.0::float
-    else 0.0::float
-    end as truth_status_binary
-
-    from joined_labels
-
-
+    SELECT
+        unique_id_r,
+        CASE
+            WHEN true_match_weight IS NULL THEN -0.2
+            WHEN true_match_id != best_match_id THEN true_match_weight - best_match_weight
+            WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2)
+        END AS reward,
+        case
+            when reward  = 0 then 'indistinguishable true positive'
+            when reward > 0 then 'true positive'
+            when reward < 0 then 'false positive'
+        end as truth_status
+    FROM aggregated;
     """
     con.execute(sql)
+    to_score = con.table("to_score")
 
-    # print(con.table("truth_status").count("*").fetchall()[0][0])
+    score = to_score.sum("reward").fetchall()[0][0]
+    num_labels = labels_filtered.count("*").fetchall()[0][0]
+    score = 5 * score / num_labels
 
-    # sql = """
-    # select * from truth_status
-    # where 1=1 and
-    # unique_id_r = '53242442132009020316233502068709' and unique_id_l = '34094897'
-
-    # order by random()
-    # limit 10
-    # """
-    # con.sql(sql).show(max_width=100000)
-
-    # con.table("truth_status").filter(
-    #     "lower(distinguishability_category) like '%no match%'"
-    # ).show(max_width=100000)
-
-    score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
-    num_labels = con.sql("select count(*) from labels_filtered").fetchall()[0][0]
-    score = score / num_labels
-    num_matches = con.sql(
-        "select sum(truth_status_binary) from truth_status"
-    ).fetchall()[0][0]
-
-    num_non_matches = con.sql(
-        "select count(*) from truth_status where truth_status = 'false positive'"
-    ).fetchall()[0][0]
+    num_matches = (
+        to_score.filter("truth_status = 'true positive'").count("*").fetchall()[0][0]
+    )
+    num_indeterminate = (
+        to_score.filter("truth_status = 'indistinguishable true positive'")
+        .count("*")
+        .fetchall()[0][0]
+    )
+    num_non_matches = (
+        to_score.filter("truth_status = 'false positive'").count("*").fetchall()[0][0]
+    )
 
     return {
         "score": score,
         "num_matches": num_matches,
         "num_non_matches": num_non_matches,
+        "num_indeterminate": num_indeterminate,
     }
 
 
@@ -421,7 +473,7 @@ def create_chart(history_df, iteration):
     combined_chart = alt.layer(line_chart, text_chart, data=history_df)
 
     # Define variable order with categories
-    metrics = ["score", "num_matches", "num_non_matches"]
+    metrics = ["score", "num_matches", "num_non_matches", "num_indeterminate"]
     optimization_params = [
         name for name, config in param_config.items() if config["optimize"]
     ]
@@ -699,10 +751,11 @@ initial_result = black_box(**initial_params_dict)
 initial_score = initial_result["score"]
 initial_num_matches = initial_result["num_matches"]
 initial_num_non_matches = initial_result["num_non_matches"]
-
+initial_num_indeterminate = initial_result["num_indeterminate"]
 print(f"Initial Score: {initial_score:,.2f}")
 print(f"Initial Num Matches: {initial_num_matches:,.0f}")
 print(f"Initial Num Non Matches: {initial_num_non_matches:,.0f}")
+print(f"Initial Num Indeterminate: {initial_num_indeterminate:,.0f}")
 best_score = initial_score
 best_params = params.copy()
 
@@ -710,6 +763,11 @@ history = [
     {"iteration": -1, "variable": "score", "value": initial_score},
     {"iteration": -1, "variable": "num_matches", "value": initial_num_matches},
     {"iteration": -1, "variable": "num_non_matches", "value": initial_num_non_matches},
+    {
+        "iteration": -1,
+        "variable": "num_indeterminate",
+        "value": initial_num_indeterminate,
+    },
 ]
 for name in param_config:
     history.append(
@@ -744,7 +802,7 @@ for iteration in range(num_iterations):
     score = result["score"]
     num_matches = result["num_matches"]
     num_non_matches = result["num_non_matches"]
-
+    num_indeterminate = result["num_indeterminate"]
     history.append({"iteration": iteration, "variable": "score", "value": score})
     history.append(
         {"iteration": iteration, "variable": "num_matches", "value": num_matches}
@@ -754,6 +812,13 @@ for iteration in range(num_iterations):
             "iteration": iteration,
             "variable": "num_non_matches",
             "value": num_non_matches,
+        }
+    )
+    history.append(
+        {
+            "iteration": iteration,
+            "variable": "num_indeterminate",
+            "value": num_indeterminate,
         }
     )
     for name in param_config:

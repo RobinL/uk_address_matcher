@@ -18,7 +18,7 @@ original_address_concat_comparison = cl.ExactMatch(
 
 def get_first_n_tokens_comparison(
     WEIGHT_1=10,
-    WEIGHT_2=0,
+    WEIGHT_2=5,
     WEIGHT_3=0,
     WEIGHT_4=0,
     WEIGHT_5=-2,
@@ -35,6 +35,7 @@ def get_first_n_tokens_comparison(
                 "sql_condition": f"""
                     regexp_extract(original_address_concat_l, '{regex_4_tokens}') = regexp_extract(original_address_concat_r, '{regex_4_tokens}')
                     and length(regexp_extract(original_address_concat_l, '{regex_4_tokens}')) > 1
+                    and postcode_l = postcode_r
 
                 """,
                 "label_for_charts": "First 4 tokens match",
@@ -47,6 +48,7 @@ def get_first_n_tokens_comparison(
                 "sql_condition": f"""
                     regexp_extract(original_address_concat_l, '{regex_3_tokens}') = regexp_extract(original_address_concat_r, '{regex_3_tokens}')
                     and length(regexp_extract(original_address_concat_l, '{regex_3_tokens}')) > 1
+                    and postcode_l = postcode_r
                 """,
                 "label_for_charts": "First 3 tokens match",
                 "m_probability": match_weight_to_bayes_factor(WEIGHT_2),
@@ -58,6 +60,7 @@ def get_first_n_tokens_comparison(
                 "sql_condition": f"""
                     regexp_extract(original_address_concat_l, '{regex_2_tokens}') = regexp_extract(original_address_concat_r, '{regex_2_tokens}')
                     and length(regexp_extract(original_address_concat_l, '{regex_2_tokens}')) > 1
+                    and postcode_l = postcode_r
                 """,
                 "label_for_charts": "First 2 tokens match",
                 "m_probability": match_weight_to_bayes_factor(WEIGHT_3),
@@ -69,6 +72,7 @@ def get_first_n_tokens_comparison(
                 "sql_condition": f"""
                     regexp_extract(original_address_concat_l, '{regex_1_token}') = regexp_extract(original_address_concat_r, '{regex_1_token}')
                     and length(regexp_extract(original_address_concat_l, '{regex_1_token}')) > 1
+                    and postcode_l = postcode_r
                 """,
                 "label_for_charts": "First token match",
                 "m_probability": match_weight_to_bayes_factor(WEIGHT_4),
