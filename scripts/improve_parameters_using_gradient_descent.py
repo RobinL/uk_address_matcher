@@ -593,7 +593,7 @@ perturb_scale = np.array([param_config[name]["perturb"] for name in param_names]
 alpha = 0.01
 alpha_decay = 0.99
 min_alpha = 0.0001
-momentum = 0.7
+momentum = 0.3
 num_iterations = 100
 
 params = np.array(initial_params_array)
