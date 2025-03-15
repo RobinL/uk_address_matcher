@@ -16,6 +16,77 @@ original_address_concat_comparison = cl.ExactMatch(
 ).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
 
 
+def get_first_n_tokens_comparison(
+    WEIGHT_1=10,
+    WEIGHT_2=0,
+    WEIGHT_3=0,
+    WEIGHT_4=0,
+    WEIGHT_5=-2,
+):
+    regex_4_tokens = r"^(?:\S+\s+){3}\S+"
+    regex_3_tokens = r"^(?:\S+\s+){2}\S+"
+    regex_2_tokens = r"^(?:\S+\s+){1}\S+"
+    regex_1_token = r"^\S+"
+
+    first_n_tokens_comparison = {
+        "output_column_name": "first_n_tokens",
+        "comparison_levels": [
+            {
+                "sql_condition": f"""
+                    regexp_extract(original_address_concat_l, '{regex_4_tokens}') = regexp_extract(original_address_concat_r, '{regex_4_tokens}')
+                    and length(regexp_extract(original_address_concat_l, '{regex_4_tokens}')) > 1
+
+                """,
+                "label_for_charts": "First 4 tokens match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_1),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": f"""
+                    regexp_extract(original_address_concat_l, '{regex_3_tokens}') = regexp_extract(original_address_concat_r, '{regex_3_tokens}')
+                    and length(regexp_extract(original_address_concat_l, '{regex_3_tokens}')) > 1
+                """,
+                "label_for_charts": "First 3 tokens match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_2),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": f"""
+                    regexp_extract(original_address_concat_l, '{regex_2_tokens}') = regexp_extract(original_address_concat_r, '{regex_2_tokens}')
+                    and length(regexp_extract(original_address_concat_l, '{regex_2_tokens}')) > 1
+                """,
+                "label_for_charts": "First 2 tokens match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_3),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": f"""
+                    regexp_extract(original_address_concat_l, '{regex_1_token}') = regexp_extract(original_address_concat_r, '{regex_1_token}')
+                    and length(regexp_extract(original_address_concat_l, '{regex_1_token}')) > 1
+                """,
+                "label_for_charts": "First token match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_4),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "ELSE",
+                "label_for_charts": "All other comparisons",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_5),
+                "u_probability": 1,
+            },
+        ],
+    }
+    return first_n_tokens_comparison
+
+
 def get_flat_positional_comparison(
     WEIGHT_1=6.57,
     WEIGHT_2=6.57,
@@ -480,16 +551,20 @@ def get_settings_for_training(
     num_2_weights=None,
     token_rel_freq_arr_comparison=None,
     flat_positional_weights=None,
+    first_n_tokens_weights=None,
 ):
     num_1_weights = num_1_weights or {}
     num_2_weights = num_2_weights or {}
     token_rel_freq_arr_comparison = token_rel_freq_arr_comparison or {}
+    flat_positional_weights = flat_positional_weights or {}
+    first_n_tokens_weights = first_n_tokens_weights or {}
     settings_for_training = SettingsCreator(
         probability_two_random_records_match=3e-8,
         link_type="link_only",
         blocking_rules_to_generate_predictions=blocking_rules,
         comparisons=[
             original_address_concat_comparison,
+            get_first_n_tokens_comparison(**first_n_tokens_weights),
             get_flat_positional_comparison(**flat_positional_weights),
             get_num_1_comparison(**num_1_weights),
             get_num_2_comparison(**num_2_weights),

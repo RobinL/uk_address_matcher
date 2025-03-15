@@ -135,6 +135,11 @@ def black_box(
     REL_FREQ_DELTA_WEIGHT_3=0.25,
     REL_FREQ_DELTA_WEIGHT_4=0.25,
     REL_FREQ_PUNISHMENT_MULTIPLIER=0.33,
+    FIRST_N_TOKENS_WEIGHT_1=10,
+    FIRST_N_TOKENS_WEIGHT_2=0,
+    FIRST_N_TOKENS_WEIGHT_3=0,
+    FIRST_N_TOKENS_WEIGHT_4=0,
+    FIRST_N_TOKENS_WEIGHT_5=-2,
 ):
     con = duckdb.connect(":memory:")
     sql = "attach 'del.duckdb' as cleaned;"
@@ -193,6 +198,13 @@ def black_box(
             "WEIGHT_3": FLAT_POSITIONAL_WEIGHT_3,
             "WEIGHT_4": FLAT_POSITIONAL_WEIGHT_4,
             "WEIGHT_5": FLAT_POSITIONAL_WEIGHT_5,
+        },
+        first_n_tokens_weights={
+            "WEIGHT_1": FIRST_N_TOKENS_WEIGHT_1,
+            "WEIGHT_2": FIRST_N_TOKENS_WEIGHT_2,
+            "WEIGHT_3": FIRST_N_TOKENS_WEIGHT_3,
+            "WEIGHT_4": FIRST_N_TOKENS_WEIGHT_4,
+            "WEIGHT_5": FIRST_N_TOKENS_WEIGHT_5,
         },
         token_rel_freq_arr_comparison={
             "START_EXP": REL_FREQ_START_EXP,
@@ -557,6 +569,36 @@ param_config = {
         "initial": -5,
         "optimize": True,
         "bounds": (-10, 10),
+        "perturb": 1.0,
+    },
+    "FIRST_N_TOKENS_WEIGHT_1": {
+        "initial": 10,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 1.0,
+    },
+    "FIRST_N_TOKENS_WEIGHT_2": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 1.0,
+    },
+    "FIRST_N_TOKENS_WEIGHT_3": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 1.0,
+    },
+    "FIRST_N_TOKENS_WEIGHT_4": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (0, 20),
+        "perturb": 1.0,
+    },
+    "FIRST_N_TOKENS_WEIGHT_5": {
+        "initial": -2,
+        "optimize": True,
+        "bounds": (-20, 0),
         "perturb": 1.0,
     },
     "REL_FREQ_START_EXP": {
