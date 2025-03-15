@@ -681,7 +681,7 @@ param_config = {
     "FIRST_N_TOKENS_WEIGHT_5": {
         "initial": -2,
         "optimize": True,
-        "bounds": (-20, 0),
+        "bounds": (-10, 0),
         "perturb": 1.0,
     },
     # "REL_FREQ_START_EXP": {
@@ -751,6 +751,13 @@ param_config = {
         "perturb": 0.03,
     },
 }
+
+# Optionally randomise the initial parameters within the bounds
+# for name, config in param_config.items():
+#     if config["optimize"]:
+#         config["initial"] = np.random.uniform(config["bounds"][0], config["bounds"][1])
+#         config["initial"] = config["bounds"][0]
+
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
 lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names])
