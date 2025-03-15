@@ -117,6 +117,17 @@ def black_box(
     NUM_2_WEIGHT_2=1,
     NUM_2_WEIGHT_3=1 / 16,
     NUM_2_WEIGHT_4=1 / 256,
+    REL_FREQ_START_EXP=4,
+    REL_FREQ_START_WEIGHT=-4,
+    REL_FREQ_SEGMENT_1=8,
+    REL_FREQ_SEGMENT_2=8,
+    REL_FREQ_SEGMENT_3=8,
+    REL_FREQ_SEGMENT_4=10,
+    REL_FREQ_DELTA_WEIGHT_1=1,
+    REL_FREQ_DELTA_WEIGHT_2=1,
+    REL_FREQ_DELTA_WEIGHT_3=0.25,
+    REL_FREQ_DELTA_WEIGHT_4=0.25,
+    REL_FREQ_PUNISHMENT_MULTIPLIER=0.33,
 ):
     con = duckdb.connect(":memory:")
     sql = "attach 'del.duckdb' as cleaned;"
@@ -168,6 +179,23 @@ def black_box(
             "WEIGHT_2": NUM_2_WEIGHT_2,
             "WEIGHT_3": NUM_2_WEIGHT_3,
             "WEIGHT_4": NUM_2_WEIGHT_4,
+        },
+        token_rel_freq_arr_comparison={
+            "START_EXP": REL_FREQ_START_EXP,
+            "START_WEIGHT": REL_FREQ_START_WEIGHT,
+            "SEGMENTS": [
+                REL_FREQ_SEGMENT_1,
+                REL_FREQ_SEGMENT_2,
+                REL_FREQ_SEGMENT_3,
+                REL_FREQ_SEGMENT_4,
+            ],
+            "DELTA_WEIGHTS_WITHIN_SEGMENTS": [
+                REL_FREQ_DELTA_WEIGHT_1,
+                REL_FREQ_DELTA_WEIGHT_2,
+                REL_FREQ_DELTA_WEIGHT_3,
+                REL_FREQ_DELTA_WEIGHT_4,
+            ],
+            "PUNISHMENT_MULTIPLIER": REL_FREQ_PUNISHMENT_MULTIPLIER,
         },
     )
     # import json
@@ -577,13 +605,15 @@ for iteration in range(num_iterations):
         history.append({"iteration": iteration, "variable": name, "value": value})
 
     history_df = pd.DataFrame(history)
-    clear_output(wait=True)
+    # clear_output(wait=True)
     chart = create_chart(history_df, iteration)
-    display(chart)
+    # display(chart)
+    chart.save("iteration.html")
 
     print(f"  Parameters (after update): {params.tolist()}")
     print(f"Score: {score:,.2f}")
     print(f"Num Matches: {num_matches:,.0f}")
+    print(f"Num Non Matches: {num_non_matches:,.0f}")
     param_change_magnitude = np.linalg.norm(velocity)
     print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
     print(f"  Velocity: {velocity.tolist()}")

@@ -16,67 +16,6 @@ original_address_concat_comparison = cl.ExactMatch(
 ).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
 
 
-def array_reduce_by_freq(column_name: str, power: float) -> str:
-    """Generate SQL for reducing arrays by frequency.
-
-    Args:
-        column_name: Name of the column containing arrays to compare
-        power: Power to raise the denominator to in the second reduction
-
-    Returns:
-        SQL string for comparing arrays by frequency
-    """
-    # First part - multiply frequencies of matching tokens
-    matching_tokens = f"""
-    list_reduce(
-        list_prepend(
-            1.0,
-            list_transform(
-                {column_name}_l,
-                x -> CASE
-                        WHEN array_contains(
-                            list_transform({column_name}_r, y -> y.tok),
-                            x.tok
-                        )
-                        THEN x.rel_freq
-                        ELSE 1.0
-                    END
-            )
-        ),
-        (p, q) -> p * q
-    )"""
-
-    # # Second part - divide by frequencies of non-matching tokens
-    # non_matching_tokens = f"""
-    # list_reduce(
-    #     list_prepend(
-    #         1.0,
-    #         list_transform(
-    #             list_concat(
-    #                 array_filter(
-    #                     {column_name}_l,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_r, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 ),
-    #                 array_filter(
-    #                     {column_name}_r,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_l, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 )
-    #             ),
-    #             x -> x.rel_freq
-    #         )
-    #     ),
-    #     (p, q) -> p / q^{power}
-    # )"""
-
-    return f"{matching_tokens}"
-
-
 def get_num_1_comparison(
     WEIGHT_1=6.57,
     WEIGHT_2=6.57,
@@ -198,67 +137,6 @@ original_address_concat_comparison = cl.ExactMatch(
 ).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
 
 
-def array_reduce_by_freq(column_name: str, power: float) -> str:
-    """Generate SQL for reducing arrays by frequency.
-
-    Args:
-        column_name: Name of the column containing arrays to compare
-        power: Power to raise the denominator to in the second reduction
-
-    Returns:
-        SQL string for comparing arrays by frequency
-    """
-    # First part - multiply frequencies of matching tokens
-    matching_tokens = f"""
-    list_reduce(
-        list_prepend(
-            1.0,
-            list_transform(
-                {column_name}_l,
-                x -> CASE
-                        WHEN array_contains(
-                            list_transform({column_name}_r, y -> y.tok),
-                            x.tok
-                        )
-                        THEN x.rel_freq
-                        ELSE 1.0
-                    END
-            )
-        ),
-        (p, q) -> p * q
-    )"""
-
-    # # Second part - divide by frequencies of non-matching tokens
-    # non_matching_tokens = f"""
-    # list_reduce(
-    #     list_prepend(
-    #         1.0,
-    #         list_transform(
-    #             list_concat(
-    #                 array_filter(
-    #                     {column_name}_l,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_r, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 ),
-    #                 array_filter(
-    #                     {column_name}_r,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_l, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 )
-    #             ),
-    #             x -> x.rel_freq
-    #         )
-    #     ),
-    #     (p, q) -> p / q^{power}
-    # )"""
-
-    return f"{matching_tokens}"
-
-
 num_3_comparison = {
     "output_column_name": "numeric_token_3",
     "comparison_levels": [
@@ -300,69 +178,142 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.33)
+
+def array_reduce_by_freq(column_name: str, power: float) -> str:
+    """Generate SQL for reducing arrays by frequency.
+
+    Args:
+        column_name: Name of the column containing arrays to compare
+        power: Power to raise the denominator to in the second reduction
+
+    Returns:
+        SQL string for comparing arrays by frequency
+    """
+    # First part - multiply frequencies of matching tokens
+    matching_tokens = f"""
+    list_reduce(
+        list_prepend(
+            1.0,
+            list_transform(
+                {column_name}_l,
+                x -> CASE
+                        WHEN array_contains(
+                            list_transform({column_name}_r, y -> y.tok),
+                            x.tok
+                        )
+                        THEN x.rel_freq
+                        ELSE 1.0
+                    END
+            )
+        ),
+        (p, q) -> p * q
+    )"""
+
+    # Second part - divide by frequencies of non-matching tokens
+    non_matching_tokens = f"""
+    list_reduce(
+        list_prepend(
+            1.0,
+            list_transform(
+                list_concat(
+                    array_filter(
+                        {column_name}_l,
+                        y -> NOT array_contains(
+                                list_transform({column_name}_r, x -> x.tok),
+                                y.tok
+                            )
+                    ),
+                    array_filter(
+                        {column_name}_r,
+                        y -> NOT array_contains(
+                                list_transform({column_name}_l, x -> x.tok),
+                                y.tok
+                            )
+                    )
+                ),
+                x -> x.rel_freq
+            )
+        ),
+        (p, q) -> p / q^{power}
+    )"""
+
+    return f"{matching_tokens} * {non_matching_tokens}"
 
 
-def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
+def generate_arr_reduce_data(
+    start_exp=4,
+    start_weight=-4,
+    segments=[8, 8, 8, 10],
+    delta_weights_within_segments=[1, 1, 0.25, 0.25],
+    punishment_multiplier=0.33,
+):
     data = []
-    anchor_exp = -12
-    anchor_m_prob = 2048.0
-
     current_exp = start_exp
-    while current_exp <= end_exp:
-        if current_exp > 0:
-            sql_cond = f"{arr_red_sql} < 1e{current_exp}"
-            label = f" < 1e{current_exp}"
-        else:
-            sql_cond = f"{arr_red_sql} < 1e{current_exp}"
-            label = f" < 1e{current_exp}"
+    current_weight = start_weight
 
-        if current_exp > anchor_exp:
-            # Above <1e-12: doubles every 4 steps (increases by 2^(1/4) per step)
-            m_prob = anchor_m_prob * (2 ** ((anchor_exp - current_exp) / 1))
-        else:
-            # Below <1e-12: halves every 2 steps (decreases by 2^(-1/2) per step)
-            m_prob = anchor_m_prob * (2 ** (-(current_exp - anchor_exp) / 4))
+    for segment, delta_weight in zip(segments, delta_weights_within_segments):
+        arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", punishment_multiplier)
+        for _ in range(segment):
+            if current_exp > 0:
+                sql_cond = f"{arr_red_sql} < 1e{current_exp}"
+                label = f" < 1e{current_exp}"
+            else:
+                sql_cond = f"{arr_red_sql} < 1e{current_exp}"
+                label = f" < 1e{current_exp}"
 
-        data.append(
-            {
+            level = {
                 "sql_condition": sql_cond,
                 "label_for_charts": label,
-                "m_probability": m_prob,
+                "m_probability": match_weight_to_bayes_factor(current_weight),
                 "u_probability": 1,
                 "fix_m_probability": toggle_m_probability_fix,
                 "fix_u_probability": toggle_u_probability_fix,
             }
-        )
+            data.append(level)
+            current_weight += delta_weight
+            current_exp -= 1
 
-        current_exp += step
-
-    return data
-
-
-middle_conditions = generate_arr_reduce_data(-30, 4, 1)
+    return data[::-1]
 
 
-token_rel_freq_arr_comparison = {
-    "output_column_name": "token_rel_freq_arr",
-    "comparison_levels": [
-        {
-            "sql_condition": '"token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or length("token_rel_freq_arr_l") = 0 or length("token_rel_freq_arr_r") = 0',
-            "label_for_charts": "Null",
-            "is_null_level": True,
-        },
-        *middle_conditions,
-        {
-            "sql_condition": "ELSE",
-            "label_for_charts": "All other comparisons",
-            "m_probability": 1,
-            "u_probability": 256,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-    ],
-    "comparison_description": "Token relative frequency array",
-}
+def get_token_rel_freq_arr_comparison(
+    START_EXP=4,
+    START_WEIGHT=-4,
+    SEGMENTS=[8, 8, 8, 10],
+    DELTA_WEIGHTS_WITHIN_SEGMENTS=[1, 1, 0.25, 0.25],
+    PUNISHMENT_MULTIPLIER=0.33,
+):
+    middle_conditions = generate_arr_reduce_data(
+        START_EXP,
+        START_WEIGHT,
+        SEGMENTS,
+        DELTA_WEIGHTS_WITHIN_SEGMENTS,
+        PUNISHMENT_MULTIPLIER,
+    )
+
+    token_rel_freq_arr_comparison = {
+        "output_column_name": "token_rel_freq_arr",
+        "comparison_levels": [
+            {
+                "sql_condition": '"token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or length("token_rel_freq_arr_l") = 0 or length("token_rel_freq_arr_r") = 0',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
+            *middle_conditions,
+            {
+                "sql_condition": "ELSE",
+                "label_for_charts": "All other comparisons",
+                "m_probability": 1,
+                "u_probability": 256,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+        ],
+        "comparison_description": "Token relative frequency array",
+    }
+
+    return token_rel_freq_arr_comparison
+
 
 arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
 
@@ -517,10 +468,11 @@ blocking_rules = old_blocking_rules + [block_on("postcode")]
 def get_settings_for_training(
     num_1_weights=None,
     num_2_weights=None,
+    token_rel_freq_arr_comparison=None,
 ):
     num_1_weights = num_1_weights or {}
     num_2_weights = num_2_weights or {}
-
+    token_rel_freq_arr_comparison = token_rel_freq_arr_comparison or {}
     settings_for_training = SettingsCreator(
         probability_two_random_records_match=3e-8,
         link_type="link_only",
@@ -531,7 +483,7 @@ def get_settings_for_training(
             get_num_1_comparison(**num_1_weights),
             get_num_2_comparison(**num_2_weights),
             num_3_comparison,
-            token_rel_freq_arr_comparison,
+            get_token_rel_freq_arr_comparison(**token_rel_freq_arr_comparison),
             common_end_tokens_comparison,
             postcode_comparison,
         ],
