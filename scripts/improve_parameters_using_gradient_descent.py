@@ -36,11 +36,11 @@ sql = f"""
 create or replace table labels_filtered as
 select * from {labels_path}
 where confidence = 'epc_splink_agree'
-and hash(messy_id) % 10 = 0
+and hash(messy_id) % 100 = 0
 -- and 1=2
 UNION ALL
 select * from {labels_path}
-where confidence in ('likely', 'certain')
+where confidence in ('certain')
 -- limit 100
 
 """
@@ -143,6 +143,7 @@ def black_box(
     FIRST_N_TOKENS_WEIGHT_4=0,
     FIRST_N_TOKENS_WEIGHT_5=-2,
 ):
+    start_time = datetime.now()
     con = duckdb.connect(":memory:")
     sql = "attach 'del.duckdb' as cleaned;"
     con.execute(sql)
@@ -180,6 +181,12 @@ def black_box(
     con.execute("detach cleaned")
     df_os_clean = con.table("df_os_clean")
 
+    end_time = datetime.now()
+    print(
+        f"Time taken to load data: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
+    start_time = datetime.now()
     settings = get_settings_for_training(
         num_1_weights={
             "WEIGHT_1": NUM_1_WEIGHT_1,
@@ -229,7 +236,7 @@ def black_box(
     # import json
 
     # print(json.dumps(settings.get_settings("duckdb").as_dict(), indent=4))
-    logging.getLogger("splink").setLevel(logging.WARNING)
+    logging.getLogger("splink").setLevel(logging.ERROR)
 
     linker = get_linker(
         df_addresses_to_match=df_epc_data_clean,
@@ -242,13 +249,30 @@ def black_box(
     )
     c = linker.visualisations.match_weights_chart()
     c.save("match_weights_chart.html")
+
+    end_time = datetime.now()
+
+    print(
+        f"Time taken to run match weights chart: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
+    start_time = datetime.now()
+
     df_predict = linker.inference.predict(
-        threshold_match_weight=-50, experimental_optimisation=True
+        threshold_match_weight=-20, experimental_optimisation=True
     )
     df_predict_ddb = df_predict.as_duckdbpyrelation()
 
+    end_time = datetime.now()
+    print(
+        f"Time taken to run predict: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
+    start_time = datetime.now()
+
     USE_BIGRAMS = True
 
+    start_time = datetime.now()
     df_predict_improved = improve_predictions_using_distinguishing_tokens(
         df_predict=df_predict_ddb,
         con=con,
@@ -260,6 +284,11 @@ def black_box(
         BIGRAM_REWARD_MULTIPLIER=BIGRAM_REWARD_MULTIPLIER,
         BIGRAM_PUNISHMENT_MULTIPLIER=BIGRAM_PUNISHMENT_MULTIPLIER,
         MISSING_TOKEN_PENALTY=MISSING_TOKEN_PENALTY,
+    )
+
+    end_time = datetime.now()
+    print(
+        f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
     )
 
     # df_with_distinguishability = best_matches_with_distinguishability(
@@ -275,14 +304,6 @@ def black_box(
     # ===================================
 
     # TO DO NEXT:
-    # Allow for additional params for other parts of Splink model
-    # Define loss = max(0, margin - (p_true_match - p_next_best))
-    # To do so we need to set the match weight of the true match to the max match weight
-    # once the margin goes beyond a certain threshold we no longer care about rewarding it more
-    # Then:
-    # Add in 'matches on first n tokens' with a weight to splink model
-    # i.e. on level for first 4, then first 3, first 2 and so on
-
     # And update model for the better token freq rel overlap algo.
 
     # At that point we just really need better labels!
@@ -355,6 +376,7 @@ def black_box(
     # num_non_matches = con.sql(
     #     "select count(*) from truth_status where truth_status = 'false positive'"
     # ).fetchall()[0][0]
+    start_time = datetime.now()
 
     sql = """
     create or replace table to_score as
@@ -410,6 +432,13 @@ def black_box(
     """
     con.execute(sql)
     to_score = con.table("to_score")
+
+    end_time = datetime.now()
+    print(
+        f"Time taken to run to_score: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
+    start_time = datetime.now()
 
     score = to_score.sum("reward").fetchall()[0][0]
     num_labels = labels_filtered.count("*").fetchall()[0][0]
@@ -626,19 +655,19 @@ param_config = {
         "perturb": 1.0,
     },
     "FIRST_N_TOKENS_WEIGHT_1": {
-        "initial": 10,
+        "initial": 8,
         "optimize": True,
         "bounds": (0, 20),
         "perturb": 1.0,
     },
     "FIRST_N_TOKENS_WEIGHT_2": {
-        "initial": 0,
+        "initial": 4,
         "optimize": True,
         "bounds": (0, 20),
         "perturb": 1.0,
     },
     "FIRST_N_TOKENS_WEIGHT_3": {
-        "initial": 0,
+        "initial": 3,
         "optimize": True,
         "bounds": (0, 20),
         "perturb": 1.0,
@@ -781,6 +810,7 @@ with open("optimisation.jsonl", "a") as f:
 
 # Optimization loop
 for iteration in range(num_iterations):
+    start_time = datetime.now()
     alpha = max(alpha * alpha_decay, min_alpha)
     delta = np.random.choice([-1, 1], size=num_params) * perturb_scale
     params_plus = np.clip(params + delta, lower_bounds, upper_bounds)
@@ -803,7 +833,18 @@ for iteration in range(num_iterations):
     params = np.clip(params, lower_bounds, upper_bounds)
 
     params_dict = get_params_dict(params)
+    end_time = datetime.now()
+    print(
+        f"Time taken to run get_params_dict: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
+    start_time = datetime.now()
     result = black_box(**params_dict)
+    end_time = datetime.now()
+    print(
+        f"Time taken to run black_box: {round((end_time - start_time).total_seconds(), 2)}"
+    )
+
     score = result["score"]
     num_matches = result["num_matches"]
     num_non_matches = result["num_non_matches"]
@@ -846,6 +887,10 @@ for iteration in range(num_iterations):
     param_change_magnitude = np.linalg.norm(velocity)
     print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
     print(f"  Velocity: {velocity.tolist()}")
+    end_time = datetime.now()
+    print(
+        f"Time taken to run iteration: {round((end_time - start_time).total_seconds(), 2)}"
+    )
 
     if score > best_score:
         best_score = score
