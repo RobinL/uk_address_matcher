@@ -213,6 +213,28 @@ def black_box(
         distinguishability_thresholds=[1, 5, 10],
         best_match_only=True,
     )
+    # ===================================
+    # ===================================
+    # ===================================
+    # ===================================
+
+    # TO DO NEXT:
+    # Allow for additional params for other parts of Splink model
+    # Define loss = max(0, margin - (p_true_match - p_next_best))
+    # To do so we need to set the match weight of the true match to the max match weight
+    # once the margin goes beyond a certain threshold we no longer care about rewarding it more
+    # Then:
+    # Add in 'matches on first n tokens' with a weight to splink model
+    # i.e. on level for first 4, then first 3, first 2 and so on
+
+    # And update model for the better token freq rel overlap algo.
+
+    # At that point we just really need better labels!
+
+    # ===================================
+    # ===================================
+    # ===================================
+    # ===================================
 
     # print(df_with_distinguishability.count("*").fetchall()[0][0])
     # print(labels_filtered.count("*").fetchall()[0][0])
@@ -327,6 +349,7 @@ def create_chart(history_df, iteration):
         .encode(
             x=alt.X("iteration:O", title="Iteration"),
             y=alt.Y("value:Q", title="Value", scale=alt.Scale(zero=False)),
+            tooltip=["iteration", "value"],
         )
     )
     text_chart = (
@@ -336,6 +359,7 @@ def create_chart(history_df, iteration):
             x=alt.X("iteration:O"),
             y=alt.Y("value:Q"),
             text=alt.Text("value:Q", format=".3f"),
+            tooltip=["iteration", "value"],
         )
     )
     combined_chart = alt.layer(line_chart, text_chart, data=history_df)
