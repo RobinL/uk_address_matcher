@@ -655,12 +655,12 @@ param_config = {
         "bounds": (-20, 0),
         "perturb": 1.0,
     },
-    "REL_FREQ_START_EXP": {
-        "initial": 4,
-        "optimize": False,
-        "bounds": (0, 10),
-        "perturb": 0.5,
-    },
+    # "REL_FREQ_START_EXP": {
+    #     "initial": 4,
+    #     "optimize": False,
+    #     "bounds": (0, 10),
+    #     "perturb": 0.5,
+    # },
     "REL_FREQ_START_WEIGHT": {
         "initial": -4,
         "optimize": True,
