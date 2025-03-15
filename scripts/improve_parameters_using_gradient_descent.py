@@ -102,7 +102,7 @@ con_disk.execute(sql)
 
 def black_box(
     *,
-    IMPROVE_DISTINGUISHING_MWT,
+    IMPROVE_DISTINGUISHING_MWT=-10,
     REWARD_MULTIPLIER=3,
     PUNISHMENT_MULTIPLIER=1.5,
     BIGRAM_REWARD_MULTIPLIER=3,
@@ -213,7 +213,7 @@ def black_box(
         settings=settings,
     )
     c = linker.visualisations.match_weights_chart()
-    # display(c)
+    c.save("match_weights_chart.html")
     df_predict = linker.inference.predict(
         threshold_match_weight=-50, experimental_optimisation=True
     )
@@ -267,8 +267,8 @@ def black_box(
     # print(df_with_distinguishability.count("*").fetchall()[0][0])
     # print(labels_filtered.count("*").fetchall()[0][0])
 
-    max_score = con.sql("select max(match_weight) from truth_status").fetchall()[0][0]
-    min_score = con.sql("select min(match_weight) from truth_status").fetchall()[0][0]
+    # max_score = con.sql("select max(match_weight) from truth_status").fetchall()[0][0]
+    # min_score = con.sql("select min(match_weight) from truth_status").fetchall()[0][0]
 
     # Join on match weight of true matches
 
@@ -301,9 +301,9 @@ def black_box(
 
     case
     when truth_status = 'true positive'
-        then  truth_status_numeric  + 1.0
+        then  truth_status_numeric  + 2.0
     when truth_status = 'false positive'
-        then (-1* truth_status_numeric) - 1.0
+        then (-1* truth_status_numeric) - 2.0
     else truth_status_numeric
     end as score,
 
@@ -423,12 +423,12 @@ def create_chart(history_df, iteration):
 
 # Parameter configuration and initialization remain unchanged
 param_config = {
-    "IMPROVE_DISTINGUISHING_MWT": {
-        "initial": -10,
-        "optimize": False,
-        "bounds": (-30, 5),
-        "perturb": 1.0,
-    },
+    # "IMPROVE_DISTINGUISHING_MWT": {
+    #     "initial": -10,
+    #     "optimize": False,
+    #     "bounds": (-30, 5),
+    #     "perturb": 1.0,
+    # },
     "REWARD_MULTIPLIER": {
         "initial": 3,
         "optimize": True,
@@ -513,6 +513,72 @@ param_config = {
         "bounds": (-10, 1),
         "perturb": 1.0,
     },
+    "REL_FREQ_START_EXP": {
+        "initial": 4,
+        "optimize": False,
+        "bounds": (0, 10),
+        "perturb": 0.5,
+    },
+    "REL_FREQ_START_WEIGHT": {
+        "initial": -4,
+        "optimize": True,
+        "bounds": (-10, 0),
+        "perturb": 0.5,
+    },
+    # "REL_FREQ_SEGMENT_1": {
+    #     "initial": 8,
+    #     "optimize": False,
+    #     "bounds": (1, 20),
+    #     "perturb": 1,
+    # },
+    # "REL_FREQ_SEGMENT_2": {
+    #     "initial": 8,
+    #     "optimize": False,
+    #     "bounds": (1, 20),
+    #     "perturb": 1,
+    # },
+    # "REL_FREQ_SEGMENT_3": {
+    #     "initial": 8,
+    #     "optimize": False,
+    #     "bounds": (1, 20),
+    #     "perturb": 1,
+    # },
+    # "REL_FREQ_SEGMENT_4": {
+    #     "initial": 10,
+    #     "optimize": False,
+    #     "bounds": (1, 20),
+    #     "perturb": 1,
+    # },
+    "REL_FREQ_DELTA_WEIGHT_1": {
+        "initial": 1,
+        "optimize": True,
+        "bounds": (0, 5),
+        "perturb": 0.1,
+    },
+    "REL_FREQ_DELTA_WEIGHT_2": {
+        "initial": 1,
+        "optimize": True,
+        "bounds": (0, 5),
+        "perturb": 0.1,
+    },
+    "REL_FREQ_DELTA_WEIGHT_3": {
+        "initial": 0.25,
+        "optimize": True,
+        "bounds": (0, 2),
+        "perturb": 0.05,
+    },
+    "REL_FREQ_DELTA_WEIGHT_4": {
+        "initial": 0.25,
+        "optimize": True,
+        "bounds": (0, 2),
+        "perturb": 0.05,
+    },
+    "REL_FREQ_PUNISHMENT_MULTIPLIER": {
+        "initial": 0.33,
+        "optimize": True,
+        "bounds": (0, 1),
+        "perturb": 0.05,
+    },
 }
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
@@ -520,10 +586,10 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 0.001
-alpha_decay = 0.995
+alpha = 0.0001
+alpha_decay = 0.99
 min_alpha = 0.0001
-momentum = 0.3
+momentum = 0.5
 num_iterations = 100
 
 params = np.array(initial_params_array)
