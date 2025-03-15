@@ -304,7 +304,10 @@ def black_box(
     # ===================================
 
     # TO DO NEXT:
-    # And update model for the better token freq rel overlap algo.
+    # Update model for the better token freq rel overlap algo.
+    # Update model to allow for the unique tokens in the predict step
+    # Generate new labels.csv with the 3,000 lables
+    # Look at whether we can use a better LLM prompt to improve the labels
 
     # At that point we just really need better labels!
 
