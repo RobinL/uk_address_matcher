@@ -15,6 +15,8 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
 from uk_address_matcher.linking_model.training import get_settings_for_training
 
 import logging
+import json
+from datetime import datetime
 
 if os.path.exists("del.duckdb"):
     os.remove("del.duckdb")
@@ -730,7 +732,7 @@ alpha = 0.5
 alpha_decay = 0.99
 min_alpha = 0.0001
 momentum = 0.3
-num_iterations = 100
+num_iterations = 400
 
 params = np.array(initial_params_array)
 num_params = len(params)
@@ -773,6 +775,9 @@ for name in param_config:
     history.append(
         {"iteration": -1, "variable": name, "value": param_config[name]["initial"]}
     )
+
+with open("optimisation.jsonl", "a") as f:
+    f.write(json.dumps({"restart_time": datetime.now().isoformat()}) + "\n")
 
 # Optimization loop
 for iteration in range(num_iterations):
@@ -846,6 +851,14 @@ for iteration in range(num_iterations):
         best_score = score
         best_params = params.copy()
         print(f"New best score found: {best_score:,.2f}")
+
+        best_params_dict = get_params_dict(best_params)
+        best_params_dict["score"] = best_score
+        best_params_dict["iteration"] = iteration
+        best_params_dict["timestamp"] = datetime.now().isoformat()
+
+        with open("optimisation.jsonl", "a") as f:
+            f.write(json.dumps(best_params_dict) + "\n")
 
     if param_change_magnitude < 1e-5 and iteration > 10:
         print(f"Converged at iteration {iteration} - parameter changes too small")
