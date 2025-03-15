@@ -825,7 +825,7 @@ for iteration in range(num_iterations):
     gradient = np.zeros(num_params)
     for idx in range(num_params):
         perturb = np.zeros(num_params)
-        perturb[idx] = perturb_scale[idx]
+        perturb[idx] = 0.1 * perturb_scale[idx]  # Perturb by 10% of the scale
 
         params_plus = np.clip(params + perturb, lower_bounds, upper_bounds)
         params_minus = np.clip(params - perturb, lower_bounds, upper_bounds)
@@ -842,13 +842,10 @@ for iteration in range(num_iterations):
     print(f"    Parameters (before update): {params.tolist()}")
     print(f"    Current alpha: {alpha:.6f}")
 
-    # Compute the update step but bound it by `perturb`
-    update_step = np.clip(alpha * gradient, -perturb_scale, perturb_scale)
-
-    # Apply momentum (but keeping max change limited)
-    velocity = momentum * velocity + update_step
-    params += velocity
-    params = np.clip(params, lower_bounds, upper_bounds)
+    # Compute the update step without clipping, allowing unrestricted updates
+    update_step = alpha * gradient  # Allow unrestricted updates based on gradient
+    params += update_step + momentum * velocity  # Apply momentum-enhanced update
+    params = np.clip(params, lower_bounds, upper_bounds)  # Keep parameters in bounds
 
     params_dict = get_params_dict(params)
     end_time = datetime.now()
