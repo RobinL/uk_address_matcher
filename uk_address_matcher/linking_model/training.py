@@ -16,6 +16,72 @@ original_address_concat_comparison = cl.ExactMatch(
 ).configure(u_probabilities=[1, 2], m_probabilities=[15, 1])
 
 
+def get_flat_positional_comparison(
+    WEIGHT_1=6.57,
+    WEIGHT_2=6.57,
+    WEIGHT_3=0,
+    WEIGHT_4=0,
+    WEIGHT_5=-5,
+):
+    flat_positional_comparison = {
+        "output_column_name": "flat_positional",
+        "comparison_levels": [
+            # Note AND not OR
+            {
+                "sql_condition": '"flat_positional_l" IS NULL AND "flat_positional_r" IS NULL AND "flat_letter_l" IS NULL AND "flat_letter_r" IS NULL',
+                "label_for_charts": "Null",
+                "is_null_level": True,
+            },
+            {
+                "sql_condition": "flat_positional_l = flat_positional_r",
+                "label_for_charts": "Exact match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_1),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "flat_letter_l = flat_letter_r",
+                "label_for_charts": "Exact match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_2),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "flat_letter_l = numeric_token_1_r OR flat_letter_r = numeric_token_1_l",
+                "label_for_charts": "Exact match inverted numbers",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_3),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": """
+            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)
+            or
+            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)
+            """,
+                "label_for_charts": "Exact match",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_4),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+            {
+                "sql_condition": "ELSE",
+                "label_for_charts": "All other comparisons",
+                "m_probability": match_weight_to_bayes_factor(WEIGHT_5),
+                "u_probability": 1,
+                "fix_m_probability": toggle_m_probability_fix,
+                "fix_u_probability": toggle_u_probability_fix,
+            },
+        ],
+        "comparison_description": "Flat position comparison",
+    }
+    return flat_positional_comparison
+
+
 def get_num_1_comparison(
     WEIGHT_1=6.57,
     WEIGHT_2=6.57,
@@ -405,62 +471,6 @@ postcode_comparison = {
     ],
 }
 
-flat_positional_comparison = {
-    "output_column_name": "flat_positional",
-    "comparison_levels": [
-        # Note AND not OR
-        {
-            "sql_condition": '"flat_positional_l" IS NULL AND "flat_positional_r" IS NULL AND "flat_letter_l" IS NULL AND "flat_letter_r" IS NULL',
-            "label_for_charts": "Null",
-            "is_null_level": True,
-        },
-        {
-            "sql_condition": "flat_positional_l = flat_positional_r",
-            "label_for_charts": "Exact match",
-            "m_probability": 0.95,
-            "u_probability": 0.01,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": "flat_letter_l = flat_letter_r",
-            "label_for_charts": "Exact match",
-            "m_probability": 0.95,
-            "u_probability": 0.01,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": "flat_letter_l = numeric_token_1_r OR flat_letter_r = numeric_token_1_l",
-            "label_for_charts": "Exact match inverted numbers",
-            "m_probability": 1,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": """
-            (flat_positional_l IS NOT NULL and flat_positional_r IS NULL and flat_letter_r IS NOT NULL)
-            or
-            (flat_positional_r IS NOT NULL and flat_positional_l IS NULL and flat_letter_l IS NOT NULL)
-            """,
-            "label_for_charts": "Exact match",
-            "m_probability": 1,
-            "u_probability": 1,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-        {
-            "sql_condition": "ELSE",
-            "label_for_charts": "All other comparisons",
-            "m_probability": 1,
-            "u_probability": 32,
-            "fix_m_probability": toggle_m_probability_fix,
-            "fix_u_probability": toggle_u_probability_fix,
-        },
-    ],
-    "comparison_description": "Flat position comparison",
-}
 
 blocking_rules = old_blocking_rules + [block_on("postcode")]
 
@@ -469,6 +479,7 @@ def get_settings_for_training(
     num_1_weights=None,
     num_2_weights=None,
     token_rel_freq_arr_comparison=None,
+    flat_positional_weights=None,
 ):
     num_1_weights = num_1_weights or {}
     num_2_weights = num_2_weights or {}
@@ -479,7 +490,7 @@ def get_settings_for_training(
         blocking_rules_to_generate_predictions=blocking_rules,
         comparisons=[
             original_address_concat_comparison,
-            flat_positional_comparison,
+            get_flat_positional_comparison(**flat_positional_weights),
             get_num_1_comparison(**num_1_weights),
             get_num_2_comparison(**num_2_weights),
             num_3_comparison,

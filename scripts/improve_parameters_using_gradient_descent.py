@@ -119,6 +119,11 @@ def black_box(
     NUM_2_WEIGHT_2=1,
     NUM_2_WEIGHT_3=1 / 16,
     NUM_2_WEIGHT_4=1 / 256,
+    FLAT_POSITIONAL_WEIGHT_1=6.57,
+    FLAT_POSITIONAL_WEIGHT_2=6.57,
+    FLAT_POSITIONAL_WEIGHT_3=0,
+    FLAT_POSITIONAL_WEIGHT_4=0,
+    FLAT_POSITIONAL_WEIGHT_5=-5,
     REL_FREQ_START_EXP=4,
     REL_FREQ_START_WEIGHT=-4,
     REL_FREQ_SEGMENT_1=8,
@@ -181,6 +186,13 @@ def black_box(
             "WEIGHT_2": NUM_2_WEIGHT_2,
             "WEIGHT_3": NUM_2_WEIGHT_3,
             "WEIGHT_4": NUM_2_WEIGHT_4,
+        },
+        flat_positional_weights={
+            "WEIGHT_1": FLAT_POSITIONAL_WEIGHT_1,
+            "WEIGHT_2": FLAT_POSITIONAL_WEIGHT_2,
+            "WEIGHT_3": FLAT_POSITIONAL_WEIGHT_3,
+            "WEIGHT_4": FLAT_POSITIONAL_WEIGHT_4,
+            "WEIGHT_5": FLAT_POSITIONAL_WEIGHT_5,
         },
         token_rel_freq_arr_comparison={
             "START_EXP": REL_FREQ_START_EXP,
@@ -442,7 +454,7 @@ param_config = {
     "PUNISHMENT_MULTIPLIER": {
         "initial": 1.5,
         "optimize": True,
-        "bounds": (0.2, 20),
+        "bounds": (0.0, 20),
         "perturb": 0.5,
     },
     "BIGRAM_REWARD_MULTIPLIER": {
@@ -454,7 +466,7 @@ param_config = {
     "BIGRAM_PUNISHMENT_MULTIPLIER": {
         "initial": 1.5,
         "optimize": True,
-        "bounds": (0.2, 20),
+        "bounds": (0, 20),
         "perturb": 0.5,
     },
     "MISSING_TOKEN_PENALTY": {
@@ -515,6 +527,36 @@ param_config = {
         "initial": -4,
         "optimize": True,
         "bounds": (-10, 1),
+        "perturb": 1.0,
+    },
+    "FLAT_POSITIONAL_WEIGHT_1": {
+        "initial": 6.57,
+        "optimize": True,
+        "bounds": (1, 30),
+        "perturb": 1.0,
+    },
+    "FLAT_POSITIONAL_WEIGHT_2": {
+        "initial": 6.57,
+        "optimize": True,
+        "bounds": (1, 30),
+        "perturb": 1.0,
+    },
+    "FLAT_POSITIONAL_WEIGHT_3": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (-10, 10),
+        "perturb": 1.0,
+    },
+    "FLAT_POSITIONAL_WEIGHT_4": {
+        "initial": 0,
+        "optimize": True,
+        "bounds": (-10, 10),
+        "perturb": 1.0,
+    },
+    "FLAT_POSITIONAL_WEIGHT_5": {
+        "initial": -5,
+        "optimize": True,
+        "bounds": (-10, 10),
         "perturb": 1.0,
     },
     "REL_FREQ_START_EXP": {
@@ -590,7 +632,7 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 0.01
+alpha = 0.5
 alpha_decay = 0.99
 min_alpha = 0.0001
 momentum = 0.3
