@@ -20,7 +20,9 @@ if os.path.exists("del.duckdb"):
     os.remove("del.duckdb")
 con_disk = duckdb.connect("del.duckdb")
 
-epc_path = "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=true)"
+epc_path = (
+    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=radient)"
+)
 
 full_os_path = (
     "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
@@ -338,6 +340,8 @@ def black_box(
     # ).show(max_width=100000)
 
     score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
+    num_labels = con.sql("select count(*) from labels_filtered").fetchall()[0][0]
+    score = score / num_labels
     num_matches = con.sql(
         "select sum(truth_status_binary) from truth_status"
     ).fetchall()[0][0]
@@ -565,19 +569,19 @@ param_config = {
         "initial": 0.25,
         "optimize": True,
         "bounds": (0, 2),
-        "perturb": 0.05,
+        "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_4": {
         "initial": 0.25,
         "optimize": True,
         "bounds": (0, 2),
-        "perturb": 0.05,
+        "perturb": 0.1,
     },
     "REL_FREQ_PUNISHMENT_MULTIPLIER": {
         "initial": 0.33,
         "optimize": True,
         "bounds": (0, 1),
-        "perturb": 0.05,
+        "perturb": 0.03,
     },
 }
 param_names = [name for name, config in param_config.items() if config["optimize"]]
@@ -586,10 +590,10 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 0.0001
+alpha = 0.01
 alpha_decay = 0.99
 min_alpha = 0.0001
-momentum = 0.5
+momentum = 0.7
 num_iterations = 100
 
 params = np.array(initial_params_array)
@@ -643,9 +647,14 @@ for iteration in range(num_iterations):
     print(f"    Parameters (before update): {params.tolist()}")
     print(f"    Current alpha: {alpha:.6f}")
 
-    velocity = momentum * velocity + alpha * gradient
+    # Compute the update step but bound it by `perturb`
+    update_step = np.clip(alpha * gradient, -perturb_scale, perturb_scale)
+
+    # Apply momentum (but keeping max change limited)
+    velocity = momentum * velocity + update_step
     params -= velocity
     params = np.clip(params, lower_bounds, upper_bounds)
+
     params_dict = get_params_dict(params)
     result = black_box(**params_dict)
     score = result["score"]
