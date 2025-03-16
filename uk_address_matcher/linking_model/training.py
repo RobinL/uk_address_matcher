@@ -29,50 +29,52 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
     matching_tokens = f"""
     list_reduce(
         list_prepend(
-            1.0,
+        1.0,
+        list_filter(
             list_transform(
-                {column_name}_l,
-                x -> CASE
-                        WHEN array_contains(
-                            list_transform({column_name}_r, y -> y.tok),
-                            x.tok
-                        )
-                        THEN x.rel_freq
-                        ELSE 1.0
-                    END
-            )
+            flatten(
+                list_transform(
+                map_entries({column_name}_l),
+                entry -> CASE
+                            WHEN COALESCE({column_name}_r[entry.key], 0) > 0
+                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, {column_name}_r[entry.key])))
+                            ELSE list_value()
+                        END
+                )
+            ),
+            x -> x
+            ),
+            x -> x IS NOT NULL
+        )
         ),
         (p, q) -> p * q
-    )"""
+    )
+    """
 
-    # # Second part - divide by frequencies of non-matching tokens
-    # non_matching_tokens = f"""
+    # This current fails if experimental optimisation on splink==4.0.7.dev1 is enabled
+    # https://github.com/moj-analytical-services/splink/pull/2630
+    # It doesn't appear to improve accuracy anyway
+    #
+    # missing_tokens_product = f"""
     # list_reduce(
     #     list_prepend(
     #         1.0,
-    #         list_transform(
-    #             list_concat(
-    #                 array_filter(
-    #                     {column_name}_l,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_r, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 ),
-    #                 array_filter(
-    #                     {column_name}_r,
-    #                     y -> NOT array_contains(
-    #                             list_transform({column_name}_l, x -> x.tok),
-    #                             y.tok
-    #                         )
-    #                 )
+    #         list_concat(
+    #             list_transform(
+    #                 map_entries({column_name}_l),
+    #                 entry -> POW(entry.key.rel_freq, GREATEST(entry.value::INTEGER - COALESCE({column_name}_r[entry.key], 0), 0))
     #             ),
-    #             x -> x.rel_freq
+    #             list_transform(
+    #                 map_entries({column_name}_r),
+    #                 entry -> POW(entry.key.rel_freq, GREATEST(entry.value::INTEGER - COALESCE({column_name}_l[entry.key], 0), 0))
+    #             )
     #         )
     #     ),
-    #     (p, q) -> p / q^{power}
-    # )"""
+    #     (p, q) -> p * q
+    # )
+    # """
 
+    # return f"{matching_tokens} / POW({missing_tokens_product}, 0.33)"
     return f"{matching_tokens}"
 
 
@@ -215,7 +217,7 @@ num_3_comparison = {
     "comparison_description": "numeric_token_3",
 }
 
-arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", 0.33)
+arr_red_sql = array_reduce_by_freq("token_rel_freq_arr_hist", 0.33)
 
 
 def generate_arr_reduce_data(start_exp, end_exp=2, step=-1):
@@ -262,7 +264,7 @@ token_rel_freq_arr_comparison = {
     "output_column_name": "token_rel_freq_arr",
     "comparison_levels": [
         {
-            "sql_condition": '"token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or length("token_rel_freq_arr_l") = 0 or length("token_rel_freq_arr_r") = 0',
+            "sql_condition": '"token_rel_freq_arr_hist_l" IS NULL OR "token_rel_freq_arr_hist_r" IS NULL',
             "label_for_charts": "Null",
             "is_null_level": True,
         },
@@ -279,13 +281,13 @@ token_rel_freq_arr_comparison = {
     "comparison_description": "Token relative frequency array",
 }
 
-arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
+arr_red_sql = array_reduce_by_freq("common_end_tokens_hist", 0.1)
 
 common_end_tokens_comparison = {
     "output_column_name": "common_end_tokens",
     "comparison_levels": [
         {
-            "sql_condition": '"common_end_tokens_l" IS NULL OR "common_end_tokens_r" IS NULL or length("common_end_tokens_l") = 0 or length("common_end_tokens_r") = 0',
+            "sql_condition": '"common_end_tokens_hist_l" IS NULL OR "common_end_tokens_hist_r" IS NULL',
             "label_for_charts": "Null",
             "is_null_level": True,
         },

@@ -45,7 +45,7 @@ def improve_predictions_using_distinguishing_tokens(
     FROM good_matches
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY unique_id_r
-        ORDER BY match_weight DESC
+        ORDER BY match_weight DESC, unique_id_l
     ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
     """
     top_n_matches = con.sql(sql_top_n_matches)
@@ -54,6 +54,9 @@ def improve_predictions_using_distinguishing_tokens(
     sql_remove_common_end_tokens = """
     SELECT
         * EXCLUDE (original_address_concat_r, original_address_concat_l),
+
+        map_keys(common_end_tokens_hist_r) as common_end_tokens_r,
+
 
         original_address_concat_l
             .trim()

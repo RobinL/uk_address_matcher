@@ -8,6 +8,7 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
 from IPython.display import display
+from uk_address_matcher.linking_model.training import settings_for_training
 
 overall_start_time = time.time()
 
@@ -34,6 +35,7 @@ and hash(messy_id) % 10 = 0
 UNION ALL
 select * from {labels_path}
 where confidence in ('likely', 'certain')
+
 
 """
 labels_filtered = con.sql(sql)
@@ -93,7 +95,7 @@ print(f"Time to load/clean: {end_time - overall_start_time} seconds")
 # -----------------------------------------------------------------------------
 # Step 3: Link data - pass 1
 # -----------------------------------------------------------------------------
-
+settings = settings_for_training
 
 linker = get_linker(
     df_addresses_to_match=df_epc_data_clean,
@@ -102,10 +104,8 @@ linker = get_linker(
     include_full_postcode_block=True,
     include_outside_postcode_block=True,
     retain_intermediate_calculation_columns=True,
-    additional_columns_to_retain=[
-        "common_end_tokens",
-        "token_rel_freq_arr",
-    ],
+    additional_columns_to_retain=[],
+    settings=settings,
 )
 
 
@@ -153,7 +153,7 @@ print(
 
 
 sql = """
-CREATE OR REPLACE TABLE matches_with_epc_and_os as
+CREATE OR REPLACE TABLE matches_with_epc_and_os_predict as
 
 select
     m.*,
@@ -178,7 +178,7 @@ con.execute(sql)
 
 sql = """
 select truth_status, count(*) as count
-from matches_with_epc_and_os
+from matches_with_epc_and_os_predict
 group by truth_status
 """
 con.sql(sql).show(max_width=400, max_rows=40)
@@ -192,7 +192,7 @@ print(
 
 sql = """
 select truth_status, label_confidence, count(*) as count
-from matches_with_epc_and_os
+from matches_with_epc_and_os_predict
 group by truth_status, label_confidence
 order by label_confidence, truth_status desc
 """
@@ -215,7 +215,7 @@ select
 from df_predict_improved m
 left join epc_data_raw e on m.unique_id_r = e.unique_id
 left join labels_filtered l on m.unique_id_r = l.messy_id
-QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) =1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC, unique_id_l) =1
 
 """
 con.execute(sql)
@@ -300,8 +300,8 @@ cols = """
     numeric_token_1,
     numeric_token_2,
     numeric_token_3,
-    array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
-    array_transform(common_end_tokens, x -> x.tok) as cet_arr,
+    token_rel_freq_arr_hist as tok_arr,
+    common_end_tokens_hist as cet_arr,
 
     unique_id
     """

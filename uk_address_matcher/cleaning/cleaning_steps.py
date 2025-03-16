@@ -190,7 +190,6 @@ def clean_address_string_second_pass(
     select
         * exclude (address_without_numbers),
         {fn_call} as address_without_numbers,
-
     from ddb_pyrel
     """
 
@@ -397,8 +396,12 @@ def final_column_order(
         numeric_token_1,
         numeric_token_2,
         numeric_token_3,
-        token_rel_freq_arr,
-        common_end_tokens,
+        -- token_rel_freq_arr,
+
+        list_aggregate(token_rel_freq_arr, 'histogram') as token_rel_freq_arr_hist,
+        list_aggregate(common_end_tokens,'histogram') AS common_end_tokens_hist,
+
+        --common_end_tokens,
         postcode,
 
         * exclude (
