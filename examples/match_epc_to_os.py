@@ -7,7 +7,6 @@ from uk_address_matcher import (
 )
 from uk_address_matcher.post_linkage.analyse_results import (
     best_matches_summary,
-    best_matches_with_distinguishability,
 )
 from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
@@ -42,7 +41,6 @@ select
    UPRN_SOURCE as uprn_source
 from {epc_path}
 -- where lower(filename) like '%hammersmith%'
-limit 1000
 """
 con.execute(sql)
 
@@ -165,7 +163,7 @@ select
 from df_predict_improved m
 left join epc_data_raw e on m.unique_id_r = substr(e.unique_id, 1, 12)
 left join df_os_clean o on e.uprn = o.unique_id
-QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) =1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC, unique_id_l) =1
 
 """
 con.execute(sql)
@@ -214,8 +212,8 @@ cols = """
     numeric_token_1,
     numeric_token_2,
     numeric_token_3,
-    array_transform(token_rel_freq_arr, x -> x.tok) as tok_arr,
-    array_transform(common_end_tokens, x -> x.tok) as cet_arr,
+    token_rel_freq_arr_hist as tok_arr,
+    common_end_tokens_hist as cet_arr,
     unique_id
     """
 sql = f"""
