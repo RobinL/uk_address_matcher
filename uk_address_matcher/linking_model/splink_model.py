@@ -33,6 +33,7 @@ def get_linker(
     precomputed_numeric_tf_table: DuckDBPyRelation | None = None,
     retain_intermediate_calculation_columns=False,
     retain_matching_columns=True,
+    settings: SettingsCreator | None = None,
 ) -> Linker:
     # Check if either input dataset contains a source_dataset column
     if (
@@ -44,7 +45,10 @@ def get_linker(
             "before calling get_linker as it will be overwritten by the linker."
         )
 
-    settings_as_dict = _get_model_settings_dict()
+    if settings is None:
+        settings_as_dict = _get_model_settings_dict()
+    else:
+        settings_as_dict = settings.create_settings_dict("duckdb")
 
     if additional_columns_to_retain:
         settings_as_dict.setdefault("additional_columns_to_retain", [])

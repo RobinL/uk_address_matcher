@@ -133,11 +133,11 @@ addresses:
   # part overlaps twice so  tok rel freq comparison comes out better
   - messy_address: ["11 WEST STREET WAVHAM-BY-SEA WAVHAM-BY-SEA", "AA11 2BB"]
     canonical_addresses:
+      - ["11 WEST STREET WAVHAM-BY-SEA", "AA11 2BB"]
       - [
-          "DEVELOPMENT SITE OF 11 WEST STREET AND REAR HALL WEST STREET WAVHAM-BY-SEA",
+          "DEVELOPMENT SITE OF 11 WEST STREET AND REAR HALL WEST STREET WAVHAM-BY-SEA WAVHAM-BY-SEA",
           "AA11 2BB",
         ]
-      - ["11 WEST STREET WAVHAM-BY-SEA", "AA11 2BB"]
 
   # 17. Based on EPC id 144198335904
   # MILTON KEYES is causing too much punishment here!

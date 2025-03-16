@@ -60,7 +60,9 @@ def run_assertions(
         # Generate test data and create a DuckDB table
         data = generate_test_data(messy_address, canonical_addresses, common_end_token)
         df = pd.DataFrame(data)
-        df_ddb = con.sql("select * from df")
+        df_ddb = con.sql(
+            "select *, array_aggregate(common_end_tokens_r, 'histogram') as common_end_tokens_hist_r from df"
+        )
         if show:
             df_ddb.show(max_width=10000)
         # Improve predictions using the distinguishing tokens function
