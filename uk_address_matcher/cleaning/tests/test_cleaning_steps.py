@@ -1,6 +1,7 @@
 import duckdb
 from uk_address_matcher.cleaning.cleaning_steps import (
     parse_out_flat_position_and_letter,
+    remove_duplicate_end_tokens,
 )
 
 
@@ -79,3 +80,52 @@ def test_parse_out_flat_positional():
         },
     ]
     run_tests(test_cases)
+
+
+def test_remove_duplicate_end_tokens():
+    test_cases = [
+        {
+            "input": "9A SOUTHVIEW ROAD SOUTHWICK LONDON LONDON",
+            "expected": "9A SOUTHVIEW ROAD SOUTHWICK LONDON",
+        },
+        {
+            "input": "1 HIGH STREET ST ALBANS ST ALBANS",
+            "expected": "1 HIGH STREET ST ALBANS",
+        },
+        {
+            "input": "2 CORINATION ROAD KINGS LANGLEY HERTFORDSHIRE HERTFORDSHIRE",
+            "expected": "2 CORINATION ROAD KINGS LANGLEY HERTFORDSHIRE",
+        },
+        {
+            "input": "FLAT 2 8 ORCHARD WAY MILTON KEYNES MILTON KEYNES",
+            "expected": "FLAT 2 8 ORCHARD WAY MILTON KEYNES",
+        },
+        {
+            "input": "9 SOUTHVIEW ROAD SOUTHWICK LONDON",
+            "expected": "9 SOUTHVIEW ROAD SOUTHWICK LONDON",
+        },
+        {
+            "input": "1 LONDON ROAD LONDON",
+            "expected": "1 LONDON ROAD LONDON",
+        },
+    ]
+
+    duckdb_connection = duckdb.connect()
+
+    # Prepare test data
+    test_data = "SELECT * FROM (VALUES\n"
+    test_data += ",\n".join(f"('{case['input']}')" for case in test_cases)
+    test_data += ") AS t(address_concat)"
+
+    input_relation = duckdb_connection.sql(test_data)
+
+    # Run the function
+    result = remove_duplicate_end_tokens(input_relation, duckdb_connection)
+    results = result.fetchall()
+
+    # Assert results
+    for actual_row, case in zip(results, test_cases):
+        assert actual_row[0] == case["expected"], (
+            f"For address '{case['input']}', "
+            f"expected '{case['expected']}' but got '{actual_row[0]}'"
+        )
