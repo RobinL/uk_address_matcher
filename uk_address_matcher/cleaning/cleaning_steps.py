@@ -225,6 +225,35 @@ def tokenise_address_without_numbers(
     return con.sql(sql)
 
 
+def remove_duplicate_end_tokens(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Removes duplicated tokens at the end of the address.
+    E.g. 'HIGH STREET ST ALBANS ST ALBANS' -> 'HIGH STREET ST ALBANS'
+    """
+    sql = """
+    with tokenised as (
+    select *, string_split(address_concat, ' ') as cleaned_tokenised
+    from ddb_pyrel
+    )
+    SELECT
+        * EXCLUDE (cleaned_tokenised, address_concat),
+        CASE
+            WHEN array_length(cleaned_tokenised) >= 2
+                AND cleaned_tokenised[-1] = cleaned_tokenised[-2]
+                THEN array_to_string(cleaned_tokenised[:-2], ' ')
+            WHEN array_length(cleaned_tokenised) >= 4
+                AND cleaned_tokenised[-4] = cleaned_tokenised[-2]
+                AND cleaned_tokenised[-3] = cleaned_tokenised[-1]
+                THEN array_to_string(cleaned_tokenised[:-3], ' ')
+            ELSE address_concat
+        END AS address_concat
+    FROM tokenised
+    """
+    return con.sql(sql)
+
+
 def get_token_frequeny_table(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:

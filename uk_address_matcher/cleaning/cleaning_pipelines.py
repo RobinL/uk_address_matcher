@@ -22,6 +22,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     upper_case_address_and_postcode,
     use_first_unusual_token_if_no_numeric_token,
     get_token_frequeny_table,
+    remove_duplicate_end_tokens,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -35,6 +36,7 @@ QUEUE_PRE_TF = [
     trim_whitespace_address_and_postcode,
     upper_case_address_and_postcode,
     clean_address_string_first_pass,
+    remove_duplicate_end_tokens,
     derive_original_address_concat,
     parse_out_flat_position_and_letter,
     parse_out_numbers,
