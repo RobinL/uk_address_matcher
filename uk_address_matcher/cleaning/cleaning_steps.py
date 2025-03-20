@@ -548,3 +548,124 @@ def separate_unusual_tokens(
     FROM ddb_pyrel
     """
     return con.sql(sql)
+
+
+def separate_unique_and_common_tokens(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Identifies common suffixes between addresses and separates them into unique and common parts.
+    This function analyzes each address in relation to its neighbors (previous and next addresses
+    when sorted by unique_id) to find common suffix patterns. It then splits each address into:
+    - unique_tokens: The tokens that are unique to this address (typically the beginning part)
+    - common_tokens: The tokens that are shared with neighboring addresses (typically the end part)
+    Args:
+        ddb_pyrel (DuckDBPyRelation): The input relation
+        con (DuckDBPyConnection): The DuckDB connection
+    Returns:
+        DuckDBPyRelation: The modified table with unique_tokens and common_tokens fields
+    """
+    sql = """
+    WITH tokens AS (
+        SELECT
+            regexp_split_to_array(replace(replace(address_concat, ',', ' '), 'FLAT', ' '), '\\s+') AS __tokens,
+            row_number() OVER (ORDER BY reverse(address_concat)) AS row_order,
+            *
+        FROM ddb_pyrel
+    ),
+    with_neighbors AS (
+        SELECT
+            lag(__tokens) OVER (ORDER BY row_order) AS __prev_tokens,
+            lead(__tokens) OVER (ORDER BY row_order) AS __next_tokens,
+            *
+        FROM tokens
+    ),
+    with_suffix_lengths AS (
+        SELECT
+            len(__tokens) AS __token_count,
+            -- Calculate common suffix length with previous address
+            CASE WHEN __prev_tokens IS NOT NULL THEN
+                (SELECT max(i)
+                FROM range(0, least(len(__tokens), len(__prev_tokens))) AS t(i)
+                WHERE list_slice(list_reverse(__tokens), 1, i+1) =
+                    list_slice(list_reverse(__prev_tokens), 1, i+1))
+            ELSE 0 END AS prev_common_suffix,
+            -- Calculate common suffix length with next address
+            CASE WHEN __next_tokens IS NOT NULL THEN
+                (SELECT max(i)
+                FROM range(0, least(len(__tokens), len(__next_tokens))) AS t(i)
+                WHERE list_slice(list_reverse(__tokens), 1, i+1) =
+                    list_slice(list_reverse(__next_tokens), 1, i+1))
+            ELSE 0 END AS next_common_suffix,
+            *
+        FROM with_neighbors
+    ),
+    with_unique_parts AS (
+        SELECT
+            *,
+            -- Find the maximum common suffix length
+            greatest(prev_common_suffix, next_common_suffix) AS max_common_suffix,
+            -- Use list_filter with index to keep only the unique part at the beginning
+            list_filter(__tokens, (token, i) -> i < __token_count - greatest(prev_common_suffix, next_common_suffix)) AS unique_tokens,
+            -- Use list_filter with index to keep only the common part at the end
+            list_filter(__tokens, (token, i) -> i >= __token_count - greatest(prev_common_suffix, next_common_suffix)) AS common_tokens
+        FROM with_suffix_lengths
+    )
+    SELECT
+        * EXCLUDE (__tokens, __prev_tokens, __next_tokens, __token_count, max_common_suffix, next_common_suffix, prev_common_suffix, row_order, common_tokens,unique_tokens),
+        COALESCE(unique_tokens, ARRAY[]) AS unique_tokens,
+        COALESCE(common_tokens, ARRAY[]) AS common_tokens,
+    FROM
+    with_unique_parts
+    """
+
+    return con.sql(sql)
+
+
+def generalise_unique_tokens(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Maps specific tokens to more general categories to create a generalised representation
+    of the unique tokens in an address.
+    This function applies the following mappings:
+    - Single letters (A-E) -> UNIT_NUM_LET
+    - Single digits (1-5) -> UNIT_NUM_LET
+    - Floor indicators (FIRST, SECOND, THIRD) -> LEVEL
+    - Position indicators (TOP, FIRST, SECOND, THIRD) -> TOP
+    The following tokens are filtered out completely:
+    - FLAT, APARTMENT, UNIT
+    Args:
+        ddb_pyrel (DuckDBPyRelation): The input relation with unique_tokens field
+        con (DuckDBPyConnection): The DuckDB connection
+    Returns:
+        DuckDBPyRelation: The modified table with generalised_unique_tokens field
+    """
+    sql = """
+    SELECT
+        *,
+        -- First transform tokens according to mapping rules
+        -- Then filter out any empty strings (which represent removed tokens)
+        list_filter(
+            list_transform(unique_tokens, token ->
+                CASE
+                    -- Tokens to filter out completely
+                    WHEN token = 'FLAT' OR token = 'APARTMENT' OR token = 'UNIT' THEN ''
+                    -- Map single letters A-E to UNIT_NUM_LET
+                    WHEN token = 'A' OR token = 'B' OR token = 'C' OR token = 'D' OR token = 'E' THEN 'UNIT_NUM_LET'
+                    -- Map single digits 1-5 to UNIT_NUM_LET
+                    WHEN token = '1' OR token = '2' OR token = '3' OR token = '4' OR token = '5' THEN 'UNIT_NUM_LET'
+                    -- Map floor indicators to LEVEL
+                    WHEN token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'LEVEL'
+                    -- Map position indicators to TOP
+                    WHEN token = 'TOP' OR token = 'FIRST' OR token = 'SECOND' OR token = 'THIRD' THEN 'TOP'
+                    -- Keep other tokens as they are
+                    ELSE token
+                END
+            ),
+            x -> x != ''  -- Filter out empty strings
+        ) AS generalised_unique_tokens
+    FROM ddb_pyrel
+    """
+
+    return con.sql(sql)
