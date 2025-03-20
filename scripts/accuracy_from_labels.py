@@ -101,7 +101,7 @@ linker = get_linker(
     df_addresses_to_match=df_epc_data_clean,
     df_addresses_to_search_within=df_os_clean,
     con=con,
-    include_full_postcode_block=False,
+    include_full_postcode_block=True,
     include_outside_postcode_block=True,
     retain_intermediate_calculation_columns=True,
     additional_columns_to_retain=[],
@@ -129,7 +129,7 @@ USE_BIGRAMS = True
 df_predict_improved = improve_predictions_using_distinguishing_tokens(
     df_predict=df_predict_ddb,
     con=con,
-    match_weight_threshold=-5,
+    match_weight_threshold=-10,
     top_n_matches=5,
     use_bigrams=USE_BIGRAMS,
 )
@@ -244,182 +244,182 @@ order by label_confidence, truth_status desc
 con.sql(sql).show(max_width=400, max_rows=40)
 
 
-# # -----------------------------------------------------------------------------
-# # LOOK AT FALSE POSITIVES
-# # -----------------------------------------------------------------------------
-# # %%
+# -----------------------------------------------------------------------------
+# LOOK AT FALSE POSITIVES
+# -----------------------------------------------------------------------------
+# %%
 
-# print("=" * 200)
-# # Want to see waterfall for correct and wrong
+print("=" * 200)
+# Want to see waterfall for correct and wrong
 
-# sql = """
-# select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match, correct_uprn as correct_uprn
-# from matches_with_epc_and_os
-# where 1=1
-# and truth_status = 'false positive'
-# --and epc_id = '732941539062014031115561564858454'
-# and label_confidence = 'epc_splink_agree'
-# order by random()
-# limit 1
-# """
+sql = """
+select unique_id_r as epc_id, unique_id_l as our_match, epc_uprn as their_match, correct_uprn as correct_uprn
+from matches_with_epc_and_os
+where 1=1
+and truth_status = 'false positive'
+--and epc_id = '732941539062014031115561564858454'
+and label_confidence = 'epc_splink_agree'
+order by random()
+limit 1
+"""
 
-# epc_row_id, our_uprn_match, their_uprn_match, correct_uprn = con.sql(sql).fetchall()[0]
+epc_row_id, our_uprn_match, their_uprn_match, correct_uprn = con.sql(sql).fetchall()[0]
 
-# # show original address
+# show original address
+
+sql = f"""
+select address_concat as epc_raw_address, postcode as epc_raw_postcode, unique_id
+from epc_data_raw
+where unique_id = '{epc_row_id}'
+"""
+
+con.sql(sql).show()
+
+sql = f"""
+select *
+from df_epc_data_clean
+where unique_id = '{epc_row_id}'
+"""
+
+con.sql(sql).show(max_width=100000)
+
+
+sql = f"""
+select fulladdress as llm_correct_match
+from {full_os_path}
+ where uprn = '{correct_uprn}'
+"""
+con.sql(sql).show(max_width=100000)
+
+
+cols = """
+    concat_ws(' ', original_address_concat, postcode) as original_address_concat,
+
+    flat_positional,
+    flat_letter,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    token_rel_freq_arr_hist as tok_arr,
+    common_end_tokens_hist as cet_arr,
+
+    unique_id
+    """
+sql = f"""
+select
+    'epc' as source, {cols}
+from df_epc_data_clean
+where substr(unique_id, 1, 12) = '{epc_row_id}'
+UNION ALL
+select
+    'our_match' as source, {cols}
+from df_os_clean
+where unique_id = '{our_uprn_match}'
+UNION ALL
+select
+    'correct_match' as source, {cols}
+from df_os_clean
+where unique_id = '{correct_uprn}'
+UNION ALL
+select
+    'epc_match' as source, {cols}
+from df_os_clean
+where unique_id = '{their_uprn_match}'
+
+"""
+con.sql(sql).show(max_width=1000)
+
+
+sql = f"""
+select
+    concat_ws(' ', original_address_concat_r, postcode_r) as messy_address,
+    concat_ws(' ', original_address_concat_l, postcode_l) as our_match,
+    match_weight as match_weight_short,
+    mw_adjustment,
+    match_weight_original as match_weight_orig,
+    overlapping_bigrams_this_l_and_r_filtered,
+    bigrams_elsewhere_in_block_but_not_this_filtered
+    overlapping_tokens_this_l_and_r,
+    tokens_elsewhere_in_block_but_not_this ,
+    missing_tokens,
+
+from df_predict_improved
+where unique_id_r = '{epc_row_id}'
+order by match_weight desc
+
+"""
+
+con.sql(sql).show(max_width=1000)
+
+sql = f"""
+select
+    *
+
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}'
+order by match_weight desc
+limit 5
+"""
+
+con.sql(sql).show(max_width=10000)
+
+
+# Waterfall
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}')
+order by match_weight desc
+limit 10
+"""
+
+res = con.sql(sql)
+
+print(f"Our match: {our_uprn_match}")
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
+
+# Waterfall
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{epc_row_id}' and unique_id_l in ('{correct_uprn}')
+order by match_weight desc
+limit 10
+"""
+
+res = con.sql(sql)
+
+print(f"Correct match: {correct_uprn}")
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
+
+sql = f"""
+select 'correct' as source, uprn, fulladdress
+from {full_os_path}
+where uprn = '{correct_uprn}'
+UNION ALL
+select 'our_match' as source, uprn, fulladdress
+from {full_os_path}
+where uprn = '{our_uprn_match}'
+"""
+
+con.sql(sql).show(max_width=100000)
+
+
+# %%
+
 
 # sql = f"""
-# select address_concat as epc_raw_address, postcode as epc_raw_postcode, unique_id
+# select unique_id, address_concat
 # from epc_data_raw
-# where unique_id = '{epc_row_id}'
-# """
-
-# con.sql(sql).show()
-
-# sql = f"""
-# select *
-# from df_epc_data_clean
-# where unique_id = '{epc_row_id}'
+# where upper(address_concat) like '%FLAT A 119%'
 # """
 
 # con.sql(sql).show(max_width=100000)
-
-
-# sql = f"""
-# select fulladdress as llm_correct_match
-# from {full_os_path}
-#  where uprn = '{correct_uprn}'
-# """
-# con.sql(sql).show(max_width=100000)
-
-
-# cols = """
-#     concat_ws(' ', original_address_concat, postcode) as original_address_concat,
-
-#     flat_positional,
-#     flat_letter,
-#     numeric_token_1,
-#     numeric_token_2,
-#     numeric_token_3,
-#     token_rel_freq_arr_hist as tok_arr,
-#     common_end_tokens_hist as cet_arr,
-
-#     unique_id
-#     """
-# sql = f"""
-# select
-#     'epc' as source, {cols}
-# from df_epc_data_clean
-# where substr(unique_id, 1, 12) = '{epc_row_id}'
-# UNION ALL
-# select
-#     'our_match' as source, {cols}
-# from df_os_clean
-# where unique_id = '{our_uprn_match}'
-# UNION ALL
-# select
-#     'correct_match' as source, {cols}
-# from df_os_clean
-# where unique_id = '{correct_uprn}'
-# UNION ALL
-# select
-#     'epc_match' as source, {cols}
-# from df_os_clean
-# where unique_id = '{their_uprn_match}'
-
-# """
-# con.sql(sql).show(max_width=1000)
-
-
-# sql = f"""
-# select
-#     concat_ws(' ', original_address_concat_r, postcode_r) as messy_address,
-#     concat_ws(' ', original_address_concat_l, postcode_l) as our_match,
-#     match_weight as match_weight_short,
-#     mw_adjustment,
-#     match_weight_original as match_weight_orig,
-#     overlapping_bigrams_this_l_and_r_filtered,
-#     bigrams_elsewhere_in_block_but_not_this_filtered
-#     overlapping_tokens_this_l_and_r,
-#     tokens_elsewhere_in_block_but_not_this ,
-#     missing_tokens,
-
-# from df_predict_improved
-# where unique_id_r = '{epc_row_id}'
-# order by match_weight desc
-
-# """
-
-# con.sql(sql).show(max_width=1000)
-
-# sql = f"""
-# select
-#     *
-
-# from df_predict_ddb
-# where unique_id_r = '{epc_row_id}'
-# order by match_weight desc
-# limit 5
-# """
-
-# con.sql(sql).show(max_width=10000)
-
-
-# # Waterfall
-# sql = f"""
-# select *
-# from df_predict_ddb
-# where unique_id_r = '{epc_row_id}' and unique_id_l in ('{our_uprn_match}')
-# order by match_weight desc
-# limit 10
-# """
-
-# res = con.sql(sql)
-
-# print(f"Our match: {our_uprn_match}")
-# display(
-#     linker.visualisations.waterfall_chart(
-#         res.df().to_dict(orient="records"), filter_nulls=False
-#     )
-# )
-
-# # Waterfall
-# sql = f"""
-# select *
-# from df_predict_ddb
-# where unique_id_r = '{epc_row_id}' and unique_id_l in ('{correct_uprn}')
-# order by match_weight desc
-# limit 10
-# """
-
-# res = con.sql(sql)
-
-# print(f"Correct match: {correct_uprn}")
-# display(
-#     linker.visualisations.waterfall_chart(
-#         res.df().to_dict(orient="records"), filter_nulls=False
-#     )
-# )
-
-# sql = f"""
-# select 'correct' as source, uprn, fulladdress
-# from {full_os_path}
-# where uprn = '{correct_uprn}'
-# UNION ALL
-# select 'our_match' as source, uprn, fulladdress
-# from {full_os_path}
-# where uprn = '{our_uprn_match}'
-# """
-
-# con.sql(sql).show(max_width=100000)
-
-
-# # %%
-
-
-# # sql = f"""
-# # select unique_id, address_concat
-# # from epc_data_raw
-# # where upper(address_concat) like '%FLAT A 119%'
-# # """
-
-# # con.sql(sql).show(max_width=100000)
