@@ -410,11 +410,8 @@ def improve_predictions_using_distinguishing_tokens(
         else ""
     }
         as mw_adjustment,
-
         match_weight AS match_weight_original,
-        match_probability AS match_probability_original,
         (match_weight_original + mw_adjustment) AS match_weight,
-        pow(2, match_weight)/(1+pow(2, match_weight)) AS match_probability,
 
         -- Token-related fields
         overlapping_tokens_this_l_and_r,
