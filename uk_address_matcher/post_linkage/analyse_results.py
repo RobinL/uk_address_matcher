@@ -103,7 +103,6 @@ def best_matches_with_distinguishability(
         a.postcode AS postcode_r,
         t.original_address_concat_l,
         t.postcode_l,
-        t.match_probability,
         t.match_weight,
         t.distinguishability,
         COALESCE(t.distinguishability_category, '99: No match') AS distinguishability_category,
