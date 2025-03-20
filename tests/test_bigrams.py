@@ -31,7 +31,6 @@ def generate_test_data(
     for i, canonical_address in enumerate(canonical_addresses, start=1):
         row = {
             "match_weight": 0.0,
-            "match_probability": 0.5,
             "source_dataset_l": "c_",
             "source_dataset_r": "m_",
             "unique_id_l": f"l{i}",
