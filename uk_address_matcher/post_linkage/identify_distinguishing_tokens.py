@@ -59,6 +59,7 @@ def improve_predictions_using_distinguishing_tokens(
     sql_remove_common_end_tokens = """
     SELECT
         * EXCLUDE (original_address_concat_r, original_address_concat_l),
+        map_keys(common_end_tokens_hist_r) as common_end_tokens_r,
 
         original_address_concat_l
             .trim()

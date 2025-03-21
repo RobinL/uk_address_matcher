@@ -320,7 +320,7 @@ num_3_comparison = {
 }
 
 
-def array_reduce_by_freq(column_name: str, power: float) -> str:
+def array_reduce_by_freq(column_name: str) -> str:
     """Generate SQL for reducing arrays by frequency.
 
     Args:
@@ -334,51 +334,53 @@ def array_reduce_by_freq(column_name: str, power: float) -> str:
     matching_tokens = f"""
     list_reduce(
         list_prepend(
-            1.0,
+        1.0,
+        list_filter(
             list_transform(
-                {column_name}_l,
-                x -> CASE
-                        WHEN array_contains(
-                            list_transform({column_name}_r, y -> y.tok),
-                            x.tok
-                        )
-                        THEN x.rel_freq
-                        ELSE 1.0
-                    END
-            )
+            flatten(
+                list_transform(
+                map_entries({column_name}_l),
+                entry -> CASE
+                            WHEN COALESCE({column_name}_r[entry.key], 0) > 0
+                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, {column_name}_r[entry.key])))
+                            ELSE list_value()
+                        END
+                )
+            ),
+            x -> x
+            ),
+            x -> x IS NOT NULL
+        )
         ),
         (p, q) -> p * q
-    )"""
+    )
+    """
 
-    # Second part - divide by frequencies of non-matching tokens
-    non_matching_tokens = f"""
-    list_reduce(
-        list_prepend(
-            1.0,
-            list_transform(
-                list_concat(
-                    array_filter(
-                        {column_name}_l,
-                        y -> NOT array_contains(
-                                list_transform({column_name}_r, x -> x.tok),
-                                y.tok
-                            )
-                    ),
-                    array_filter(
-                        {column_name}_r,
-                        y -> NOT array_contains(
-                                list_transform({column_name}_l, x -> x.tok),
-                                y.tok
-                            )
-                    )
-                ),
-                x -> x.rel_freq
-            )
-        ),
-        (p, q) -> p / q^{power}
-    )"""
+    # This current fails if experimental optimisation on splink==4.0.7.dev1 is enabled
+    # https://github.com/moj-analytical-services/splink/pull/2630
+    # It doesn't appear to improve accuracy anyway
+    #
+    # missing_tokens_product = f"""
+    # list_reduce(
+    #     list_prepend(
+    #         1.0,
+    #         list_concat(
+    #             list_transform(
+    #                 map_entries({column_name}_l),
+    #                 entry -> POW(entry.key.rel_freq, GREATEST(entry.value::INTEGER - COALESCE({column_name}_r[entry.key], 0), 0))
+    #             ),
+    #             list_transform(
+    #                 map_entries({column_name}_r),
+    #                 entry -> POW(entry.key.rel_freq, GREATEST(entry.value::INTEGER - COALESCE({column_name}_l[entry.key], 0), 0))
+    #             )
+    #         )
+    #     ),
+    #     (p, q) -> p * q
+    # )
+    # """
 
-    return f"{matching_tokens} * {non_matching_tokens}"
+    # return f"{matching_tokens} / POW({missing_tokens_product}, 0.33)"
+    return f"{matching_tokens}"
 
 
 def generate_arr_reduce_data(
@@ -386,14 +388,13 @@ def generate_arr_reduce_data(
     start_weight=-4,
     segments=[8, 8, 8, 10],
     delta_weights_within_segments=[1, 1, 0.25, 0.25],
-    punishment_multiplier=0.33,
 ):
     data = []
     current_exp = start_exp
     current_weight = start_weight
 
     for segment, delta_weight in zip(segments, delta_weights_within_segments):
-        arr_red_sql = array_reduce_by_freq("token_rel_freq_arr", punishment_multiplier)
+        arr_red_sql = array_reduce_by_freq("token_rel_freq_arr_hist")
         for _ in range(segment):
             if current_exp > 0:
                 sql_cond = f"{arr_red_sql} < 1e{current_exp}"
@@ -422,21 +423,19 @@ def get_token_rel_freq_arr_comparison(
     START_WEIGHT=-4,
     SEGMENTS=[8, 8, 8, 10],
     DELTA_WEIGHTS_WITHIN_SEGMENTS=[1, 1, 0.25, 0.25],
-    PUNISHMENT_MULTIPLIER=0.33,
 ):
     middle_conditions = generate_arr_reduce_data(
         START_EXP,
         START_WEIGHT,
         SEGMENTS,
         DELTA_WEIGHTS_WITHIN_SEGMENTS,
-        PUNISHMENT_MULTIPLIER,
     )
 
     token_rel_freq_arr_comparison = {
-        "output_column_name": "token_rel_freq_arr",
+        "output_column_name": "token_rel_freq_arr_hist",
         "comparison_levels": [
             {
-                "sql_condition": '"token_rel_freq_arr_l" IS NULL OR "token_rel_freq_arr_r" IS NULL or length("token_rel_freq_arr_l") = 0 or length("token_rel_freq_arr_r") = 0',
+                "sql_condition": '"token_rel_freq_arr_hist_l" IS NULL OR "token_rel_freq_arr_hist_r" IS NULL',
                 "label_for_charts": "Null",
                 "is_null_level": True,
             },
@@ -456,13 +455,13 @@ def get_token_rel_freq_arr_comparison(
     return token_rel_freq_arr_comparison
 
 
-arr_red_sql = array_reduce_by_freq("common_end_tokens", 0.0)
+arr_red_sql = array_reduce_by_freq("common_end_tokens_hist")
 
 common_end_tokens_comparison = {
     "output_column_name": "common_end_tokens",
     "comparison_levels": [
         {
-            "sql_condition": '"common_end_tokens_l" IS NULL OR "common_end_tokens_r" IS NULL or length("common_end_tokens_l") = 0 or length("common_end_tokens_r") = 0',
+            "sql_condition": '"common_end_tokens_hist_l" IS NULL OR "common_end_tokens_hist_r" IS NULL',
             "label_for_charts": "Null",
             "is_null_level": True,
         },
