@@ -550,7 +550,7 @@ def separate_unusual_tokens(
     return con.sql(sql)
 
 
-def separate_unique_and_common_tokens(
+def separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
     """
@@ -568,7 +568,12 @@ def separate_unique_and_common_tokens(
     sql = """
     WITH tokens AS (
         SELECT
-            regexp_split_to_array(replace(replace(address_concat, ',', ' '), 'FLAT', ' '), '\\s+') AS __tokens,
+            ['FLAT', 'APARTMENT', 'UNIT'] AS __tokens_to_remove,
+            list_filter(
+                regexp_split_to_array(address_concat, '\\s+'),
+                x -> not list_contains(__tokens_to_remove, x)
+            )
+                AS __tokens,
             row_number() OVER (ORDER BY reverse(address_concat)) AS row_order,
             *
         FROM ddb_pyrel
@@ -612,9 +617,9 @@ def separate_unique_and_common_tokens(
         FROM with_suffix_lengths
     )
     SELECT
-        * EXCLUDE (__tokens, __prev_tokens, __next_tokens, __token_count, max_common_suffix, next_common_suffix, prev_common_suffix, row_order, common_tokens,unique_tokens),
-        COALESCE(unique_tokens, ARRAY[]) AS unique_tokens,
-        COALESCE(common_tokens, ARRAY[]) AS common_tokens,
+        * EXCLUDE (__tokens, __prev_tokens, __next_tokens, __token_count, __tokens_to_remove, max_common_suffix, next_common_suffix, prev_common_suffix, row_order, common_tokens,unique_tokens),
+        COALESCE(unique_tokens, ARRAY[]) AS distinguishing_adj_start_tokens,
+        COALESCE(common_tokens, ARRAY[]) AS common_adj_start_tokens,
     FROM
     with_unique_parts
     """
