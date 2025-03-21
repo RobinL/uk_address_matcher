@@ -9,6 +9,11 @@ def improve_predictions_using_distinguishing_tokens(
     top_n_matches: int = 5,
     use_bigrams: bool = True,
     additional_columns_to_retain: list[str] | None = None,
+    REWARD_MULTIPLIER=3,
+    PUNISHMENT_MULTIPLIER=1.5,
+    BIGRAM_REWARD_MULTIPLIER=3,
+    BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
+    MISSING_TOKEN_PENALTY=0.1,
 ):
     """
     Improve match predictions by identifying distinguishing tokens between addresses.
@@ -45,7 +50,7 @@ def improve_predictions_using_distinguishing_tokens(
     FROM good_matches
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY unique_id_r
-        ORDER BY match_weight DESC, unique_id_l
+        ORDER BY match_weight DESC, unique_id_l DESC
     ) <= {top_n_matches}  -- e.g., 5 for top 5 matches
     """
     top_n_matches = con.sql(sql_top_n_matches)
@@ -54,9 +59,7 @@ def improve_predictions_using_distinguishing_tokens(
     sql_remove_common_end_tokens = """
     SELECT
         * EXCLUDE (original_address_concat_r, original_address_concat_l),
-
         map_keys(common_end_tokens_hist_r) as common_end_tokens_r,
-
 
         original_address_concat_l
             .trim()
@@ -370,12 +373,6 @@ def improve_predictions_using_distinguishing_tokens(
 
     # Calculate new match weights based on distinguishing tokens and bigrams
 
-    overall_reward_multiplier = 1.5
-    REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
-    BIGRAM_REWARD_MULTIPLIER = 2 * overall_reward_multiplier
-    BIGRAM_PUNISHMENT_MULTIPLIER = 1 * overall_reward_multiplier
-
     sql = f"""
     CREATE OR REPLACE TABLE matches AS
 
@@ -392,7 +389,7 @@ def improve_predictions_using_distinguishing_tokens(
             .list_transform(x -> 1)
             .list_sum() *  {PUNISHMENT_MULTIPLIER}, 0)
 
-        - (0.1 * len(missing_tokens))
+        - (len(missing_tokens) * {MISSING_TOKEN_PENALTY})
 
         -- Bigram-based adjustments
         {

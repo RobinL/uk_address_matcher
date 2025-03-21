@@ -8,7 +8,7 @@ import duckdb
 
 from secret_data.secrets import epc_addresses_path
 from uk_address_matcher import clean_data_using_precomputed_rel_tok_freq
-from uk_address_matcher.linking_model.training import settings_for_training
+from uk_address_matcher.linking_model.training import get_settings_for_training
 
 from splink import Linker, DuckDBAPI, block_on
 
@@ -38,7 +38,7 @@ db_api = DuckDBAPI(connection=con)
 
 linker = Linker(
     [epc_addresses_clean, epc_addresses_clean],
-    settings=settings_for_training,
+    settings=get_settings_for_training(),
     db_api=db_api,
 )
 

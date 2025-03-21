@@ -8,7 +8,7 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
 from IPython.display import display
-from uk_address_matcher.linking_model.training import settings_for_training
+from uk_address_matcher.linking_model.training import get_settings_for_training
 
 overall_start_time = time.time()
 
@@ -95,7 +95,7 @@ print(f"Time to load/clean: {end_time - overall_start_time} seconds")
 # -----------------------------------------------------------------------------
 # Step 3: Link data - pass 1
 # -----------------------------------------------------------------------------
-settings = settings_for_training
+settings = get_settings_for_training()
 
 linker = get_linker(
     df_addresses_to_match=df_epc_data_clean,

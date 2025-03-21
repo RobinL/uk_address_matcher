@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "kofigmqi",
+    "linker_uid": "e5bphl9c",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -130,16 +130,16 @@
                 {
                     "sql_condition": "flat_positional_l = flat_positional_r",
                     "label_for_charts": "Exact match",
-                    "m_probability": 0.95,
-                    "u_probability": 0.01,
+                    "m_probability": 95.00950852025916,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 },
                 {
                     "sql_condition": "flat_letter_l = flat_letter_r",
                     "label_for_charts": "Exact match",
-                    "m_probability": 0.95,
-                    "u_probability": 0.01,
+                    "m_probability": 95.00950852025916,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 },
@@ -162,8 +162,8 @@
                 {
                     "sql_condition": "ELSE",
                     "label_for_charts": "All other comparisons",
-                    "m_probability": 1,
-                    "u_probability": 32,
+                    "m_probability": 0.03125,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 }
@@ -183,22 +183,22 @@
                 {
                     "sql_condition": "\"numeric_token_1_l\" = \"numeric_token_1_r\"",
                     "label_for_charts": "Exact match",
-                    "m_probability": 0.95,
-                    "u_probability": 0.01,
+                    "m_probability": 95.00950852025916,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_1",
-                    "tf_adjustment_weight": 0.5
+                    "tf_adjustment_weight": 0.1
                 },
                 {
-                    "sql_condition": "\n                        nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')\n                        = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')\n                        ",
+                    "sql_condition": "\n                            nullif(regexp_extract(numeric_token_1_l, '\\d+', 0), '')\n                            = nullif(regexp_extract(numeric_token_1_r, '\\d+', 0), '')\n                            ",
                     "label_for_charts": "Exact match",
-                    "m_probability": 0.95,
-                    "u_probability": 0.01,
+                    "m_probability": 95.00950852025916,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_1",
-                    "tf_adjustment_weight": 0.5
+                    "tf_adjustment_weight": 0.1
                 },
                 {
                     "sql_condition": "numeric_token_2_l = numeric_token_1_r or numeric_token_1_l = numeric_token_2_r",
@@ -211,16 +211,16 @@
                 {
                     "sql_condition": "\"numeric_token_1_l\" IS NULL OR \"numeric_token_1_r\" IS NULL",
                     "label_for_charts": "Null",
-                    "m_probability": 1,
-                    "u_probability": 16,
-                    "fix_m_probability": false,
-                    "fix_u_probability": false
+                    "m_probability": 0.0625,
+                    "u_probability": 1,
+                    "fix_m_probability": true,
+                    "fix_u_probability": true
                 },
                 {
                     "sql_condition": "ELSE",
                     "label_for_charts": "All other comparisons",
-                    "m_probability": 1,
-                    "u_probability": 256,
+                    "m_probability": 0.00390625,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 }
@@ -240,12 +240,12 @@
                 {
                     "sql_condition": "\"numeric_token_2_l\" = \"numeric_token_2_r\"",
                     "label_for_charts": "Exact match",
-                    "m_probability": 0.8,
-                    "u_probability": 0.001,
+                    "m_probability": 95.00950852025916,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true,
                     "tf_adjustment_column": "numeric_token_2",
-                    "tf_adjustment_weight": 0.5
+                    "tf_adjustment_weight": 0.1
                 },
                 {
                     "sql_condition": "numeric_token_1_l = numeric_token_2_r OR numeric_token_1_r = numeric_token_2_l",
@@ -258,16 +258,16 @@
                 {
                     "sql_condition": "\"numeric_token_2_l\" IS NULL OR \"numeric_token_2_r\" IS NULL",
                     "label_for_charts": "Null",
-                    "m_probability": 1,
-                    "u_probability": 16,
+                    "m_probability": 0.25,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 },
                 {
                     "sql_condition": "ELSE",
                     "label_for_charts": "All other comparisons",
-                    "m_probability": 1,
-                    "u_probability": 256,
+                    "m_probability": 0.0625,
+                    "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
                 }
@@ -324,7 +324,7 @@
             "comparison_description": "CustomComparison"
         },
         {
-            "output_column_name": "token_rel_freq_arr",
+            "output_column_name": "token_rel_freq_arr_hist",
             "comparison_levels": [
                 {
                     "sql_condition": "\"token_rel_freq_arr_hist_l\" IS NULL OR \"token_rel_freq_arr_hist_r\" IS NULL",
@@ -334,17 +334,9 @@
                     "is_null_level": true
                 },
                 {
-                    "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-30",
-                    "label_for_charts": " < 1e-30",
-                    "m_probability": 46340.95001184158,
-                    "u_probability": 1,
-                    "fix_m_probability": true,
-                    "fix_u_probability": true
-                },
-                {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-29",
                     "label_for_charts": " < 1e-29",
-                    "m_probability": 38967.93874440916,
+                    "m_probability": 77935.87748881833,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -352,7 +344,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-28",
                     "label_for_charts": " < 1e-28",
-                    "m_probability": 32768.0,
+                    "m_probability": 65536.0,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -360,7 +352,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-27",
                     "label_for_charts": " < 1e-27",
-                    "m_probability": 27554.493735033717,
+                    "m_probability": 55108.98747006743,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -368,7 +360,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-26",
                     "label_for_charts": " < 1e-26",
-                    "m_probability": 23170.47500592079,
+                    "m_probability": 46340.95001184158,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -376,7 +368,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-25",
                     "label_for_charts": " < 1e-25",
-                    "m_probability": 19483.96937220458,
+                    "m_probability": 38967.93874440916,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -384,7 +376,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-24",
                     "label_for_charts": " < 1e-24",
-                    "m_probability": 16384.0,
+                    "m_probability": 32768.0,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -392,7 +384,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-23",
                     "label_for_charts": " < 1e-23",
-                    "m_probability": 13777.246867516858,
+                    "m_probability": 27554.493735033717,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -400,7 +392,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-22",
                     "label_for_charts": " < 1e-22",
-                    "m_probability": 11585.237502960395,
+                    "m_probability": 23170.47500592079,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -408,7 +400,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-21",
                     "label_for_charts": " < 1e-21",
-                    "m_probability": 9741.98468610229,
+                    "m_probability": 19483.96937220458,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -416,7 +408,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-20",
                     "label_for_charts": " < 1e-20",
-                    "m_probability": 8192.0,
+                    "m_probability": 16384.0,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -424,7 +416,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-19",
                     "label_for_charts": " < 1e-19",
-                    "m_probability": 6888.623433758429,
+                    "m_probability": 13777.246867516858,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -432,7 +424,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-18",
                     "label_for_charts": " < 1e-18",
-                    "m_probability": 5792.618751480198,
+                    "m_probability": 11585.237502960395,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -440,7 +432,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-17",
                     "label_for_charts": " < 1e-17",
-                    "m_probability": 4870.992343051145,
+                    "m_probability": 9741.98468610229,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -448,7 +440,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-16",
                     "label_for_charts": " < 1e-16",
-                    "m_probability": 4096.0,
+                    "m_probability": 8192.0,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -456,7 +448,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-15",
                     "label_for_charts": " < 1e-15",
-                    "m_probability": 3444.3117168792146,
+                    "m_probability": 6888.623433758429,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -464,7 +456,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-14",
                     "label_for_charts": " < 1e-14",
-                    "m_probability": 2896.309375740099,
+                    "m_probability": 5792.618751480198,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -472,7 +464,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-13",
                     "label_for_charts": " < 1e-13",
-                    "m_probability": 2435.4961715255727,
+                    "m_probability": 4870.992343051145,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -480,7 +472,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-12",
                     "label_for_charts": " < 1e-12",
-                    "m_probability": 2048.0,
+                    "m_probability": 4096,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -488,7 +480,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-11",
                     "label_for_charts": " < 1e-11",
-                    "m_probability": 1024.0,
+                    "m_probability": 2048,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -496,7 +488,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-10",
                     "label_for_charts": " < 1e-10",
-                    "m_probability": 512.0,
+                    "m_probability": 1024,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -504,7 +496,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-9",
                     "label_for_charts": " < 1e-9",
-                    "m_probability": 256.0,
+                    "m_probability": 512,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -512,7 +504,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-8",
                     "label_for_charts": " < 1e-8",
-                    "m_probability": 128.0,
+                    "m_probability": 256,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -520,7 +512,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-7",
                     "label_for_charts": " < 1e-7",
-                    "m_probability": 64.0,
+                    "m_probability": 128,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -528,7 +520,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-6",
                     "label_for_charts": " < 1e-6",
-                    "m_probability": 32.0,
+                    "m_probability": 64,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -536,7 +528,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-5",
                     "label_for_charts": " < 1e-5",
-                    "m_probability": 16.0,
+                    "m_probability": 32,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -544,7 +536,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-4",
                     "label_for_charts": " < 1e-4",
-                    "m_probability": 8.0,
+                    "m_probability": 16,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -552,7 +544,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-3",
                     "label_for_charts": " < 1e-3",
-                    "m_probability": 4.0,
+                    "m_probability": 8,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -560,7 +552,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-2",
                     "label_for_charts": " < 1e-2",
-                    "m_probability": 2.0,
+                    "m_probability": 4,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -568,7 +560,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e-1",
                     "label_for_charts": " < 1e-1",
-                    "m_probability": 1.0,
+                    "m_probability": 2,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -576,7 +568,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e0",
                     "label_for_charts": " < 1e0",
-                    "m_probability": 0.5,
+                    "m_probability": 1,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -584,7 +576,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e1",
                     "label_for_charts": " < 1e1",
-                    "m_probability": 0.25,
+                    "m_probability": 0.5,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -592,7 +584,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e2",
                     "label_for_charts": " < 1e2",
-                    "m_probability": 0.125,
+                    "m_probability": 0.25,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -600,7 +592,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e3",
                     "label_for_charts": " < 1e3",
-                    "m_probability": 0.0625,
+                    "m_probability": 0.125,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
@@ -608,7 +600,7 @@
                 {
                     "sql_condition": "\n    list_reduce(\n        list_prepend(\n        1.0,\n        list_filter(\n            list_transform(\n            flatten(\n                list_transform(\n                map_entries(token_rel_freq_arr_hist_l),\n                entry -> CASE\n                            WHEN COALESCE(token_rel_freq_arr_hist_r[entry.key], 0) > 0\n                            THEN list_value(POW(entry.key.rel_freq, LEAST(entry.value, token_rel_freq_arr_hist_r[entry.key])))\n                            ELSE list_value()\n                        END\n                )\n            ),\n            x -> x\n            ),\n            x -> x IS NOT NULL\n        )\n        ),\n        (p, q) -> p * q\n    )\n     < 1e4",
                     "label_for_charts": " < 1e4",
-                    "m_probability": 0.03125,
+                    "m_probability": 0.0625,
                     "u_probability": 1,
                     "fix_m_probability": true,
                     "fix_u_probability": true
