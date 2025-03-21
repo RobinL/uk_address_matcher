@@ -36,12 +36,12 @@ sql = f"""
 create or replace table labels_filtered as
 select * from {labels_path}
 where confidence = 'epc_splink_agree'
-and hash(messy_id) % 30 = 0
+and hash(messy_id) % 100 = 0
 -- and 1=2
 UNION ALL
 select * from {labels_path}
 where confidence in ('certain')
--- limit 100
+limit 1000
 
 """
 con_disk.execute(sql)
@@ -230,7 +230,6 @@ def black_box(
                 REL_FREQ_DELTA_WEIGHT_3,
                 REL_FREQ_DELTA_WEIGHT_4,
             ],
-            "PUNISHMENT_MULTIPLIER": REL_FREQ_PUNISHMENT_MULTIPLIER,
         },
     )
     # import json

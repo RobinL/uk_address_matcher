@@ -230,7 +230,6 @@ def black_box(
                 REL_FREQ_DELTA_WEIGHT_3,
                 REL_FREQ_DELTA_WEIGHT_4,
             ],
-            "PUNISHMENT_MULTIPLIER": REL_FREQ_PUNISHMENT_MULTIPLIER,
         },
     )
     # import json

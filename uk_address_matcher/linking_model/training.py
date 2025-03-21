@@ -555,27 +555,33 @@ def get_settings_for_training(
     token_rel_freq_arr_comparison=None,
     flat_positional_weights=None,
     first_n_tokens_weights=None,
+    include_first_n_tokens=False,
 ):
     num_1_weights = num_1_weights or {}
     num_2_weights = num_2_weights or {}
     token_rel_freq_arr_comparison = token_rel_freq_arr_comparison or {}
     flat_positional_weights = flat_positional_weights or {}
     first_n_tokens_weights = first_n_tokens_weights or {}
+
+    comparisons = [
+        original_address_concat_comparison,
+        get_flat_positional_comparison(**flat_positional_weights),
+        get_num_1_comparison(**num_1_weights),
+        get_num_2_comparison(**num_2_weights),
+        num_3_comparison,
+        get_token_rel_freq_arr_comparison(**token_rel_freq_arr_comparison),
+        common_end_tokens_comparison,
+        postcode_comparison,
+    ]
+
+    if include_first_n_tokens:
+        comparisons.append(get_first_n_tokens_comparison(**first_n_tokens_weights))
+
     settings_for_training = SettingsCreator(
         probability_two_random_records_match=3e-8,
         link_type="link_only",
         blocking_rules_to_generate_predictions=blocking_rules,
-        comparisons=[
-            original_address_concat_comparison,
-            get_first_n_tokens_comparison(**first_n_tokens_weights),
-            get_flat_positional_comparison(**flat_positional_weights),
-            get_num_1_comparison(**num_1_weights),
-            get_num_2_comparison(**num_2_weights),
-            num_3_comparison,
-            get_token_rel_freq_arr_comparison(**token_rel_freq_arr_comparison),
-            common_end_tokens_comparison,
-            postcode_comparison,
-        ],
+        comparisons=comparisons,
         retain_intermediate_calculation_columns=True,
     )
     return settings_for_training

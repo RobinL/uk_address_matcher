@@ -5,7 +5,7 @@
     "retain_intermediate_calculation_columns": true,
     "additional_columns_to_retain": [],
     "sql_dialect": "duckdb",
-    "linker_uid": "xb7zgthp",
+    "linker_uid": "e5bphl9c",
     "em_convergence": 0.0001,
     "max_iterations": 25,
     "bayes_factor_column_prefix": "bf_",
@@ -116,52 +116,6 @@
                 }
             ],
             "comparison_description": "ExactMatch"
-        },
-        {
-            "output_column_name": "first_n_tokens",
-            "comparison_levels": [
-                {
-                    "sql_condition": "\n                    regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){3}\\S+') = regexp_extract(original_address_concat_r, '^(?:\\S+\\s+){3}\\S+')\n                    and length(regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){3}\\S+')) > 1\n                    and postcode_l = postcode_r\n\n                ",
-                    "label_for_charts": "First 4 tokens match",
-                    "m_probability": 1024,
-                    "u_probability": 1,
-                    "fix_m_probability": true,
-                    "fix_u_probability": true
-                },
-                {
-                    "sql_condition": "\n                    regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){2}\\S+') = regexp_extract(original_address_concat_r, '^(?:\\S+\\s+){2}\\S+')\n                    and length(regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){2}\\S+')) > 1\n                    and postcode_l = postcode_r\n                ",
-                    "label_for_charts": "First 3 tokens match",
-                    "m_probability": 32,
-                    "u_probability": 1,
-                    "fix_m_probability": true,
-                    "fix_u_probability": true
-                },
-                {
-                    "sql_condition": "\n                    regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){1}\\S+') = regexp_extract(original_address_concat_r, '^(?:\\S+\\s+){1}\\S+')\n                    and length(regexp_extract(original_address_concat_l, '^(?:\\S+\\s+){1}\\S+')) > 1\n                    and postcode_l = postcode_r\n                ",
-                    "label_for_charts": "First 2 tokens match",
-                    "m_probability": 1,
-                    "u_probability": 1,
-                    "fix_m_probability": true,
-                    "fix_u_probability": true
-                },
-                {
-                    "sql_condition": "\n                    regexp_extract(original_address_concat_l, '^\\S+') = regexp_extract(original_address_concat_r, '^\\S+')\n                    and length(regexp_extract(original_address_concat_l, '^\\S+')) > 1\n                    and postcode_l = postcode_r\n                ",
-                    "label_for_charts": "First token match",
-                    "m_probability": 1,
-                    "u_probability": 1,
-                    "fix_m_probability": true,
-                    "fix_u_probability": true
-                },
-                {
-                    "sql_condition": "ELSE",
-                    "label_for_charts": "All other comparisons",
-                    "m_probability": 0.25,
-                    "u_probability": 1,
-                    "fix_m_probability": false,
-                    "fix_u_probability": false
-                }
-            ],
-            "comparison_description": "CustomComparison"
         },
         {
             "output_column_name": "flat_positional",
