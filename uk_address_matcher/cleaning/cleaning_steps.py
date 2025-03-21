@@ -625,3 +625,65 @@ def separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods(
     """
 
     return con.sql(sql)
+
+
+# Located here because this is reused in comparisons
+GENERALISED_TOKEN_ALIASES_CASE_STATEMENT = """
+    CASE
+        WHEN token in ('FIRST', 'SECOND', 'THIRD', 'TOP') THEN ['UPPERFLOOR', 'LEVEL']
+        WHEN token in ('GARDEN', 'GROUND') THEN ['GROUNDFLOOR', 'LEVEL']
+        WHEN token in ('BASEMENT') THEN ['LEVEL']
+        ELSE [TOKEN]
+    END
+
+"""
+
+
+def generalised_token_aliases(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Maps specific tokens to more general categories to create a generalised representation
+    of the unique tokens in an address.
+
+    The idea is to guide matches away from implausible matches and towards
+    possible matches
+
+    The real tokens always take precidence over genearlised
+
+    For example sometimes a 2nd floor flat will match to top floor.  Whilst 'top floor'
+    is often ambiguous (is the 2nd floor the top floor), we know that
+    'top floor' cannot match to 'ground' or 'basement'
+
+    This function applies the following mappings:
+
+    [FIRST, SECOND, THIRD, TOP] -> [UPPERFLOOR, LEVEL]
+
+    [GARDEN, GROUND] -> [GROUNDFLOOR, LEVEL]
+
+
+    This function applies the following mappings:
+    - Single letters (A-E) -> UNIT_NUM_LET
+    - Single digits (1-5) -> UNIT_NUM_LET
+    - Floor indicators (FIRST, SECOND, THIRD) -> LEVEL
+    - Position indicators (TOP, FIRST, SECOND, THIRD) -> TOP
+    The following tokens are filtered out completely:
+    - FLAT, APARTMENT, UNIT
+    Args:
+        ddb_pyrel (DuckDBPyRelation): The input relation with unique_tokens field
+        con (DuckDBPyConnection): The DuckDB connection
+    Returns:
+        DuckDBPyRelation: The modified table with generalised_unique_tokens field
+    """
+    sql = f"""
+    SELECT
+        *,
+        flatten(
+            list_transform(distinguishing_adj_start_tokens, token ->
+               {GENERALISED_TOKEN_ALIASES_CASE_STATEMENT}
+            )
+        ) AS distinguishing_adj_token_aliases
+    FROM ddb_pyrel
+    """
+
+    return con.sql(sql)
