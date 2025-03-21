@@ -17,11 +17,11 @@ original_address_concat_comparison = cl.ExactMatch(
 
 
 def get_first_n_tokens_comparison(
-    WEIGHT_1=10,
-    WEIGHT_2=5,
+    WEIGHT_1=1,
+    WEIGHT_2=0.5,
     WEIGHT_3=0,
     WEIGHT_4=0,
-    WEIGHT_5=-2,
+    WEIGHT_5=-0.2,
 ):
     regex_4_tokens = r"^(?:\S+\s+){3}\S+"
     regex_3_tokens = r"^(?:\S+\s+){2}\S+"
