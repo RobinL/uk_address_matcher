@@ -24,6 +24,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     get_token_frequeny_table,
     remove_duplicate_end_tokens,
     separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods,
+    generalised_token_aliases,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -49,6 +50,7 @@ QUEUE_PRE_TF = [
 QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON = [
     *QUEUE_PRE_TF[: QUEUE_PRE_TF.index(derive_original_address_concat) + 1],
     separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods,
+    generalised_token_aliases,
     *QUEUE_PRE_TF[QUEUE_PRE_TF.index(derive_original_address_concat) + 1 :],
 ]
 
