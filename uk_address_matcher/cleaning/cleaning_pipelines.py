@@ -23,6 +23,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     use_first_unusual_token_if_no_numeric_token,
     get_token_frequeny_table,
     remove_duplicate_end_tokens,
+    separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -45,6 +46,11 @@ QUEUE_PRE_TF = [
     tokenise_address_without_numbers,
 ]
 
+QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON = [
+    *QUEUE_PRE_TF[: QUEUE_PRE_TF.index(derive_original_address_concat) + 1],
+    separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods,
+    *QUEUE_PRE_TF[QUEUE_PRE_TF.index(derive_original_address_concat) + 1 :],
+]
 
 QUEUE_POST_TF = [
     move_common_end_tokens_to_field,
@@ -105,6 +111,7 @@ def clean_data_using_precomputed_rel_tok_freq(
     address_table: DuckDBPyRelation,
     con: DuckDBPyConnection,
     rel_tok_freq_table: DuckDBPyRelation = None,
+    derive_distinguishing_wrt_adjacent_records: bool = False,
 ) -> DuckDBPyRelation:
     # Load the default term frequency table if none is provided
     if rel_tok_freq_table is None:
@@ -134,8 +141,13 @@ def clean_data_using_precomputed_rel_tok_freq(
     con.execute(sql)
     input_table = con.table(materialised_table_name)
 
+    if derive_distinguishing_wrt_adjacent_records:
+        QUEUE_PRE = QUEUE_PRE_TF_WITH_UNIQUE_AND_COMMON
+    else:
+        QUEUE_PRE = QUEUE_PRE_TF
+
     cleaning_queue = (
-        QUEUE_PRE_TF
+        QUEUE_PRE
         + [
             add_term_frequencies_to_address_tokens_using_registered_df,
         ]
