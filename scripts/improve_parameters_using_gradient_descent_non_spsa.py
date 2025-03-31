@@ -27,6 +27,9 @@ con_disk = duckdb.connect("del.duckdb")
 path = "secret_data/labels/*.jsonl"
 
 sql = f"""
+with
+labels_all as
+(
 select * from
 read_json('{path}', filename=labels_filename, columns={{
     'messy_id': 'VARCHAR',
@@ -35,11 +38,40 @@ read_json('{path}', filename=labels_filename, columns={{
 }})
 where  not contains(correct_uprn, '[')
 and nullif(correct_uprn, '') is not null
+)
 
+-- Labels from LLM labelling of fhrs data
+select *
+from labels_all
+WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
+
+UNION ALL
+-- Labels from LLM labelling of EPC data where splink and EPC did not match
+select *
+from labels_all
+WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+
+UNION ALL
+-- Labels from auto agreement of EPC and splink matcher
+SELECT * FROM (
+    SELECT
+        *
+    FROM labels_all
+    WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
+    ORDER BY substr(messy_id, 4, 4)
+    LIMIT 3000
+)
 """
 labels = con_disk.sql(sql)
 labels.aggregate("labels_filename, count(*)", "labels_filename").show()
 
+# labels like
+# ┌────────────────────────────────┬──────────────┬──────────────────────┬───────────────────────────────────────────────┐
+# │            messy_id            │ correct_uprn │      confidence      │                labels_filename                │
+# │            varchar             │   varchar    │       varchar        │                    varchar                    │
+# ├────────────────────────────────┼──────────────┼──────────────────────┼───────────────────────────────────────────────┤
+# │ 1000661                        │ 100052007636 │ certain              │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+# │ 1
 
 epc_path = (
     "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=epc_filename)"
@@ -48,59 +80,66 @@ epc_path = (
 
 fhrs_path = "read_parquet('secret_data/fhrs/fhrs_data.parquet')"
 
+sql = f"""
+select DISTINCT ON (fhrsid) *
+from {fhrs_path}
+"""
+fhrs_deduped = con_disk.sql(sql)
+
+# FHRS data has duplicate rows for some reason
+
 
 sql = f"""
 CREATE OR REPLACE TABLE messy_data AS
 -- Labels from LLM labelling of fhrs data
-select
-    fhrsid AS unique_id,
-    CONCAT_WS(' ', BusinessName, AddressLine1, AddressLine2, AddressLine3, AddressLine4) AS address_concat,
-    PostCode
-FROM {fhrs_path}
-WHERE unique_id IN (
-    SELECT messy_id
-    FROM labels
-    WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
-)
+SELECT
+    f.fhrsid AS unique_id,
+    CONCAT_WS(' ', f.BusinessName, f.AddressLine1, f.AddressLine2, f.AddressLine3, f.AddressLine4) AS address_concat,
+    f.PostCode AS postcode,
+    l.labels_filename
+FROM fhrs_deduped f
+INNER JOIN labels l ON f.fhrsid = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'fhrs') AND CONTAINS(l.labels_filename, 'llm')
 
 UNION ALL
 
 -- Labels from LLM labelling of EPC data where splink and EPC did not match
 SELECT
-    LMK_KEY AS unique_id,
-    CONCAT_WS(' ', ADDRESS1, ADDRESS2, ADDRESS3) AS address_concat,
-    POSTCODE AS postcode
-FROM {epc_path}
-WHERE unique_id IN (
-    SELECT messy_id
-    FROM labels
-    WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
-)
+    e.LMK_KEY AS unique_id,
+    CONCAT_WS(' ', e.ADDRESS1, e.ADDRESS2, e.ADDRESS3) AS address_concat,
+    e.POSTCODE AS postcode,
+    l.labels_filename
+FROM {epc_path} e
+INNER JOIN labels l ON e.LMK_KEY = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'epc') AND CONTAINS(l.labels_filename, 'llm')
 
 UNION ALL
 
 -- Labels from auto agreement of EPC and splink matcher
-SELECT * FROM (
-    SELECT
-        LMK_KEY AS unique_id,
-        CONCAT_WS(' ', ADDRESS1, ADDRESS2, ADDRESS3) AS address_concat,
-        POSTCODE AS postcode
-    FROM {epc_path}
-    WHERE unique_id IN (
-        SELECT messy_id
-        FROM labels
-        WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
-    )
-    ORDER BY substr(unique_id, 4, 4)
-    LIMIT 3000
-) AS limited_third_part
-
-
-
+SELECT
+    e.LMK_KEY AS unique_id,
+    CONCAT_WS(' ', e.ADDRESS1, e.ADDRESS2, e.ADDRESS3) AS address_concat,
+    e.POSTCODE AS postcode,
+    l.labels_filename
+FROM {epc_path} e
+INNER JOIN labels l ON e.LMK_KEY = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'epc') AND CONTAINS(l.labels_filename, 'auto')
 """
 
 con_disk.execute(sql)
 messy_data = con_disk.table("messy_data")
+
+
+messy_data.aggregate("labels_filename, count(*)", "labels_filename").show()
+
+# Messy data like
+# ┌──────────────────────┬────────────────────────────────────┬──────────┬───────────────────────────────────────────────┐
+# │      unique_id       │           address_concat           │ postcode │                labels_filename                │
+# │       varchar        │              varchar               │ varchar  │                    varchar                    │
+# ├──────────────────────┼────────────────────────────────────┼──────────┼───────────────────────────────────────────────┤
+# │ 52714                │ White Heather Hotel White Heathe…  │ LL30 2NR │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+# │ 1701094              │ Champs Cafe Champs Cafe 64 Drome…  │ CH5 2LR  │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+
 
 full_os_path = (
     "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
@@ -123,16 +162,50 @@ description != 'Non Addressable Object'
 con_disk.execute(sql)
 df_os = con_disk.table("os")
 
+# df os like:
+# ┌─────────────┬────────────────────────────────────────────────────────────────────────────────────┬──────────┐
+# │  unique_id  │                                   address_concat                                   │ postcode │
+# │    int64    │                                      varchar                                       │ varchar  │
+# ├─────────────┼────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+# │    25035526 │ 10,  SOME ADDRESS GOES HERE.                                                       │ MK14 6EF │
+
 
 messy_count = messy_data.count("*").fetchall()[0][0]
 canonical_count = df_os.count("*").fetchall()[0][0]
 print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
+
+# Check that the labels look correct
+
+sql = """
+SELECT
+    l.messy_id,
+    l.correct_uprn,
+    l.confidence,
+
+    m.address_concat AS messy_address,
+    m.postcode AS messy_postcode,
+
+    o.address_concat AS os_address,
+    o.postcode AS os_postcode,
+
+    l.labels_filename
+
+FROM labels AS l
+INNER JOIN messy_data AS m
+    ON l.messy_id = m.unique_id
+INNER JOIN os AS o
+    ON TRY_CAST(l.correct_uprn AS BIGINT) = o.unique_id
+ORDER BY random()
+
+"""
+con_disk.sql(sql).show(max_width=100000)
+
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
 # -----------------------------------------------------------------------------
 
-df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con_disk)
+df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(messy_data, con=con_disk)
 sql = """
 create table epc_data_clean as
 select * from df_epc_data_clean
@@ -334,94 +407,6 @@ def black_box(
         f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
     )
 
-    # df_with_distinguishability = best_matches_with_distinguishability(
-    #     df_predict=df_predict_improved,
-    #     df_addresses_to_match=df_epc_data,
-    #     con=con,
-    #     distinguishability_thresholds=[1, 5, 10],
-    #     best_match_only=True,
-    # )
-    # ===================================
-    # ===================================
-    # ===================================
-    # ===================================
-
-    # TO DO NEXT:
-    # Update model for the better token freq rel overlap algo.
-    # Update model to allow for the unique tokens in the predict step
-    # Generate new labels.csv with the 3,000 lables
-    # Look at whether we can use a better LLM prompt to improve the labels
-
-    # At that point we just really need better labels!
-
-    # ===================================
-    # ===================================
-    # ===================================
-    # ===================================
-
-    # print(df_with_distinguishability.count("*").fetchall()[0][0])
-    # print(labels_filtered.count("*").fetchall()[0][0])
-
-    # Join on match weight of true matches
-
-    # squish = 1.5
-    # sql = f"""
-    # CREATE OR REPLACE TABLE truth_status as
-
-    # with joined_labels as (
-    # select
-    #     m.*,
-    #     e.uprn as epc_uprn,
-    #     e.uprn_source as epc_source,
-    #     l.correct_uprn as correct_uprn,
-    #     l.confidence as label_confidence,
-    #     case
-    #         when m.unique_id_l = l.correct_uprn then 'true positive'
-    #         else 'false positive'
-    #     end as truth_status
-    # from df_with_distinguishability m
-    # left join epc_data_raw e on m.unique_id_r = e.unique_id
-    # left join labels_filtered l on m.unique_id_r = l.messy_id
-    # )
-    # select *,
-
-    # case
-    # when distinguishability_category = '01: One match only' then 1.0
-    # when distinguishability_category = '99: No match' then 0.0
-    # else (pow({squish}, distinguishability))/(1+pow({squish}, distinguishability))
-    # end as truth_status_numeric,
-
-    # case
-    # when truth_status = 'true positive'
-    #     then  truth_status_numeric  + 2.0
-    # when truth_status = 'false positive'
-    #     then (-1* truth_status_numeric) - 2.0
-    # else truth_status_numeric
-    # end as score,
-
-    # case
-    # when truth_status = 'true positive'
-    #     then 1.0::float
-    # when truth_status = 'false positive'
-    #     then 0.0::float
-    # else 0.0::float
-    # end as truth_status_binary
-
-    # from joined_labels
-
-    # """
-    # con.execute(sql)
-
-    # score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
-    # num_labels = con.sql("select count(*) from labels_filtered").fetchall()[0][0]
-    # score = score / num_labels
-    # num_matches = con.sql(
-    #     "select sum(truth_status_binary) from truth_status"
-    # ).fetchall()[0][0]
-
-    # num_non_matches = con.sql(
-    #     "select count(*) from truth_status where truth_status = 'false positive'"
-    # ).fetchall()[0][0]
     start_time = datetime.now()
 
     sql = """
