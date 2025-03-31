@@ -16,51 +16,96 @@ from uk_address_matcher.linking_model.training import get_settings_for_training
 
 import logging
 import json
+
 from datetime import datetime
 
+#  We will clean the data once and store it
 if os.path.exists("del.duckdb"):
     os.remove("del.duckdb")
 con_disk = duckdb.connect("del.duckdb")
 
+path = "secret_data/labels/*.jsonl"
+
+sql = f"""
+select * from
+read_json('{path}', filename=labels_filename, columns={{
+    'messy_id': 'VARCHAR',
+    'correct_uprn': 'VARCHAR',
+    'confidence': 'VARCHAR'
+}})
+where  not contains(correct_uprn, '[')
+and nullif(correct_uprn, '') is not null
+
+"""
+labels = con_disk.sql(sql)
+labels.aggregate("labels_filename, count(*)", "labels_filename").show()
+
+
 epc_path = (
-    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=radient)"
+    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=epc_filename)"
 )
+
+
+fhrs_path = "read_parquet('secret_data/fhrs/fhrs_data.parquet')"
+
+
+sql = f"""
+CREATE OR REPLACE TABLE messy_data AS
+-- Labels from LLM labelling of fhrs data
+select
+    fhrsid AS unique_id,
+    CONCAT_WS(' ', BusinessName, AddressLine1, AddressLine2, AddressLine3, AddressLine4) AS address_concat,
+    PostCode
+FROM {fhrs_path}
+WHERE unique_id IN (
+    SELECT messy_id
+    FROM labels
+    WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
+)
+
+UNION ALL
+
+-- Labels from LLM labelling of EPC data where splink and EPC did not match
+SELECT
+    LMK_KEY AS unique_id,
+    CONCAT_WS(' ', ADDRESS1, ADDRESS2, ADDRESS3) AS address_concat,
+    POSTCODE AS postcode
+FROM {epc_path}
+WHERE unique_id IN (
+    SELECT messy_id
+    FROM labels
+    WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+)
+
+UNION ALL
+
+-- Labels from auto agreement of EPC and splink matcher
+SELECT * FROM (
+    SELECT
+        LMK_KEY AS unique_id,
+        CONCAT_WS(' ', ADDRESS1, ADDRESS2, ADDRESS3) AS address_concat,
+        POSTCODE AS postcode
+    FROM {epc_path}
+    WHERE unique_id IN (
+        SELECT messy_id
+        FROM labels
+        WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
+    )
+    ORDER BY substr(unique_id, 4, 4)
+    LIMIT 3000
+) AS limited_third_part
+
+
+
+"""
+
+con_disk.execute(sql)
+messy_data = con_disk.table("messy_data")
 
 full_os_path = (
     "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
 )
 
-labels_path = "read_csv('secret_data/epc/labels_2000.csv', all_varchar=true)"
-
-sql = f"""
-create or replace table labels_filtered as
-select * from {labels_path}
-where confidence = 'epc_splink_agree'
-and hash(messy_id) % 100 = 0
--- and 1=2
-UNION ALL
-select * from {labels_path}
-where confidence in ('certain')
-limit 1000
-
-"""
-con_disk.execute(sql)
-labels_filtered = con_disk.table("labels_filtered")
-labels_filtered.count("*").fetchall()[0][0]
-
-sql = f"""
-create or replace table epc_data_raw as
-select
-LMK_KEY as unique_id,
-concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
-POSTCODE as postcode,
-UPRN as uprn,
-UPRN_SOURCE as uprn_source
-from {epc_path}
-where unique_id in (select messy_id from labels_filtered)
-
-"""
-con_disk.execute(sql)
 
 sql = f"""
 create or replace table os as
@@ -70,7 +115,7 @@ regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
 postcode
 from {full_os_path}
 where postcode in
-(select distinct postcode from epc_data_raw)
+(select distinct postcode from messy_data)
 and
 description != 'Non Addressable Object'
 
@@ -78,11 +123,10 @@ description != 'Non Addressable Object'
 con_disk.execute(sql)
 df_os = con_disk.table("os")
 
-df_epc_data = con_disk.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
 
-# messy_count = df_epc_data.count("*").fetchall()[0][0]
-# canonical_count = df_os.count("*").fetchall()[0][0]
-# print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
+messy_count = messy_data.count("*").fetchall()[0][0]
+canonical_count = df_os.count("*").fetchall()[0][0]
+print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
