@@ -27,8 +27,9 @@ con_disk = duckdb.connect("del.duckdb")
 path = "secret_data/labels/*.jsonl"
 
 sql = f"""
+CREATE TABLE labels_all AS
 with
-labels_all as
+labels_all_input as
 (
 select * from
 read_json('{path}', filename=labels_filename, columns={{
@@ -42,13 +43,13 @@ and nullif(correct_uprn, '') is not null
 
 -- Labels from LLM labelling of fhrs data
 select *
-from labels_all
+from labels_all_input
 WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
 
 UNION ALL
 -- Labels from LLM labelling of EPC data where splink and EPC did not match
 select *
-from labels_all
+from labels_all_input
 WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
 
 UNION ALL
@@ -56,13 +57,14 @@ UNION ALL
 SELECT * FROM (
     SELECT
         *
-    FROM labels_all
+    FROM labels_all_input
     WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
     ORDER BY substr(messy_id, 4, 4)
     LIMIT 3000
 )
 """
-labels = con_disk.sql(sql)
+con_disk.execute(sql)
+labels = con_disk.table("labels_all")
 labels.aggregate("labels_filename, count(*)", "labels_filename").show()
 
 # labels like
@@ -205,10 +207,12 @@ con_disk.sql(sql).show(max_width=100000)
 # Step 2: Clean data
 # -----------------------------------------------------------------------------
 
-df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(messy_data, con=con_disk)
+df_messy_data_clean = clean_data_using_precomputed_rel_tok_freq(
+    messy_data, con=con_disk
+)
 sql = """
-create table epc_data_clean as
-select * from df_epc_data_clean
+create table messy_data_clean as
+select * exclude (labels_filename) from df_messy_data_clean
 """
 con_disk.execute(sql)
 
@@ -266,18 +270,18 @@ def black_box(
     con.execute(sql)
 
     sql = """
-    create table labels_filtered as
-    select * from cleaned.labels_filtered
+    create table labels_all as
+    select * from cleaned.labels_all
     """
     con.execute(sql)
-    labels_filtered = con.table("labels_filtered")
+    labels_all = con.table("labels_all")
 
     sql = """
-    create table df_epc_data_clean as
-    select * from cleaned.epc_data_clean
+    create table df_messy_data_clean as
+    select * from cleaned.messy_data_clean
     """
     con.execute(sql)
-    df_epc_data_clean = con.table("df_epc_data_clean")
+    df_messy_data_clean = con.table("df_messy_data_clean")
 
     sql = """
 
@@ -288,12 +292,12 @@ def black_box(
     df_os_clean = con.table("df_os_clean")
 
     sql = """
-    create table epc_data_raw as
-    select * from cleaned.epc_data_raw
+    create table messy_data as
+    select * from cleaned.messy_data
     """
     con.execute(sql)
 
-    df_epc_data = con.table("epc_data_raw")
+    messy_data = con.table("messy_data")
 
     con.execute("detach cleaned")
     df_os_clean = con.table("df_os_clean")
@@ -354,7 +358,7 @@ def black_box(
     # print(json.dumps(settings.get_settings("duckdb").as_dict(), indent=4))
 
     linker = get_linker(
-        df_addresses_to_match=df_epc_data_clean,
+        df_addresses_to_match=df_messy_data_clean,
         df_addresses_to_search_within=df_os_clean,
         con=con,
         include_full_postcode_block=True,
@@ -425,7 +429,7 @@ def black_box(
             l.correct_uprn
         FROM df_predict_improved p
         CROSS JOIN weight_bounds w
-        LEFT JOIN labels_filtered l ON p.unique_id_r = l.messy_id
+        LEFT JOIN labels_all l ON p.unique_id_r = l.messy_id
     ),
     ranked AS (
         SELECT
@@ -472,7 +476,7 @@ def black_box(
     start_time = datetime.now()
 
     score = to_score.sum("reward").fetchall()[0][0]
-    num_labels = labels_filtered.count("*").fetchall()[0][0]
+    num_labels = labels_all.count("*").fetchall()[0][0]
     score = 5 * score / num_labels
 
     num_matches = (
