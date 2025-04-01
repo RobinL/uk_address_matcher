@@ -296,9 +296,9 @@ def black_box(
     df_os_clean = con.table("df_os_clean")
 
     end_time = datetime.now()
-    print(
-        f"Time taken to load data: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to load data: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
     settings = get_settings_for_training(
@@ -354,7 +354,7 @@ def black_box(
         df_addresses_to_match=df_messy_data_clean,
         df_addresses_to_search_within=df_os_clean,
         con=con,
-        include_full_postcode_block=True,
+        include_full_postcode_block=False,
         include_outside_postcode_block=True,
         retain_intermediate_calculation_columns=True,
         settings=settings,
@@ -366,9 +366,9 @@ def black_box(
 
     end_time = datetime.now()
 
-    print(
-        f"Time taken to run match weights chart: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run match weights chart: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
@@ -378,9 +378,9 @@ def black_box(
     df_predict_ddb = df_predict.as_duckdbpyrelation()
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run predict: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run predict: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
@@ -401,9 +401,9 @@ def black_box(
     )
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     # How many of the labels are in df_predict_improved
 
@@ -492,9 +492,9 @@ def black_box(
     # to_score.count("*").show()
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run to_score: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run to_score: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
@@ -825,108 +825,160 @@ param_config = {
 #         config["initial"] = np.random.uniform(config["bounds"][0], config["bounds"][1])
 #         config["initial"] = config["bounds"][0]
 
+
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
 lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names])
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 5.0
+alpha = 10.0
 alpha_decay = 0.995
 min_alpha = 0.0001
-momentum = 0.1
+momentum = (
+    0.1  # Note: Momentum is not used in the provided loop, velocity isn't updated/used
+)
 num_iterations = 400
-perterb_multiplier_to_compute_gradient = 0.1
-
+perterb_multiplier_to_compute_gradient = 0.2
 
 params = np.array(initial_params_array)
 num_params = len(params)
-velocity = np.zeros(num_params)
+velocity = np.zeros(
+    num_params
+)  # Initialize velocity even if not used in the provided loop snippet
 
-print("Parameter configuration:")
-for name, config in param_config.items():
-    status = "OPTIMIZING" if config["optimize"] else "FIXED (using initial value)"
-    print(f"  {name}: {status}, initial value: {config['initial']}")
-    if config["optimize"]:
-        print(
-            f"    bounds: {config['bounds']}, perturbation scale: {config['perturb']}"
-        )
-
-# Initial computation
+# Initial computation (optional but good practice)
 initial_params_dict = get_params_dict(params)
 initial_result = black_box(**initial_params_dict)
 initial_score = initial_result["score"]
-initial_num_matches = initial_result["num_matches"]
-initial_num_non_matches = initial_result["num_non_matches"]
-initial_num_indeterminate = initial_result["num_indeterminate"]
-print(f"Initial Score: {initial_score:,.2f}")
-print(f"Initial Num Matches: {initial_num_matches:,.0f}")
-print(f"Initial Num Non Matches: {initial_num_non_matches:,.0f}")
-print(f"Initial Num Indeterminate: {initial_num_indeterminate:,.0f}")
 best_score = initial_score
 best_params = params.copy()
 
-history = [
-    {"iteration": -1, "variable": "score", "value": initial_score},
-    {"iteration": -1, "variable": "num_matches", "value": initial_num_matches},
-    {"iteration": -1, "variable": "num_non_matches", "value": initial_num_non_matches},
-    {
-        "iteration": -1,
-        "variable": "num_indeterminate",
-        "value": initial_num_indeterminate,
-    },
-]
-for name in param_config:
-    history.append(
-        {"iteration": -1, "variable": name, "value": param_config[name]["initial"]}
-    )
 
-with open("optimisation.jsonl", "a") as f:
-    f.write(json.dumps({"restart_time": datetime.now().isoformat()}) + "\n")
+history = []
 
+
+print("Starting Optimization Loop...")
 # Optimization loop
 for iteration in range(num_iterations):
-    start_time = datetime.now()
+    iteration_start_time = datetime.now()  # Use a different name
+    print(f"\n--- Iteration {iteration} ---")
     alpha = max(alpha * alpha_decay, min_alpha)
     gradient = np.zeros(num_params)
-    base_reward = black_box_reward(
-        params, output_match_weights_chart=True
-    )  # Compute once per iteration
-    for idx in range(num_params):
-        perturb = np.zeros(num_params)
-        perturb[idx] = perterb_multiplier_to_compute_gradient * perturb_scale[idx]
-        params_plus = np.clip(params + perturb, lower_bounds, upper_bounds)
-        reward_plus = black_box_reward(params_plus, output_match_weights_chart=False)
-        gradient[idx] = (reward_plus - base_reward) / (perturb_scale[idx] * 0.1)
-        print(f"Gradient for parameter {param_names[idx]}: {gradient[idx]:.6f}")
 
-    print(f"  Iteration {iteration}:")
-    print(f"    Gradient: {gradient.tolist()}")
-    print(f"    Parameters (before update): {params.tolist()}")
+    # --- Calculate Base Reward and Details ---
+    print("Calculating base reward...")
+    base_params_dict = get_params_dict(params)
+    base_result = black_box(**base_params_dict)  # Call full function
+    base_score = base_result["score"]
+    base_num_matches = base_result["num_matches"]
+    print(f"  Base Score: {base_score:.10f}, Base Matches: {base_num_matches}")
+
+    print("Calculating gradients...")
+    # --- Gradient Calculation Loop with Detailed Debugging ---
+    for idx in range(num_params):
+        param_name = param_names[idx]
+        perturb_size = perterb_multiplier_to_compute_gradient * perturb_scale[idx]
+
+        if perturb_scale[idx] == 0 or perturb_size == 0:
+            print(f"  Skipping gradient for {param_name}: Zero perturbation scale.")
+            gradient[idx] = 0
+            continue  # Skip if no perturbation defined
+
+        # Create perturbed parameters
+        params_perturbed = params.copy()
+        params_perturbed[idx] += perturb_size
+
+        # --- Crucial: Clip the perturbed parameter *before* evaluation ---
+        # This mimics what your original code did and might be the cause of zero gradients
+        original_param_val = params[idx]
+        perturbed_val_before_clip = params_perturbed[idx]
+        params_perturbed[idx] = np.clip(
+            params_perturbed[idx], lower_bounds[idx], upper_bounds[idx]
+        )
+        perturbed_val_after_clip = params_perturbed[idx]
+
+        # Check if clipping made the perturbation ineffective
+        if perturbed_val_after_clip == original_param_val:
+            print(
+                f"  Gradient for {param_name}: 0.000000 (Perturbation clipped back to original value)"
+            )
+            gradient[idx] = 0
+            # Optionally: You could try a backward difference here if needed
+            # perturb_size = -perturb_size ... recompute params_perturbed ... etc.
+        else:
+            # Evaluate with the (potentially clipped) perturbed parameters
+            params_plus_dict = get_params_dict(
+                params_perturbed
+            )  # Use the modified params array
+            result_plus = black_box(**params_plus_dict)
+            score_plus = result_plus["score"]
+            num_matches_plus = result_plus["num_matches"]
+
+            # Calculate gradient
+            gradient[idx] = (
+                score_plus - base_score
+            ) / perturb_size  # Use the *intended* perturb size
+
+            # --- Detailed Print ---
+            print(f"  Gradient for {param_name}:")
+            print(
+                f"    Base          -> Score: {base_score:.10f}, Matches: {base_num_matches}"
+            )
+            # --- ADDED original_param_val HERE ---
+            print(
+                f"    Values        -> Original: {original_param_val:.6f}, Perturbed (Before Clip): {perturbed_val_before_clip:.6f}, Perturbed (After Clip): {perturbed_val_after_clip:.6f}"
+            )
+            # --- END ADDITION ---
+            print(
+                f"    Perturbed(+)  -> Score: {score_plus:.10f}, Matches: {num_matches_plus}"
+            )
+            print(
+                f"    Score Diff: {(score_plus - base_score):.10f}, Perturb Size: {perturb_size:.6f}"
+            )
+            print(f"    Calculated Gradient: {gradient[idx]:.10f}")
+
+    print(f"\n  Iteration {iteration} Summary:")
+    # Using list comprehension for cleaner formatting
+    print(f"    Gradient: {[f'{g:.6f}' for g in gradient]}")
+    print(f"    Parameters (before update): {[f'{p:.6f}' for p in params]}")
     print(f"    Current alpha: {alpha:.6f}")
 
-    # Compute the update step without clipping, allowing unrestricted updates
-    update_step = alpha * gradient  # Allow unrestricted updates based on gradient
-    params += update_step + momentum * velocity  # Apply momentum-enhanced update
-    params = np.clip(params, lower_bounds, upper_bounds)  # Keep parameters in bounds
+    # --- Parameter Update ---
+    # Compute the update step (Note: Original loop code didn't update velocity)
+    # If you want momentum, you need: velocity = momentum * velocity + alpha * gradient
+    # update_step = velocity
+    # Otherwise, just use the gradient:
+    update_step = alpha * gradient
 
-    params_dict = get_params_dict(params)
-    end_time = datetime.now()
+    params_before_update = params.copy()  # Keep track
+    params_after_momentum = params + update_step  # If using momentum: params + velocity
+    # params = params_after_momentum # If only using update_step
+    # Apply momentum-enhanced update (as per original loop structure) - MAKE SURE VELOCITY IS UPDATED IF USING THIS
+    # Assuming you *want* momentum as in the original description:
+    velocity = momentum * velocity + alpha * gradient  # Standard momentum update
+    params_after_momentum = params + velocity  # Apply new velocity
+    params = np.clip(
+        params_after_momentum, lower_bounds, upper_bounds
+    )  # Keep parameters in bounds
+
+    # --- Post-Update Evaluation and Logging ---
+    print(f"    Parameters (after update): {[f'{p:.6f}' for p in params]}")
+
+    # Evaluate final state for this iteration (optional, could use base_result from next iter)
+    final_params_dict = get_params_dict(params)
+    final_result = black_box(**final_params_dict)
+    score = final_result["score"]
+    num_matches = final_result["num_matches"]
+    num_non_matches = final_result["num_non_matches"]
+    num_indeterminate = final_result["num_indeterminate"]
+
+    print(f"  Score (End of Iter): {score:,.4f}")  # Use 4dp for final score report
     print(
-        f"Time taken to run get_params_dict: {round((end_time - start_time).total_seconds(), 2)}"
+        f"  Num Matches: {num_matches:,.0f}, Num Non Matches: {num_non_matches:,.0f}, Num Indeterminate: {num_indeterminate:,.0f}"
     )
 
-    start_time = datetime.now()
-    result = black_box(**params_dict)
-    end_time = datetime.now()
-    print(
-        f"Time taken to run black_box: {round((end_time - start_time).total_seconds(), 2)}"
-    )
-
-    score = result["score"]
-    num_matches = result["num_matches"]
-    num_non_matches = result["num_non_matches"]
-    num_indeterminate = result["num_indeterminate"]
+    # --- History Update ---
     history.append({"iteration": iteration, "variable": "score", "value": score})
     history.append(
         {"iteration": iteration, "variable": "num_matches", "value": num_matches}
@@ -945,50 +997,59 @@ for iteration in range(num_iterations):
             "value": num_indeterminate,
         }
     )
-    for name in param_config:
-        if param_config[name]["optimize"]:
-            value = params[param_names.index(name)]
-        else:
-            value = param_config[name]["initial"]
+    current_param_dict_for_history = get_params_dict(
+        params
+    )  # Get full dict including fixed params
+    for name, value in current_param_dict_for_history.items():
         history.append({"iteration": iteration, "variable": name, "value": value})
 
-    history_df = pd.DataFrame(history)
-    # clear_output(wait=True)
-    chart = create_chart(history_df, iteration)
-    # display(chart)
-    chart.save("iteration.html")
+    # --- Charting ---
+    if (
+        iteration % 5 == 0 or score > best_score
+    ):  # Update chart less frequently or on improvement
+        try:
+            history_df = pd.DataFrame(history)
+            chart = create_chart(history_df, iteration)
+            chart.save("iteration.html")
+            # display(chart) # Optional inline display
+            print("  Chart updated.")
+        except Exception as e:
+            print(f"  Error generating chart: {e}")
 
-    print(f"  Parameters (after update): {params.tolist()}")
-    print(f"Score: {score:,.2f}")
-    print(f"Num Matches: {num_matches:,.0f}")
-    print(f"Num Non Matches: {num_non_matches:,.0f}")
-    param_change_magnitude = np.linalg.norm(velocity)
-    print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
-    print(f"  Velocity: {velocity.tolist()}")
-    end_time = datetime.now()
-    print(
-        f"Time taken to run iteration: {round((end_time - start_time).total_seconds(), 2)}"
-    )
-
+    # --- Best Score Tracking ---
     if score > best_score:
         best_score = score
         best_params = params.copy()
-        print(f"New best score found: {best_score:,.2f}")
+        print(f"----> New best score found: {best_score:,.4f} at iteration {iteration}")
 
         best_params_dict = get_params_dict(best_params)
         best_params_dict["score"] = best_score
         best_params_dict["iteration"] = iteration
         best_params_dict["timestamp"] = datetime.now().isoformat()
+        try:
+            with open("optimisation.jsonl", "a") as f:
+                f.write(json.dumps(best_params_dict) + "\n")
+        except Exception as e:
+            print(f"Error writing best params to file: {e}")
 
-        with open("optimisation.jsonl", "a") as f:
-            f.write(json.dumps(best_params_dict) + "\n")
+    # --- Convergence Check (using parameter change) ---
+    param_change = params - params_before_update
+    param_change_magnitude = np.linalg.norm(param_change)
+    print(f"  Parameter change magnitude (norm): {param_change_magnitude:.6f}")
+    # print(f"  Velocity (end of iter): {[f'{v:.6f}' for v in velocity]}") # Add if using momentum
 
     if param_change_magnitude < 1e-5 and iteration > 10:
         print(f"Converged at iteration {iteration} - parameter changes too small")
         break
 
-# Final results
-print(f"Optimization completed. Best Score: {best_score:,.2f}")
+    iteration_end_time = datetime.now()
+    # print(
+    #     f"Time taken for Iteration {iteration}: {(iteration_end_time - iteration_start_time).total_seconds():.2f}s"
+    # )
+
+
+# --- Final Results ---
+print(f"\nOptimization completed. Best Score: {best_score:,.4f}")
 print(f"Parameter names: {param_names}")
 print("Final best parameters:")
 final_params_dict = {
