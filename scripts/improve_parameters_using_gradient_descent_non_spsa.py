@@ -831,12 +831,13 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 10.0
+alpha = 5.0
 alpha_decay = 0.995
 min_alpha = 0.0001
 momentum = 0.1
 num_iterations = 400
-perterb_multiplier_to_compute_gradient = 0.2
+perterb_multiplier_to_compute_gradient = 0.1
+
 
 params = np.array(initial_params_array)
 num_params = len(params)
