@@ -53,12 +53,14 @@ CREATE TABLE labels_all AS
 select *
 from labels_raw
 WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
+and confidence = 'certain'
 
 UNION ALL
 -- Labels from LLM labelling of EPC data where splink and EPC did not match
 select *
 from labels_raw
 WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+and confidence = 'certain'
 
 UNION ALL
 -- Labels from auto agreement of EPC and splink matcher
@@ -79,6 +81,7 @@ SELECT * FROM (
 """
 con_disk.execute(sql)
 labels = con_disk.table("labels_all")
+labels
 labels.aggregate(
     "coalesce(labels_filename, 'total') as labels_count, count(*)",
     "cube(labels_filename)",
@@ -467,7 +470,7 @@ def black_box(
         CASE
             WHEN true_match_weight IS NULL THEN -0.2
             WHEN true_match_id != best_match_id THEN GREATEST(true_match_weight - best_match_weight, -0.2)
-            WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2)
+            WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2) + 0.01
         END AS reward
     FROM aggregated
     """
@@ -721,36 +724,36 @@ param_config = {
         "bounds": (-10, 10),
         "perturb": 1.0,
     },
-    "FIRST_N_TOKENS_WEIGHT_1": {
-        "initial": 8,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_2": {
-        "initial": 4,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_3": {
-        "initial": 3,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_4": {
-        "initial": 0,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_5": {
-        "initial": -2,
-        "optimize": True,
-        "bounds": (-10, 0),
-        "perturb": 1.0,
-    },
+    # "FIRST_N_TOKENS_WEIGHT_1": {
+    #     "initial": 8,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_2": {
+    #     "initial": 4,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_3": {
+    #     "initial": 3,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_4": {
+    #     "initial": 0,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_5": {
+    #     "initial": -2,
+    #     "optimize": True,
+    #     "bounds": (-10, 0),
+    #     "perturb": 1.0,
+    # },
     # "REL_FREQ_START_EXP": {
     #     "initial": 4,
     #     "optimize": False,
@@ -790,33 +793,33 @@ param_config = {
     "REL_FREQ_DELTA_WEIGHT_1": {
         "initial": 1,
         "optimize": True,
-        "bounds": (0, 5),
+        "bounds": (0.01, 5),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_2": {
         "initial": 1,
         "optimize": True,
-        "bounds": (0, 5),
+        "bounds": (0.01, 5),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_3": {
         "initial": 0.25,
         "optimize": True,
-        "bounds": (0, 2),
+        "bounds": (0.01, 2),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_4": {
         "initial": 0.25,
         "optimize": True,
-        "bounds": (0, 2),
+        "bounds": (0.01, 2),
         "perturb": 0.1,
     },
-    "REL_FREQ_PUNISHMENT_MULTIPLIER": {
-        "initial": 0.33,
-        "optimize": True,
-        "bounds": (0, 1),
-        "perturb": 0.03,
-    },
+    # "REL_FREQ_PUNISHMENT_MULTIPLIER": {
+    #     "initial": 0.33,
+    #     "optimize": True,
+    #     "bounds": (0, 1),
+    #     "perturb": 0.03,
+    # },
 }
 
 # Optionally randomise the initial parameters within the bounds
@@ -832,7 +835,7 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 10.0
+alpha = 4.0
 alpha_decay = 0.995
 min_alpha = 0.0001
 momentum = (
@@ -878,6 +881,15 @@ for iteration in range(num_iterations):
     # --- Gradient Calculation Loop with Detailed Debugging ---
     for idx in range(num_params):
         param_name = param_names[idx]
+
+        # Skip if this parameter is not to be optimized
+        if not param_config[param_name]["optimize"]:
+            print(
+                f"  Skipping gradient for {param_name}: Parameter not set for optimization."
+            )
+            gradient[idx] = 0
+            continue
+
         perturb_size = perterb_multiplier_to_compute_gradient * perturb_scale[idx]
 
         if perturb_scale[idx] == 0 or perturb_size == 0:
@@ -967,7 +979,7 @@ for iteration in range(num_iterations):
 
     # Evaluate final state for this iteration (optional, could use base_result from next iter)
     final_params_dict = get_params_dict(params)
-    final_result = black_box(**final_params_dict)
+    final_result = black_box(**final_params_dict, output_match_weights_chart=True)
     score = final_result["score"]
     num_matches = final_result["num_matches"]
     num_non_matches = final_result["num_non_matches"]
