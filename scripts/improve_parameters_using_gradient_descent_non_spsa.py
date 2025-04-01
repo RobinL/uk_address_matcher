@@ -470,7 +470,7 @@ def black_box(
         CASE
             WHEN true_match_weight IS NULL THEN -0.2
             WHEN true_match_id != best_match_id THEN GREATEST(true_match_weight - best_match_weight, -0.2)
-            WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2) + 0.01
+            WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2)
         END AS reward
     FROM aggregated
     """
@@ -842,7 +842,7 @@ momentum = (
     0.1  # Note: Momentum is not used in the provided loop, velocity isn't updated/used
 )
 num_iterations = 400
-perterb_multiplier_to_compute_gradient = 0.2
+perterb_multiplier_to_compute_gradient = 0.3
 
 params = np.array(initial_params_array)
 num_params = len(params)
