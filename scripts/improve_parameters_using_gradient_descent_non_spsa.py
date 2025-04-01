@@ -24,13 +24,16 @@ if os.path.exists("del.duckdb"):
     os.remove("del.duckdb")
 con_disk = duckdb.connect("del.duckdb")
 
+full_os_path = (
+    "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
+)
+
+
 path = "secret_data/labels/*.jsonl"
 
+
 sql = f"""
-CREATE TABLE labels_all AS
-with
-labels_all_input as
-(
+CREATE TABLE labels_raw AS
 select * from
 read_json('{path}', filename=labels_filename, columns={{
     'messy_id': 'VARCHAR',
@@ -39,17 +42,22 @@ read_json('{path}', filename=labels_filename, columns={{
 }})
 where  not contains(correct_uprn, '[')
 and nullif(correct_uprn, '') is not null
-)
+and try_cast(correct_uprn as BIGINT) in (select uprn from {full_os_path})
+"""
+con_disk.execute(sql)
+
+sql = """
+CREATE TABLE labels_all AS
 
 -- Labels from LLM labelling of fhrs data
 select *
-from labels_all_input
+from labels_raw
 WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
 
 UNION ALL
 -- Labels from LLM labelling of EPC data where splink and EPC did not match
 select *
-from labels_all_input
+from labels_raw
 WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
 
 UNION ALL
@@ -57,15 +65,24 @@ UNION ALL
 SELECT * FROM (
     SELECT
         *
-    FROM labels_all_input
+    FROM labels_raw
     WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
+    and
+    messy_id not in
+    (
+    select messy_id from labels_raw
+     WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+    )
     ORDER BY substr(messy_id, 4, 4)
     LIMIT 3000
 )
 """
 con_disk.execute(sql)
 labels = con_disk.table("labels_all")
-labels.aggregate("labels_filename, count(*)", "labels_filename").show()
+labels.aggregate(
+    "coalesce(labels_filename, 'total') as labels_count, count(*)",
+    "cube(labels_filename)",
+).show()
 
 # labels like
 # ┌────────────────────────────────┬──────────────┬──────────────────────┬───────────────────────────────────────────────┐
@@ -126,13 +143,18 @@ SELECT
 FROM {epc_path} e
 INNER JOIN labels l ON e.LMK_KEY = l.messy_id
 WHERE CONTAINS(l.labels_filename, 'epc') AND CONTAINS(l.labels_filename, 'auto')
+
 """
 
 con_disk.execute(sql)
 messy_data = con_disk.table("messy_data")
 
 
-messy_data.aggregate("labels_filename, count(*)", "labels_filename").show()
+messy_data.aggregate(
+    "coalesce(labels_filename, 'total') as messy_data_count, count(*)",
+    "cube(labels_filename)",
+).show()
+
 
 # Messy data like
 # ┌──────────────────────┬────────────────────────────────────┬──────────┬───────────────────────────────────────────────┐
@@ -143,11 +165,6 @@ messy_data.aggregate("labels_filename, count(*)", "labels_filename").show()
 # │ 1701094              │ Champs Cafe Champs Cafe 64 Drome…  │ CH5 2LR  │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
 
 
-full_os_path = (
-    "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
-)
-
-
 sql = f"""
 create or replace table os as
 select
@@ -155,10 +172,11 @@ uprn as unique_id,
 regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
 postcode
 from {full_os_path}
-where postcode in
-(select distinct postcode from messy_data)
-and
-description != 'Non Addressable Object'
+where
+(postcode in (select distinct postcode from messy_data))
+or
+(uprn in (select try_cast(correct_uprn as BIGINT) from labels))
+
 
 """
 con_disk.execute(sql)
@@ -176,32 +194,6 @@ messy_count = messy_data.count("*").fetchall()[0][0]
 canonical_count = df_os.count("*").fetchall()[0][0]
 print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
 
-
-# Check that the labels look correct
-
-sql = """
-SELECT
-    l.messy_id,
-    l.correct_uprn,
-    l.confidence,
-
-    m.address_concat AS messy_address,
-    m.postcode AS messy_postcode,
-
-    o.address_concat AS os_address,
-    o.postcode AS os_postcode,
-
-    l.labels_filename
-
-FROM labels AS l
-INNER JOIN messy_data AS m
-    ON l.messy_id = m.unique_id
-INNER JOIN os AS o
-    ON TRY_CAST(l.correct_uprn AS BIGINT) = o.unique_id
-ORDER BY random()
-
-"""
-con_disk.sql(sql).show(max_width=100000)
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
@@ -233,12 +225,12 @@ def black_box(
     BIGRAM_REWARD_MULTIPLIER=3,
     BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
     MISSING_TOKEN_PENALTY=0.1,
-    NUM_1_WEIGHT_1=95,
-    NUM_1_WEIGHT_2=95,
+    NUM_1_WEIGHT_1=6.57,
+    NUM_1_WEIGHT_2=6.57,
     NUM_1_WEIGHT_3=4,
     NUM_1_WEIGHT_4=1 / 16,
     NUM_1_WEIGHT_5=1 / 256,
-    NUM_2_WEIGHT_1=0.8 / 0.001,
+    NUM_2_WEIGHT_1=10,
     NUM_2_WEIGHT_2=1,
     NUM_2_WEIGHT_3=1 / 16,
     NUM_2_WEIGHT_4=1 / 256,
@@ -263,6 +255,7 @@ def black_box(
     FIRST_N_TOKENS_WEIGHT_3=0,
     FIRST_N_TOKENS_WEIGHT_4=0,
     FIRST_N_TOKENS_WEIGHT_5=-2,
+    output_match_weights_chart=False,
 ):
     start_time = datetime.now()
     con = duckdb.connect(":memory:")
@@ -367,8 +360,9 @@ def black_box(
         settings=settings,
     )
     logging.getLogger("splink").setLevel(logging.ERROR)
-    c = linker.visualisations.match_weights_chart()
-    c.save("match_weights_chart.html")
+    if output_match_weights_chart:
+        c = linker.visualisations.match_weights_chart()
+        c.save("match_weights_chart.html")
 
     end_time = datetime.now()
 
@@ -411,62 +405,91 @@ def black_box(
         f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
     )
 
+    # How many of the labels are in df_predict_improved
+
     start_time = datetime.now()
 
-    sql = """
-    create or replace table to_score as
-    WITH weight_bounds AS (
-        SELECT
-            MIN(match_weight) AS min_weight,
-            MAX(match_weight) AS max_weight
-        FROM df_predict_improved
-    ),
-    improved_with_labels AS (
-        SELECT
-            p.unique_id_r,
-            p.unique_id_l,
-            (p.match_weight - w.min_weight) / NULLIF(w.max_weight - w.min_weight, 0) AS normalized_match_weight,
-            l.correct_uprn
-        FROM df_predict_improved p
-        CROSS JOIN weight_bounds w
-        LEFT JOIN labels_all l ON p.unique_id_r = l.messy_id
-    ),
-    ranked AS (
-        SELECT
-            unique_id_r,
-            unique_id_l,
-            normalized_match_weight,
-            correct_uprn,
-            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY normalized_match_weight DESC) AS row_num
-        FROM improved_with_labels
-    ),
-    aggregated AS (
-        SELECT
-            unique_id_r,
-            MAX(normalized_match_weight) AS best_match_weight,
-            MAX(CASE WHEN row_num = 1 THEN unique_id_l END) AS best_match_id,
-            MAX(CASE WHEN unique_id_l = correct_uprn THEN normalized_match_weight END) AS true_match_weight,
-            MAX(CASE WHEN unique_id_l = correct_uprn THEN unique_id_l END) AS true_match_id,
-            MAX(CASE WHEN row_num = 2 THEN normalized_match_weight END) AS second_best_match_weight
-        FROM ranked
-        GROUP BY unique_id_r
-    )
+    weight_bounds_sql = """
     SELECT
+        MIN(match_weight) AS min_weight,
+        MAX(match_weight) AS max_weight
+    FROM df_predict_improved
+    """
+    weight_bounds = con.sql(weight_bounds_sql)
+    min_weight, max_weight = weight_bounds.fetchall()[0]
+
+    # Step 2: Create improved_with_labels using the weight bounds
+    # Get the min and max weight values from the weight_bounds table
+
+    improved_with_labels_sql = f"""
+    SELECT
+        l.messy_id AS messy_id,
+        p.unique_id_r,
+        p.unique_id_l,
+        (p.match_weight - {min_weight}) / NULLIF({max_weight} - {min_weight}, 0) AS normalized_match_weight,
+        l.correct_uprn
+    FROM labels_all l
+    LEFT JOIN df_predict_improved p ON l.messy_id = p.unique_id_r
+    """
+    improved_with_labels = con.sql(improved_with_labels_sql)
+
+    # Step 3: Create ranked data
+    ranked_sql = """
+    SELECT
+        messy_id,
         unique_id_r,
+        unique_id_l,
+        normalized_match_weight,
+        correct_uprn,
+        ROW_NUMBER() OVER (PARTITION BY messy_id ORDER BY normalized_match_weight DESC) AS row_num
+    FROM improved_with_labels
+    """
+    ranked = con.sql(ranked_sql)
+
+    # Step 4: Create aggregated data
+    aggregated_sql = """
+    SELECT
+        messy_id,
+        MAX(normalized_match_weight) AS best_match_weight,
+        MAX(CASE WHEN row_num = 1 THEN unique_id_l END) AS best_match_id,
+        MAX(CASE WHEN unique_id_l = correct_uprn THEN normalized_match_weight END) AS true_match_weight,
+        MAX(CASE WHEN unique_id_l = correct_uprn THEN unique_id_l END) AS true_match_id,
+        MAX(CASE WHEN row_num = 2 THEN normalized_match_weight END) AS second_best_match_weight
+    FROM ranked
+    GROUP BY messy_id
+    """
+    aggregated = con.sql(aggregated_sql)
+
+    # Step 5: Calculate rewards
+    rewards_sql = """
+    SELECT
+        messy_id,
         CASE
             WHEN true_match_weight IS NULL THEN -0.2
-            WHEN true_match_id != best_match_id THEN true_match_weight - best_match_weight
+            WHEN true_match_id != best_match_id THEN GREATEST(true_match_weight - best_match_weight, -0.2)
             WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2)
-        END AS reward,
-        case
-            when reward  = 0 then 'indistinguishable true positive'
-            when reward > 0 then 'true positive'
-            when reward < 0 then 'false positive'
-        end as truth_status
-    FROM aggregated;
+        END AS reward
+    FROM aggregated
     """
-    con.execute(sql)
-    to_score = con.table("to_score")
+    rewards = con.sql(rewards_sql)
+
+    # Step 6: Add truth status
+    to_score_sql = """
+    SELECT
+        messy_id,
+        reward,
+        CASE
+            WHEN reward = 0 THEN 'indistinguishable true positive'
+            WHEN reward > 0 THEN 'true positive'
+            WHEN reward < 0 THEN 'false positive'
+        END AS truth_status
+    FROM rewards
+    """
+    to_score = con.sql(to_score_sql)
+
+    # print count of to score
+    # print("count of to score")
+    # to_score.count("*").show()
 
     end_time = datetime.now()
     print(
@@ -491,6 +514,14 @@ def black_box(
         to_score.filter("truth_status = 'false positive'").count("*").fetchall()[0][0]
     )
 
+    print(
+        f"Score: {score:,.2f},    Num Matches: {num_matches:,.0f}, Num Non Matches: {num_non_matches:,.0f}, Num Indeterminate: {num_indeterminate:,.0f}"
+    )
+    sum_of_matches_non_matches_ind = num_matches + num_non_matches + num_indeterminate
+    print(
+        f"Sum of matches, non matches and indeterminate: {sum_of_matches_non_matches_ind:,.0f}"
+    )
+
     return {
         "score": score,
         "num_matches": num_matches,
@@ -510,8 +541,9 @@ def get_params_dict(params):
     return params_dict
 
 
-def black_box_reward(params):
+def black_box_reward(params, output_match_weights_chart=False):
     params_dict = get_params_dict(params)
+    params_dict["output_match_weights_chart"] = output_match_weights_chart
     result = black_box(**params_dict)
     return result["score"]
 
@@ -799,11 +831,12 @@ lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 2.0
+alpha = 10.0
 alpha_decay = 0.995
 min_alpha = 0.0001
 momentum = 0.1
 num_iterations = 400
+perterb_multiplier_to_compute_gradient = 0.2
 
 params = np.array(initial_params_array)
 num_params = len(params)
@@ -855,12 +888,14 @@ for iteration in range(num_iterations):
     start_time = datetime.now()
     alpha = max(alpha * alpha_decay, min_alpha)
     gradient = np.zeros(num_params)
-    base_reward = black_box_reward(params)  # Compute once per iteration
+    base_reward = black_box_reward(
+        params, output_match_weights_chart=True
+    )  # Compute once per iteration
     for idx in range(num_params):
         perturb = np.zeros(num_params)
-        perturb[idx] = 0.1 * perturb_scale[idx]
+        perturb[idx] = perterb_multiplier_to_compute_gradient * perturb_scale[idx]
         params_plus = np.clip(params + perturb, lower_bounds, upper_bounds)
-        reward_plus = black_box_reward(params_plus)
+        reward_plus = black_box_reward(params_plus, output_match_weights_chart=False)
         gradient[idx] = (reward_plus - base_reward) / (perturb_scale[idx] * 0.1)
         print(f"Gradient for parameter {param_names[idx]}: {gradient[idx]:.6f}")
 
