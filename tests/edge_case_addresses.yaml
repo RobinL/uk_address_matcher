@@ -169,3 +169,8 @@ addresses:
       - ["12 VEG STREET PUDDING LANE", "A1 1AB"]
       - ["13 VEG STREET PUDDING LANE", "A1 1AB"]
       - ["1 VEG STREET PUDDING LANE", "A1 1AA"]
+  # 21: Based on 164081566990. Gets confused over the A in 92A,
+  - messy_address: ["FLAT 2 92 KINGSWAY BIRMINGHAM", "A1 1AB"]
+    canonical_addresses:
+      - ["FLAT 2 92-92A KINGSWAY BIRMINGHAM", "A1 1AB"]
+      - ["FLAT 2 102 KINGSWAY BIRMINGHAM", "A1 1AB"]
