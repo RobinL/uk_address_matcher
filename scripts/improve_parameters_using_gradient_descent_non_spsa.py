@@ -16,51 +16,157 @@ from uk_address_matcher.linking_model.training import get_settings_for_training
 
 import logging
 import json
+
 from datetime import datetime
 
+#  We will clean the data once and store it
 if os.path.exists("del.duckdb"):
     os.remove("del.duckdb")
 con_disk = duckdb.connect("del.duckdb")
-
-epc_path = (
-    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=radient)"
-)
 
 full_os_path = (
     "read_parquet('secret_data/ord_surv/raw/add_gb_builtaddress_sorted_zstd.parquet')"
 )
 
-labels_path = "read_csv('secret_data/epc/labels_2000.csv', all_varchar=true)"
+
+path = "secret_data/labels/*.jsonl"
+
 
 sql = f"""
-create or replace table labels_filtered as
-select * from {labels_path}
-where confidence = 'epc_splink_agree'
-and hash(messy_id) % 100 = 0
--- and 1=2
+CREATE TABLE labels_raw AS
+select * from
+read_json('{path}', filename=labels_filename, columns={{
+    'messy_id': 'VARCHAR',
+    'correct_uprn': 'VARCHAR',
+    'confidence': 'VARCHAR'
+}})
+where  not contains(correct_uprn, '[')
+and nullif(correct_uprn, '') is not null
+and try_cast(correct_uprn as BIGINT) in (select uprn from {full_os_path})
+"""
+con_disk.execute(sql)
+
+sql = """
+CREATE TABLE labels_all AS
+
+-- Labels from LLM labelling of fhrs data
+select *
+from labels_raw
+WHERE CONTAINS(labels_filename, 'fhrs') and CONTAINS(labels_filename, 'llm')
+and confidence = 'certain'
+
 UNION ALL
-select * from {labels_path}
-where confidence in ('certain')
-limit 1000
+-- Labels from LLM labelling of EPC data where splink and EPC did not match
+select *
+from labels_raw
+WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+and confidence = 'certain'
 
+UNION ALL
+-- Labels from auto agreement of EPC and splink matcher
+SELECT * FROM (
+    SELECT
+        *
+    FROM labels_raw
+    WHERE CONTAINS(labels_filename, 'epc') AND CONTAINS(labels_filename, 'auto')
+    and
+    messy_id not in
+    (
+    select messy_id from labels_raw
+     WHERE CONTAINS(labels_filename, 'epc') and CONTAINS(labels_filename, 'llm')
+    )
+    ORDER BY substr(messy_id, 4, 4)
+    LIMIT 3000
+)
 """
 con_disk.execute(sql)
-labels_filtered = con_disk.table("labels_filtered")
-labels_filtered.count("*").fetchall()[0][0]
+labels = con_disk.table("labels_all")
+labels
+labels.aggregate(
+    "coalesce(labels_filename, 'total') as labels_count, count(*)",
+    "cube(labels_filename)",
+).show()
+
+# labels like
+# ┌────────────────────────────────┬──────────────┬──────────────────────┬───────────────────────────────────────────────┐
+# │            messy_id            │ correct_uprn │      confidence      │                labels_filename                │
+# │            varchar             │   varchar    │       varchar        │                    varchar                    │
+# ├────────────────────────────────┼──────────────┼──────────────────────┼───────────────────────────────────────────────┤
+# │ 1000661                        │ 100052007636 │ certain              │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+# │ 1
+
+epc_path = (
+    "read_csv('secret_data/epc/raw/domestic-*/certificates.csv', filename=epc_filename)"
+)
+
+
+fhrs_path = "read_parquet('secret_data/fhrs/fhrs_data.parquet')"
 
 sql = f"""
-create or replace table epc_data_raw as
-select
-LMK_KEY as unique_id,
-concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
-POSTCODE as postcode,
-UPRN as uprn,
-UPRN_SOURCE as uprn_source
-from {epc_path}
-where unique_id in (select messy_id from labels_filtered)
+select DISTINCT ON (fhrsid) *
+from {fhrs_path}
+"""
+fhrs_deduped = con_disk.sql(sql)
+
+# FHRS data has duplicate rows for some reason
+
+
+sql = f"""
+CREATE OR REPLACE TABLE messy_data AS
+-- Labels from LLM labelling of fhrs data
+SELECT
+    f.fhrsid AS unique_id,
+    CONCAT_WS(' ', f.BusinessName, f.AddressLine1, f.AddressLine2, f.AddressLine3, f.AddressLine4) AS address_concat,
+    f.PostCode AS postcode,
+    l.labels_filename
+FROM fhrs_deduped f
+INNER JOIN labels l ON f.fhrsid = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'fhrs') AND CONTAINS(l.labels_filename, 'llm')
+
+UNION ALL
+
+-- Labels from LLM labelling of EPC data where splink and EPC did not match
+SELECT
+    e.LMK_KEY AS unique_id,
+    CONCAT_WS(' ', e.ADDRESS1, e.ADDRESS2, e.ADDRESS3) AS address_concat,
+    e.POSTCODE AS postcode,
+    l.labels_filename
+FROM {epc_path} e
+INNER JOIN labels l ON e.LMK_KEY = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'epc') AND CONTAINS(l.labels_filename, 'llm')
+
+UNION ALL
+
+-- Labels from auto agreement of EPC and splink matcher
+SELECT
+    e.LMK_KEY AS unique_id,
+    CONCAT_WS(' ', e.ADDRESS1, e.ADDRESS2, e.ADDRESS3) AS address_concat,
+    e.POSTCODE AS postcode,
+    l.labels_filename
+FROM {epc_path} e
+INNER JOIN labels l ON e.LMK_KEY = l.messy_id
+WHERE CONTAINS(l.labels_filename, 'epc') AND CONTAINS(l.labels_filename, 'auto')
 
 """
+
 con_disk.execute(sql)
+messy_data = con_disk.table("messy_data")
+
+
+messy_data.aggregate(
+    "coalesce(labels_filename, 'total') as messy_data_count, count(*)",
+    "cube(labels_filename)",
+).show()
+
+
+# Messy data like
+# ┌──────────────────────┬────────────────────────────────────┬──────────┬───────────────────────────────────────────────┐
+# │      unique_id       │           address_concat           │ postcode │                labels_filename                │
+# │       varchar        │              varchar               │ varchar  │                    varchar                    │
+# ├──────────────────────┼────────────────────────────────────┼──────────┼───────────────────────────────────────────────┤
+# │ 52714                │ White Heather Hotel White Heathe…  │ LL30 2NR │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+# │ 1701094              │ Champs Cafe Champs Cafe 64 Drome…  │ CH5 2LR  │ secret_data/labels/llm_labels_3000_fhrs.jsonl │
+
 
 sql = f"""
 create or replace table os as
@@ -69,29 +175,39 @@ uprn as unique_id,
 regexp_replace(fulladdress, ',[^,]*$', '') AS address_concat,
 postcode
 from {full_os_path}
-where postcode in
-(select distinct postcode from epc_data_raw)
-and
-description != 'Non Addressable Object'
+where
+(postcode in (select distinct postcode from messy_data))
+or
+(uprn in (select try_cast(correct_uprn as BIGINT) from labels))
+
 
 """
 con_disk.execute(sql)
 df_os = con_disk.table("os")
 
-df_epc_data = con_disk.sql("select * exclude (uprn,uprn_source) from epc_data_raw")
+# df os like:
+# ┌─────────────┬────────────────────────────────────────────────────────────────────────────────────┬──────────┐
+# │  unique_id  │                                   address_concat                                   │ postcode │
+# │    int64    │                                      varchar                                       │ varchar  │
+# ├─────────────┼────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+# │    25035526 │ 10,  SOME ADDRESS GOES HERE.                                                       │ MK14 6EF │
 
-# messy_count = df_epc_data.count("*").fetchall()[0][0]
-# canonical_count = df_os.count("*").fetchall()[0][0]
-# print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
+
+messy_count = messy_data.count("*").fetchall()[0][0]
+canonical_count = df_os.count("*").fetchall()[0][0]
+print(f"messy_count: {messy_count:,}, canonical_count: {canonical_count:,}")
+
 
 # -----------------------------------------------------------------------------
 # Step 2: Clean data
 # -----------------------------------------------------------------------------
 
-df_epc_data_clean = clean_data_using_precomputed_rel_tok_freq(df_epc_data, con=con_disk)
+df_messy_data_clean = clean_data_using_precomputed_rel_tok_freq(
+    messy_data, con=con_disk
+)
 sql = """
-create table epc_data_clean as
-select * from df_epc_data_clean
+create table messy_data_clean as
+select * exclude (labels_filename) from df_messy_data_clean
 """
 con_disk.execute(sql)
 
@@ -112,12 +228,12 @@ def black_box(
     BIGRAM_REWARD_MULTIPLIER=3,
     BIGRAM_PUNISHMENT_MULTIPLIER=1.5,
     MISSING_TOKEN_PENALTY=0.1,
-    NUM_1_WEIGHT_1=95,
-    NUM_1_WEIGHT_2=95,
+    NUM_1_WEIGHT_1=6.57,
+    NUM_1_WEIGHT_2=6.57,
     NUM_1_WEIGHT_3=4,
     NUM_1_WEIGHT_4=1 / 16,
     NUM_1_WEIGHT_5=1 / 256,
-    NUM_2_WEIGHT_1=0.8 / 0.001,
+    NUM_2_WEIGHT_1=10,
     NUM_2_WEIGHT_2=1,
     NUM_2_WEIGHT_3=1 / 16,
     NUM_2_WEIGHT_4=1 / 256,
@@ -142,6 +258,7 @@ def black_box(
     FIRST_N_TOKENS_WEIGHT_3=0,
     FIRST_N_TOKENS_WEIGHT_4=0,
     FIRST_N_TOKENS_WEIGHT_5=-2,
+    output_match_weights_chart=False,
 ):
     start_time = datetime.now()
     con = duckdb.connect(":memory:")
@@ -149,18 +266,18 @@ def black_box(
     con.execute(sql)
 
     sql = """
-    create table labels_filtered as
-    select * from cleaned.labels_filtered
+    create table labels_all as
+    select * from cleaned.labels_all
     """
     con.execute(sql)
-    labels_filtered = con.table("labels_filtered")
+    labels_all = con.table("labels_all")
 
     sql = """
-    create table df_epc_data_clean as
-    select * from cleaned.epc_data_clean
+    create table df_messy_data_clean as
+    select * from cleaned.messy_data_clean
     """
     con.execute(sql)
-    df_epc_data_clean = con.table("df_epc_data_clean")
+    df_messy_data_clean = con.table("df_messy_data_clean")
 
     sql = """
 
@@ -171,20 +288,20 @@ def black_box(
     df_os_clean = con.table("df_os_clean")
 
     sql = """
-    create table epc_data_raw as
-    select * from cleaned.epc_data_raw
+    create table messy_data as
+    select * from cleaned.messy_data
     """
     con.execute(sql)
 
-    df_epc_data = con.table("epc_data_raw")
+    messy_data = con.table("messy_data")
 
     con.execute("detach cleaned")
     df_os_clean = con.table("df_os_clean")
 
     end_time = datetime.now()
-    print(
-        f"Time taken to load data: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to load data: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
     settings = get_settings_for_training(
@@ -237,23 +354,24 @@ def black_box(
     # print(json.dumps(settings.get_settings("duckdb").as_dict(), indent=4))
 
     linker = get_linker(
-        df_addresses_to_match=df_epc_data_clean,
+        df_addresses_to_match=df_messy_data_clean,
         df_addresses_to_search_within=df_os_clean,
         con=con,
-        include_full_postcode_block=True,
+        include_full_postcode_block=False,
         include_outside_postcode_block=True,
         retain_intermediate_calculation_columns=True,
         settings=settings,
     )
     logging.getLogger("splink").setLevel(logging.ERROR)
-    c = linker.visualisations.match_weights_chart()
-    c.save("match_weights_chart.html")
+    if output_match_weights_chart:
+        c = linker.visualisations.match_weights_chart()
+        c.save("match_weights_chart.html")
 
     end_time = datetime.now()
 
-    print(
-        f"Time taken to run match weights chart: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run match weights chart: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
@@ -263,9 +381,9 @@ def black_box(
     df_predict_ddb = df_predict.as_duckdbpyrelation()
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run predict: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run predict: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
@@ -286,164 +404,105 @@ def black_box(
     )
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
-    )
-
-    # df_with_distinguishability = best_matches_with_distinguishability(
-    #     df_predict=df_predict_improved,
-    #     df_addresses_to_match=df_epc_data,
-    #     con=con,
-    #     distinguishability_thresholds=[1, 5, 10],
-    #     best_match_only=True,
+    # print(
+    #     f"Time taken to run improve predictions: {round((end_time - start_time).total_seconds(), 2)}"
     # )
-    # ===================================
-    # ===================================
-    # ===================================
-    # ===================================
 
-    # TO DO NEXT:
-    # Update model for the better token freq rel overlap algo.
-    # Update model to allow for the unique tokens in the predict step
-    # Generate new labels.csv with the 3,000 lables
-    # Look at whether we can use a better LLM prompt to improve the labels
+    # How many of the labels are in df_predict_improved
 
-    # At that point we just really need better labels!
-
-    # ===================================
-    # ===================================
-    # ===================================
-    # ===================================
-
-    # print(df_with_distinguishability.count("*").fetchall()[0][0])
-    # print(labels_filtered.count("*").fetchall()[0][0])
-
-    # Join on match weight of true matches
-
-    # squish = 1.5
-    # sql = f"""
-    # CREATE OR REPLACE TABLE truth_status as
-
-    # with joined_labels as (
-    # select
-    #     m.*,
-    #     e.uprn as epc_uprn,
-    #     e.uprn_source as epc_source,
-    #     l.correct_uprn as correct_uprn,
-    #     l.confidence as label_confidence,
-    #     case
-    #         when m.unique_id_l = l.correct_uprn then 'true positive'
-    #         else 'false positive'
-    #     end as truth_status
-    # from df_with_distinguishability m
-    # left join epc_data_raw e on m.unique_id_r = e.unique_id
-    # left join labels_filtered l on m.unique_id_r = l.messy_id
-    # )
-    # select *,
-
-    # case
-    # when distinguishability_category = '01: One match only' then 1.0
-    # when distinguishability_category = '99: No match' then 0.0
-    # else (pow({squish}, distinguishability))/(1+pow({squish}, distinguishability))
-    # end as truth_status_numeric,
-
-    # case
-    # when truth_status = 'true positive'
-    #     then  truth_status_numeric  + 2.0
-    # when truth_status = 'false positive'
-    #     then (-1* truth_status_numeric) - 2.0
-    # else truth_status_numeric
-    # end as score,
-
-    # case
-    # when truth_status = 'true positive'
-    #     then 1.0::float
-    # when truth_status = 'false positive'
-    #     then 0.0::float
-    # else 0.0::float
-    # end as truth_status_binary
-
-    # from joined_labels
-
-    # """
-    # con.execute(sql)
-
-    # score = con.sql("select sum(score) from truth_status").fetchall()[0][0]
-    # num_labels = con.sql("select count(*) from labels_filtered").fetchall()[0][0]
-    # score = score / num_labels
-    # num_matches = con.sql(
-    #     "select sum(truth_status_binary) from truth_status"
-    # ).fetchall()[0][0]
-
-    # num_non_matches = con.sql(
-    #     "select count(*) from truth_status where truth_status = 'false positive'"
-    # ).fetchall()[0][0]
     start_time = datetime.now()
 
-    sql = """
-    create or replace table to_score as
-    WITH weight_bounds AS (
-        SELECT
-            MIN(match_weight) AS min_weight,
-            MAX(match_weight) AS max_weight
-        FROM df_predict_improved
-    ),
-    improved_with_labels AS (
-        SELECT
-            p.unique_id_r,
-            p.unique_id_l,
-            (p.match_weight - w.min_weight) / NULLIF(w.max_weight - w.min_weight, 0) AS normalized_match_weight,
-            l.correct_uprn
-        FROM df_predict_improved p
-        CROSS JOIN weight_bounds w
-        LEFT JOIN labels_filtered l ON p.unique_id_r = l.messy_id
-    ),
-    ranked AS (
-        SELECT
-            unique_id_r,
-            unique_id_l,
-            normalized_match_weight,
-            correct_uprn,
-            ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY normalized_match_weight DESC) AS row_num
-        FROM improved_with_labels
-    ),
-    aggregated AS (
-        SELECT
-            unique_id_r,
-            MAX(normalized_match_weight) AS best_match_weight,
-            MAX(CASE WHEN row_num = 1 THEN unique_id_l END) AS best_match_id,
-            MAX(CASE WHEN unique_id_l = correct_uprn THEN normalized_match_weight END) AS true_match_weight,
-            MAX(CASE WHEN unique_id_l = correct_uprn THEN unique_id_l END) AS true_match_id,
-            MAX(CASE WHEN row_num = 2 THEN normalized_match_weight END) AS second_best_match_weight
-        FROM ranked
-        GROUP BY unique_id_r
-    )
+    weight_bounds_sql = """
     SELECT
+        MIN(match_weight) AS min_weight,
+        MAX(match_weight) AS max_weight
+    FROM df_predict_improved
+    """
+    weight_bounds = con.sql(weight_bounds_sql)
+    min_weight, max_weight = weight_bounds.fetchall()[0]
+
+    # Step 2: Create improved_with_labels using the weight bounds
+    # Get the min and max weight values from the weight_bounds table
+
+    improved_with_labels_sql = f"""
+    SELECT
+        l.messy_id AS messy_id,
+        p.unique_id_r,
+        p.unique_id_l,
+        (p.match_weight - {min_weight}) / NULLIF({max_weight} - {min_weight}, 0) AS normalized_match_weight,
+        l.correct_uprn
+    FROM labels_all l
+    LEFT JOIN df_predict_improved p ON l.messy_id = p.unique_id_r
+    """
+    improved_with_labels = con.sql(improved_with_labels_sql)
+
+    # Step 3: Create ranked data
+    ranked_sql = """
+    SELECT
+        messy_id,
         unique_id_r,
+        unique_id_l,
+        normalized_match_weight,
+        correct_uprn,
+        ROW_NUMBER() OVER (PARTITION BY messy_id ORDER BY normalized_match_weight DESC) AS row_num
+    FROM improved_with_labels
+    """
+    ranked = con.sql(ranked_sql)
+
+    # Step 4: Create aggregated data
+    aggregated_sql = """
+    SELECT
+        messy_id,
+        MAX(normalized_match_weight) AS best_match_weight,
+        MAX(CASE WHEN row_num = 1 THEN unique_id_l END) AS best_match_id,
+        MAX(CASE WHEN unique_id_l = correct_uprn THEN normalized_match_weight END) AS true_match_weight,
+        MAX(CASE WHEN unique_id_l = correct_uprn THEN unique_id_l END) AS true_match_id,
+        MAX(CASE WHEN row_num = 2 THEN normalized_match_weight END) AS second_best_match_weight
+    FROM ranked
+    GROUP BY messy_id
+    """
+    aggregated = con.sql(aggregated_sql)
+
+    # Step 5: Calculate rewards
+    rewards_sql = """
+    SELECT
+        messy_id,
         CASE
             WHEN true_match_weight IS NULL THEN -0.2
-            WHEN true_match_id != best_match_id THEN true_match_weight - best_match_weight
+            WHEN true_match_id != best_match_id THEN GREATEST(true_match_weight - best_match_weight, -0.2)
             WHEN true_match_id = best_match_id THEN LEAST(best_match_weight - second_best_match_weight, 0.2)
-        END AS reward,
-        case
-            when reward  = 0 then 'indistinguishable true positive'
-            when reward > 0 then 'true positive'
-            when reward < 0 then 'false positive'
-        end as truth_status
-    FROM aggregated;
+        END AS reward
+    FROM aggregated
     """
-    con.execute(sql)
-    to_score = con.table("to_score")
+    rewards = con.sql(rewards_sql)
+
+    # Step 6: Add truth status
+    to_score_sql = """
+    SELECT
+        messy_id,
+        reward,
+        CASE
+            WHEN reward = 0 THEN 'indistinguishable true positive'
+            WHEN reward > 0 THEN 'true positive'
+            WHEN reward < 0 THEN 'false positive'
+        END AS truth_status
+    FROM rewards
+    """
+    to_score = con.sql(to_score_sql)
+
+    # print count of to score
+    # print("count of to score")
+    # to_score.count("*").show()
 
     end_time = datetime.now()
-    print(
-        f"Time taken to run to_score: {round((end_time - start_time).total_seconds(), 2)}"
-    )
+    # print(
+    #     f"Time taken to run to_score: {round((end_time - start_time).total_seconds(), 2)}"
+    # )
 
     start_time = datetime.now()
 
     score = to_score.sum("reward").fetchall()[0][0]
-    num_labels = labels_filtered.count("*").fetchall()[0][0]
+    num_labels = labels_all.count("*").fetchall()[0][0]
     score = 5 * score / num_labels
 
     num_matches = (
@@ -456,6 +515,14 @@ def black_box(
     )
     num_non_matches = (
         to_score.filter("truth_status = 'false positive'").count("*").fetchall()[0][0]
+    )
+
+    print(
+        f"Score: {score:,.2f},    Num Matches: {num_matches:,.0f}, Num Non Matches: {num_non_matches:,.0f}, Num Indeterminate: {num_indeterminate:,.0f}"
+    )
+    sum_of_matches_non_matches_ind = num_matches + num_non_matches + num_indeterminate
+    print(
+        f"Sum of matches, non matches and indeterminate: {sum_of_matches_non_matches_ind:,.0f}"
     )
 
     return {
@@ -477,8 +544,9 @@ def get_params_dict(params):
     return params_dict
 
 
-def black_box_reward(params):
+def black_box_reward(params, output_match_weights_chart=False):
     params_dict = get_params_dict(params)
+    params_dict["output_match_weights_chart"] = output_match_weights_chart
     result = black_box(**params_dict)
     return result["score"]
 
@@ -656,36 +724,36 @@ param_config = {
         "bounds": (-10, 10),
         "perturb": 1.0,
     },
-    "FIRST_N_TOKENS_WEIGHT_1": {
-        "initial": 8,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_2": {
-        "initial": 4,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_3": {
-        "initial": 3,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_4": {
-        "initial": 0,
-        "optimize": True,
-        "bounds": (0, 20),
-        "perturb": 1.0,
-    },
-    "FIRST_N_TOKENS_WEIGHT_5": {
-        "initial": -2,
-        "optimize": True,
-        "bounds": (-10, 0),
-        "perturb": 1.0,
-    },
+    # "FIRST_N_TOKENS_WEIGHT_1": {
+    #     "initial": 8,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_2": {
+    #     "initial": 4,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_3": {
+    #     "initial": 3,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_4": {
+    #     "initial": 0,
+    #     "optimize": True,
+    #     "bounds": (0, 20),
+    #     "perturb": 1.0,
+    # },
+    # "FIRST_N_TOKENS_WEIGHT_5": {
+    #     "initial": -2,
+    #     "optimize": True,
+    #     "bounds": (-10, 0),
+    #     "perturb": 1.0,
+    # },
     # "REL_FREQ_START_EXP": {
     #     "initial": 4,
     #     "optimize": False,
@@ -725,33 +793,33 @@ param_config = {
     "REL_FREQ_DELTA_WEIGHT_1": {
         "initial": 1,
         "optimize": True,
-        "bounds": (0, 5),
+        "bounds": (0.01, 5),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_2": {
         "initial": 1,
         "optimize": True,
-        "bounds": (0, 5),
+        "bounds": (0.01, 5),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_3": {
         "initial": 0.25,
         "optimize": True,
-        "bounds": (0, 2),
+        "bounds": (0.01, 2),
         "perturb": 0.1,
     },
     "REL_FREQ_DELTA_WEIGHT_4": {
         "initial": 0.25,
         "optimize": True,
-        "bounds": (0, 2),
+        "bounds": (0.01, 2),
         "perturb": 0.1,
     },
-    "REL_FREQ_PUNISHMENT_MULTIPLIER": {
-        "initial": 0.33,
-        "optimize": True,
-        "bounds": (0, 1),
-        "perturb": 0.03,
-    },
+    # "REL_FREQ_PUNISHMENT_MULTIPLIER": {
+    #     "initial": 0.33,
+    #     "optimize": True,
+    #     "bounds": (0, 1),
+    #     "perturb": 0.03,
+    # },
 }
 
 # Optionally randomise the initial parameters within the bounds
@@ -760,104 +828,169 @@ param_config = {
 #         config["initial"] = np.random.uniform(config["bounds"][0], config["bounds"][1])
 #         config["initial"] = config["bounds"][0]
 
+
 param_names = [name for name, config in param_config.items() if config["optimize"]]
 initial_params_array = [param_config[name]["initial"] for name in param_names]
 lower_bounds = np.array([param_config[name]["bounds"][0] for name in param_names])
 upper_bounds = np.array([param_config[name]["bounds"][1] for name in param_names])
 perturb_scale = np.array([param_config[name]["perturb"] for name in param_names])
 
-alpha = 2.0
+alpha = 4.0
 alpha_decay = 0.995
 min_alpha = 0.0001
-momentum = 0.1
+momentum = (
+    0.1  # Note: Momentum is not used in the provided loop, velocity isn't updated/used
+)
 num_iterations = 400
+perterb_multiplier_to_compute_gradient = 0.3
 
 params = np.array(initial_params_array)
 num_params = len(params)
-velocity = np.zeros(num_params)
+velocity = np.zeros(
+    num_params
+)  # Initialize velocity even if not used in the provided loop snippet
 
-print("Parameter configuration:")
-for name, config in param_config.items():
-    status = "OPTIMIZING" if config["optimize"] else "FIXED (using initial value)"
-    print(f"  {name}: {status}, initial value: {config['initial']}")
-    if config["optimize"]:
-        print(
-            f"    bounds: {config['bounds']}, perturbation scale: {config['perturb']}"
-        )
-
-# Initial computation
+# Initial computation (optional but good practice)
 initial_params_dict = get_params_dict(params)
 initial_result = black_box(**initial_params_dict)
 initial_score = initial_result["score"]
-initial_num_matches = initial_result["num_matches"]
-initial_num_non_matches = initial_result["num_non_matches"]
-initial_num_indeterminate = initial_result["num_indeterminate"]
-print(f"Initial Score: {initial_score:,.2f}")
-print(f"Initial Num Matches: {initial_num_matches:,.0f}")
-print(f"Initial Num Non Matches: {initial_num_non_matches:,.0f}")
-print(f"Initial Num Indeterminate: {initial_num_indeterminate:,.0f}")
 best_score = initial_score
 best_params = params.copy()
 
-history = [
-    {"iteration": -1, "variable": "score", "value": initial_score},
-    {"iteration": -1, "variable": "num_matches", "value": initial_num_matches},
-    {"iteration": -1, "variable": "num_non_matches", "value": initial_num_non_matches},
-    {
-        "iteration": -1,
-        "variable": "num_indeterminate",
-        "value": initial_num_indeterminate,
-    },
-]
-for name in param_config:
-    history.append(
-        {"iteration": -1, "variable": name, "value": param_config[name]["initial"]}
-    )
 
-with open("optimisation.jsonl", "a") as f:
-    f.write(json.dumps({"restart_time": datetime.now().isoformat()}) + "\n")
+history = []
 
+
+print("Starting Optimization Loop...")
 # Optimization loop
 for iteration in range(num_iterations):
-    start_time = datetime.now()
+    iteration_start_time = datetime.now()  # Use a different name
+    print(f"\n--- Iteration {iteration} ---")
     alpha = max(alpha * alpha_decay, min_alpha)
     gradient = np.zeros(num_params)
-    base_reward = black_box_reward(params)  # Compute once per iteration
-    for idx in range(num_params):
-        perturb = np.zeros(num_params)
-        perturb[idx] = 0.1 * perturb_scale[idx]
-        params_plus = np.clip(params + perturb, lower_bounds, upper_bounds)
-        reward_plus = black_box_reward(params_plus)
-        gradient[idx] = (reward_plus - base_reward) / (perturb_scale[idx] * 0.1)
-        print(f"Gradient for parameter {param_names[idx]}: {gradient[idx]:.6f}")
 
-    print(f"  Iteration {iteration}:")
-    print(f"    Gradient: {gradient.tolist()}")
-    print(f"    Parameters (before update): {params.tolist()}")
+    # --- Calculate Base Reward and Details ---
+    print("Calculating base reward...")
+    base_params_dict = get_params_dict(params)
+    base_result = black_box(**base_params_dict)  # Call full function
+    base_score = base_result["score"]
+    base_num_matches = base_result["num_matches"]
+    print(f"  Base Score: {base_score:.10f}, Base Matches: {base_num_matches}")
+
+    print("Calculating gradients...")
+    # --- Gradient Calculation Loop with Detailed Debugging ---
+    for idx in range(num_params):
+        param_name = param_names[idx]
+
+        # Skip if this parameter is not to be optimized
+        if not param_config[param_name]["optimize"]:
+            print(
+                f"  Skipping gradient for {param_name}: Parameter not set for optimization."
+            )
+            gradient[idx] = 0
+            continue
+
+        perturb_size = perterb_multiplier_to_compute_gradient * perturb_scale[idx]
+
+        if perturb_scale[idx] == 0 or perturb_size == 0:
+            print(f"  Skipping gradient for {param_name}: Zero perturbation scale.")
+            gradient[idx] = 0
+            continue  # Skip if no perturbation defined
+
+        # Create perturbed parameters
+        params_perturbed = params.copy()
+        params_perturbed[idx] += perturb_size
+
+        # --- Crucial: Clip the perturbed parameter *before* evaluation ---
+        # This mimics what your original code did and might be the cause of zero gradients
+        original_param_val = params[idx]
+        perturbed_val_before_clip = params_perturbed[idx]
+        params_perturbed[idx] = np.clip(
+            params_perturbed[idx], lower_bounds[idx], upper_bounds[idx]
+        )
+        perturbed_val_after_clip = params_perturbed[idx]
+
+        # Check if clipping made the perturbation ineffective
+        if perturbed_val_after_clip == original_param_val:
+            print(
+                f"  Gradient for {param_name}: 0.000000 (Perturbation clipped back to original value)"
+            )
+            gradient[idx] = 0
+            # Optionally: You could try a backward difference here if needed
+            # perturb_size = -perturb_size ... recompute params_perturbed ... etc.
+        else:
+            # Evaluate with the (potentially clipped) perturbed parameters
+            params_plus_dict = get_params_dict(
+                params_perturbed
+            )  # Use the modified params array
+            result_plus = black_box(**params_plus_dict)
+            score_plus = result_plus["score"]
+            num_matches_plus = result_plus["num_matches"]
+
+            # Calculate gradient
+            gradient[idx] = (
+                score_plus - base_score
+            ) / perturb_size  # Use the *intended* perturb size
+
+            # --- Detailed Print ---
+            print(f"  Gradient for {param_name}:")
+            print(
+                f"    Base          -> Score: {base_score:.10f}, Matches: {base_num_matches}"
+            )
+            # --- ADDED original_param_val HERE ---
+            print(
+                f"    Values        -> Original: {original_param_val:.6f}, Perturbed (Before Clip): {perturbed_val_before_clip:.6f}, Perturbed (After Clip): {perturbed_val_after_clip:.6f}"
+            )
+            # --- END ADDITION ---
+            print(
+                f"    Perturbed(+)  -> Score: {score_plus:.10f}, Matches: {num_matches_plus}"
+            )
+            print(
+                f"    Score Diff: {(score_plus - base_score):.10f}, Perturb Size: {perturb_size:.6f}"
+            )
+            print(f"    Calculated Gradient: {gradient[idx]:.10f}")
+
+    print(f"\n  Iteration {iteration} Summary:")
+    # Using list comprehension for cleaner formatting
+    print(f"    Gradient: {[f'{g:.6f}' for g in gradient]}")
+    print(f"    Parameters (before update): {[f'{p:.6f}' for p in params]}")
     print(f"    Current alpha: {alpha:.6f}")
 
-    # Compute the update step without clipping, allowing unrestricted updates
-    update_step = alpha * gradient  # Allow unrestricted updates based on gradient
-    params += update_step + momentum * velocity  # Apply momentum-enhanced update
-    params = np.clip(params, lower_bounds, upper_bounds)  # Keep parameters in bounds
+    # --- Parameter Update ---
+    # Compute the update step (Note: Original loop code didn't update velocity)
+    # If you want momentum, you need: velocity = momentum * velocity + alpha * gradient
+    # update_step = velocity
+    # Otherwise, just use the gradient:
+    update_step = alpha * gradient
 
-    params_dict = get_params_dict(params)
-    end_time = datetime.now()
+    params_before_update = params.copy()  # Keep track
+    params_after_momentum = params + update_step  # If using momentum: params + velocity
+    # params = params_after_momentum # If only using update_step
+    # Apply momentum-enhanced update (as per original loop structure) - MAKE SURE VELOCITY IS UPDATED IF USING THIS
+    # Assuming you *want* momentum as in the original description:
+    velocity = momentum * velocity + alpha * gradient  # Standard momentum update
+    params_after_momentum = params + velocity  # Apply new velocity
+    params = np.clip(
+        params_after_momentum, lower_bounds, upper_bounds
+    )  # Keep parameters in bounds
+
+    # --- Post-Update Evaluation and Logging ---
+    print(f"    Parameters (after update): {[f'{p:.6f}' for p in params]}")
+
+    # Evaluate final state for this iteration (optional, could use base_result from next iter)
+    final_params_dict = get_params_dict(params)
+    final_result = black_box(**final_params_dict, output_match_weights_chart=True)
+    score = final_result["score"]
+    num_matches = final_result["num_matches"]
+    num_non_matches = final_result["num_non_matches"]
+    num_indeterminate = final_result["num_indeterminate"]
+
+    print(f"  Score (End of Iter): {score:,.4f}")  # Use 4dp for final score report
     print(
-        f"Time taken to run get_params_dict: {round((end_time - start_time).total_seconds(), 2)}"
+        f"  Num Matches: {num_matches:,.0f}, Num Non Matches: {num_non_matches:,.0f}, Num Indeterminate: {num_indeterminate:,.0f}"
     )
 
-    start_time = datetime.now()
-    result = black_box(**params_dict)
-    end_time = datetime.now()
-    print(
-        f"Time taken to run black_box: {round((end_time - start_time).total_seconds(), 2)}"
-    )
-
-    score = result["score"]
-    num_matches = result["num_matches"]
-    num_non_matches = result["num_non_matches"]
-    num_indeterminate = result["num_indeterminate"]
+    # --- History Update ---
     history.append({"iteration": iteration, "variable": "score", "value": score})
     history.append(
         {"iteration": iteration, "variable": "num_matches", "value": num_matches}
@@ -876,50 +1009,59 @@ for iteration in range(num_iterations):
             "value": num_indeterminate,
         }
     )
-    for name in param_config:
-        if param_config[name]["optimize"]:
-            value = params[param_names.index(name)]
-        else:
-            value = param_config[name]["initial"]
+    current_param_dict_for_history = get_params_dict(
+        params
+    )  # Get full dict including fixed params
+    for name, value in current_param_dict_for_history.items():
         history.append({"iteration": iteration, "variable": name, "value": value})
 
-    history_df = pd.DataFrame(history)
-    # clear_output(wait=True)
-    chart = create_chart(history_df, iteration)
-    # display(chart)
-    chart.save("iteration.html")
+    # --- Charting ---
+    if (
+        iteration % 5 == 0 or score > best_score
+    ):  # Update chart less frequently or on improvement
+        try:
+            history_df = pd.DataFrame(history)
+            chart = create_chart(history_df, iteration)
+            chart.save("iteration.html")
+            # display(chart) # Optional inline display
+            print("  Chart updated.")
+        except Exception as e:
+            print(f"  Error generating chart: {e}")
 
-    print(f"  Parameters (after update): {params.tolist()}")
-    print(f"Score: {score:,.2f}")
-    print(f"Num Matches: {num_matches:,.0f}")
-    print(f"Num Non Matches: {num_non_matches:,.0f}")
-    param_change_magnitude = np.linalg.norm(velocity)
-    print(f"  Parameter change magnitude: {param_change_magnitude:.6f}")
-    print(f"  Velocity: {velocity.tolist()}")
-    end_time = datetime.now()
-    print(
-        f"Time taken to run iteration: {round((end_time - start_time).total_seconds(), 2)}"
-    )
-
+    # --- Best Score Tracking ---
     if score > best_score:
         best_score = score
         best_params = params.copy()
-        print(f"New best score found: {best_score:,.2f}")
+        print(f"----> New best score found: {best_score:,.4f} at iteration {iteration}")
 
         best_params_dict = get_params_dict(best_params)
         best_params_dict["score"] = best_score
         best_params_dict["iteration"] = iteration
         best_params_dict["timestamp"] = datetime.now().isoformat()
+        try:
+            with open("optimisation.jsonl", "a") as f:
+                f.write(json.dumps(best_params_dict) + "\n")
+        except Exception as e:
+            print(f"Error writing best params to file: {e}")
 
-        with open("optimisation.jsonl", "a") as f:
-            f.write(json.dumps(best_params_dict) + "\n")
+    # --- Convergence Check (using parameter change) ---
+    param_change = params - params_before_update
+    param_change_magnitude = np.linalg.norm(param_change)
+    print(f"  Parameter change magnitude (norm): {param_change_magnitude:.6f}")
+    # print(f"  Velocity (end of iter): {[f'{v:.6f}' for v in velocity]}") # Add if using momentum
 
     if param_change_magnitude < 1e-5 and iteration > 10:
         print(f"Converged at iteration {iteration} - parameter changes too small")
         break
 
-# Final results
-print(f"Optimization completed. Best Score: {best_score:,.2f}")
+    iteration_end_time = datetime.now()
+    # print(
+    #     f"Time taken for Iteration {iteration}: {(iteration_end_time - iteration_start_time).total_seconds():.2f}s"
+    # )
+
+
+# --- Final Results ---
+print(f"\nOptimization completed. Best Score: {best_score:,.4f}")
 print(f"Parameter names: {param_names}")
 print("Final best parameters:")
 final_params_dict = {

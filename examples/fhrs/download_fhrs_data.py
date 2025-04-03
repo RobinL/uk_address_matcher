@@ -40,6 +40,7 @@ print("Downloading Medway only, remove the if statement to download all")
 xml_urls = [
     "https://ratings.food.gov.uk/" + u[1] for u in list(all_urls) if "Medway" in u[0]
 ]
+xml_urls = ["https://ratings.food.gov.uk/" + u[1] for u in list(all_urls)]
 
 
 fhrs_dfs = []
@@ -51,6 +52,7 @@ for xml_url in xml_urls:
     f1 = fhrs_df["RatingValue"] != "Exempt"
     address_cols = [
         "FHRSID",
+        "BusinessName",
         "AddressLine1",
         "AddressLine2",
         "AddressLine3",
@@ -61,6 +63,7 @@ for xml_url in xml_urls:
     ]
 
     for col in [
+        "BusinessName",
         "AddressLine1",
         "AddressLine2",
         "AddressLine3",
@@ -76,6 +79,7 @@ for xml_url in xml_urls:
 
     string_columns = [
         "FHRSID",
+        "BusinessName",
         "AddressLine1",
         "AddressLine2",
         "AddressLine3",
@@ -105,6 +109,7 @@ sql = """
 
 select
 nullif(fhrsid, '') as fhrsid,
+nullif(businessname, '') as businessname,
 nullif(addressline1, '') as addressline1,
 nullif(addressline2, '') as addressline2,
 nullif(addressline3, '') as addressline3,

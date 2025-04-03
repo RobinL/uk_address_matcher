@@ -34,7 +34,7 @@ full_os_path = os.getenv(
 sql = f"""
 create or replace table epc_data_raw as
 select
-   substr(LMK_KEY, 1, 12) as unique_id,
+   LMK_KEY as unique_id,
    concat_ws(' ', ADDRESS1, ADDRESS2, ADDRESS3) as address_concat,
    POSTCODE as postcode,
    UPRN as uprn,
@@ -161,12 +161,14 @@ select
         else 'disagree'
     end as ours_theirs_agreement
 from df_predict_improved m
-left join epc_data_raw e on m.unique_id_r = substr(e.unique_id, 1, 12)
+left join epc_data_raw e on m.unique_id_r = e.unique_id
 left join df_os_clean o on e.uprn = o.unique_id
 QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC, unique_id_l) =1
 
 """
 con.execute(sql)
+
+con.table("matches_with_epc_and_os").show()
 
 
 sql = """
@@ -220,7 +222,7 @@ sql = f"""
 select
     'epc' as source, {cols}
 from df_epc_data_clean
-where substr(unique_id, 1, 12) = '{epc_row_id}'
+where unique_id = '{epc_row_id}'
 UNION ALL
 select
     'our_match' as source, {cols}
@@ -238,7 +240,7 @@ con.sql(sql).show(max_width=1000)
 sql = f"""
 select uprn_source
 from epc_data_raw
-where substr(unique_id, 1, 12) = '{epc_row_id}'
+where unique_id = '{epc_row_id}'
 """
 
 con.sql(sql).show(max_width=1000)
