@@ -1,5 +1,5 @@
-import time
 from IPython.display import display
+import time
 import duckdb
 from uk_address_matcher import (
     clean_data_using_precomputed_rel_tok_freq,
@@ -9,6 +9,7 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
 from uk_address_matcher.linking_model.training import get_settings_for_training
+import random
 from uk_address_matcher.post_linkage.analyse_results import (
     best_matches_with_distinguishability,
 )
@@ -283,126 +284,215 @@ df_predict_with_distinguishability = best_matches_with_distinguishability(
     additional_columns_to_retain=["correct_uprn"],
 )
 df_predict_with_distinguishability.show(max_width=10000)
+
+
+# TODO: Print headline stats of results here
+
+
 # # -----------------------------------------------------------------------------
 # # Step 6: Inspect single rows
 # # This code is specific to the EPC data where we have a UPRN from the EPC data
 # # that we can compare the the one we found
 # # -----------------------------------------------------------------------------
 
-
-sql = """
-CREATE OR REPLACE TABLE matches_with_label as
-WITH ranked_matches AS (
-    SELECT
-        m.*,
-        l.correct_uprn AS correct_uprn,
-        l.confidence AS label_confidence,
-        l.fulladdress AS labels_fulladdress,
-        l.labels_filename AS labels_filename,
-        CASE
-            WHEN m.unique_id_l = l.correct_uprn THEN 'true positive'
-            ELSE 'false positive'
-        END AS truth_status,
-        ROW_NUMBER() OVER (
-            PARTITION BY unique_id_r
-            ORDER BY match_weight DESC, unique_id_l
-        ) AS rn
-    FROM df_predict_ddb m
-    LEFT JOIN labels_with_os l ON m.unique_id_r = l.messy_id
-)
-SELECT *
-FROM ranked_matches
-WHERE (rn = 1 OR unique_id_l = correct_uprn)
-
-"""
-con.execute(sql)
-matches_with_label = con.table("matches_with_label")
-matches_with_label.show(max_width=10000)
-
+# For each unique_id_r, print a report of performance
 
 sql = """
 select distinct unique_id_r
-from matches_with_label
-where not (rn=1 and truth_status = 'true positive')
-order by random()
+from df_predict_with_distinguishability
+where correct_uprn_l != correct_uprn_r
 """
-id_rs = con.sql(sql).fetchall()
-id_rs = [x[0] for x in id_rs]
+unique_id_r_list = con.sql(sql).fetchall()
+unique_id_r_list = [x[0] for x in unique_id_r_list]
+random.shuffle(unique_id_r_list)
+this_id = unique_id_r_list[0]
 
 
-for this_id in id_rs[:3]:
-    this_match_relation = matches_with_label.filter(f"unique_id_r = '{this_id}'")
-    columns = this_match_relation.columns
-    rows = this_match_relation.fetchall()
+sql = f"""
+select d.*, o.address_concat as label_address_concat, o.postcode as label_postcode
+from df_predict_with_distinguishability as d
+left join df_os as o
+on d.correct_uprn_r = o.unique_id
+where d.unique_id_r = '{this_id}'
+"""
+this_match = con.sql(sql)
 
-    if not rows:
-        continue
+row_dict_best_match = dict(zip(this_match.columns, this_match.fetchone()))
 
-    results = [dict(zip(columns, row)) for row in rows]
 
-    address_r = results[0].get("original_address_concat_r", "")
-    postcode_r = results[0].get("postcode_r", "")
-    truth_address_label = results[0].get("labels_fulladdress", "N/A")
+sql = f"""
+select *
+from df_predict_improved
+where correct_uprn_l = correct_uprn_r
+and unique_id_r = '{this_id}'
+"""
+correct_match = con.sql(sql)
+row_dict_correct_match = dict(zip(correct_match.columns, correct_match.fetchone()))
+row_dict_correct_match
 
-    input_addr_full = f"{address_r} {postcode_r}".strip()
 
-    tp_address_l = "N/A"
-    tp_postcode_l = ""
-    tp_weight = None
+report_template = """
+===========================================================================
+unique_id_r:                  {this_id}
+{messy_label:<30}{messy_address} {messy_postcode}
 
-    highest_fp_weight = -float("inf")
-    fp_address_l_best = "N/A"
-    fp_postcode_l_best = ""
-    fp_weight_best = None
+{best_match_label:<30}{best_match_address} {best_match_postcode} (UPRN: {best_match_uprn})
+{true_match_label:<30}{true_match_address} {true_match_postcode} (UPRN: {true_match_uprn})
+Distinguishability:           {distinguishability_value}
+"""
 
-    for r in results:
-        status = r.get("truth_status")
-        address_l = r.get("original_address_concat_l", "")
-        postcode_l = r.get("postcode_l", "")
-        weight = r.get("match_weight")
+report = report_template.format(
+    this_id=this_id,
+    messy_label="Messy address:",
+    best_match_label=f"Best match (score: {row_dict_best_match['match_weight']:,.2f}):",
+    true_match_label=f"True match (score: {row_dict_correct_match['match_weight']:,.2f}):",
+    messy_address=row_dict_best_match["address_concat_r"],
+    best_match_address=row_dict_best_match["original_address_concat_l"],
+    true_match_address=row_dict_best_match["label_address_concat"],
+    distinguishability_value=f"{row_dict_best_match['distinguishability']:,.2f}",
+    messy_postcode=row_dict_best_match["postcode_r"],
+    best_match_postcode=row_dict_best_match["postcode_l"],
+    true_match_postcode=row_dict_best_match["label_postcode"],
+    best_match_uprn=row_dict_best_match["correct_uprn_l"],
+    true_match_uprn=row_dict_best_match["correct_uprn_r"],
+)
+print(report)
 
-        if status == "true positive":
-            # In case multiple TPs somehow exist, overwrite (or take first)
-            tp_address_l = address_l
-            tp_postcode_l = postcode_l
-            tp_weight = weight
-        elif status == "false positive":
-            if weight is not None and weight > highest_fp_weight:
-                highest_fp_weight = weight
-                fp_address_l_best = address_l
-                fp_postcode_l_best = postcode_l
-                fp_weight_best = weight
+sql = f"""
+SELECT
+    original_address_concat_r,
+    case
+        when correct_uprn_l = correct_uprn_r then concat('✅ ', original_address_concat_l)
+        else original_address_concat_l
+    end as address_concat_l,
+    match_weight,
+    mw_adjustment,
 
-    # Use the actual TP label address, but the TP match weight
-    # tp_addr_full = f"{tp_address_l} {tp_postcode_l}".strip() # This would be the matched address for TP
-    truth_addr_display = truth_address_label  # Use the ground truth string
 
-    fp_addr_full = (
-        f"{fp_address_l_best} {fp_postcode_l_best}".strip()
-        if fp_address_l_best != "N/A"
-        else "None Found"
+    * EXCLUDE (
+        original_address_concat_r,
+        original_address_concat_l,
+        match_weight,
+        mw_adjustment,
+        unique_id_r,
+        correct_uprn_l,
+        correct_uprn_r,
+
     )
+FROM df_predict_improved
+WHERE unique_id_r = '{this_id}'
+order by match_weight desc
+"""
+con.sql(sql).show(max_width=10000)
 
-    # Format weights, aligning them
-    weight_padding = 8
-    tp_weight_str = (
-        f"{tp_weight:.4f}".ljust(weight_padding)
-        if tp_weight is not None
-        else "N/A".ljust(weight_padding)
+# Printed cleaned data for best match and true match
+
+to_select = """
+    original_address_concat,
+    flat_positional,
+    flat_letter,
+    numeric_token_1,
+    numeric_token_2,
+    numeric_token_3,
+    unusual_tokens_arr,
+    very_unusual_tokens_arr,
+    extremely_unusual_tokens_arr,
+    * EXCLUDE (
+        original_address_concat,
+        flat_positional,
+        flat_letter,
+        numeric_token_1,
+        numeric_token_2,
+        numeric_token_3,
+        unusual_tokens_arr,
+        very_unusual_tokens_arr,
+        extremely_unusual_tokens_arr
     )
-    fp_weight_str = (
-        f"{fp_weight_best:.4f}".ljust(weight_padding)
-        if fp_weight_best is not None
-        else "N/A".ljust(weight_padding)
+"""
+
+sql = f"""
+SELECT 'Messy record' AS rec, {to_select}
+FROM df_messy_data_clean
+WHERE unique_id = '{this_id}'
+
+UNION ALL
+
+SELECT 'Best match' AS rec, {to_select}
+FROM df_os_clean
+WHERE unique_id = '{row_dict_best_match["unique_id_l"]}'
+
+UNION ALL
+
+SELECT 'True match' AS rec, {to_select}
+FROM df_os_clean
+WHERE unique_id = '{row_dict_correct_match["unique_id_l"]}'
+"""
+
+con.sql(sql).show(max_width=10000)
+
+
+waterfall_header = """
+Waterfall chart for messy address vs best match:
+{messy_address} {messy_postcode}
+{best_match_address} {best_match_postcode}
+"""
+
+waterfall_header = waterfall_header.format(
+    messy_address=row_dict_best_match["address_concat_r"],
+    messy_postcode=row_dict_best_match["postcode_r"],
+    best_match_address=row_dict_best_match["original_address_concat_l"],
+    best_match_postcode=row_dict_best_match["postcode_l"],
+)
+
+print(waterfall_header)
+
+best_uprn = row_dict_best_match["unique_id_l"]
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{this_id}' and unique_id_l = '{best_uprn}'
+order by match_weight desc
+limit 1
+"""
+
+res = con.sql(sql)
+
+
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
     )
+)
 
-    label_padding = 28
-    to_print = "=" * 80 + "\n"
-    to_print += f"Comparison Report for unique_id_r: {this_id}\n"
-    to_print += "-" * 80 + "\n"
-    to_print += f"{'Input Address (Right):'.ljust(label_padding)}{''.ljust(weight_padding)}  {input_addr_full}\n"
-    to_print += f"{'False positive address:'.ljust(label_padding)}{fp_weight_str}  {fp_addr_full}\n"
-    to_print += f"{'Ground Truth Address:'.ljust(label_padding)}{tp_weight_str}  {truth_addr_display}\n"
-    to_print += "=" * 80 + "\n"
 
-    print(to_print)
+waterfall_header = """
+Waterfall chart for messy address vs true match:
+{messy_address} {messy_postcode}
+{true_match_address} {true_match_postcode}
+"""
+
+waterfall_header = waterfall_header.format(
+    messy_address=row_dict_best_match["address_concat_r"],
+    messy_postcode=row_dict_best_match["postcode_r"],
+    true_match_address=row_dict_correct_match["original_address_concat_l"],
+    true_match_postcode=row_dict_correct_match["postcode_l"],
+)
+print(waterfall_header)
+
+correct_uprn = row_dict_correct_match["correct_uprn_l"]
+sql = f"""
+select *
+from df_predict_ddb
+where unique_id_r = '{this_id}' and unique_id_l = '{correct_uprn}'
+order by match_weight desc
+limit 1
+"""
+
+res = con.sql(sql)
+
+
+display(
+    linker.visualisations.waterfall_chart(
+        res.df().to_dict(orient="records"), filter_nulls=False
+    )
+)
