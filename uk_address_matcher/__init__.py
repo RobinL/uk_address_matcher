@@ -15,6 +15,10 @@ from uk_address_matcher.post_linkage.analyse_results import (
     best_matches_with_distinguishability,
     best_matches_summary,
 )
+from uk_address_matcher.post_linkage.accuracy_from_labels import (
+    inspect_match_results_vs_labels,
+    evaluate_predictions_against_labels,
+)
 
 __all__ = [
     "get_linker",
@@ -25,4 +29,6 @@ __all__ = [
     "improve_predictions_using_distinguishing_tokens",
     "best_matches_with_distinguishability",
     "best_matches_summary",
+    "inspect_match_results_vs_labels",
+    "evaluate_predictions_against_labels",
 ]
