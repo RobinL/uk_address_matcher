@@ -40,9 +40,6 @@ def inspect_match_results_vs_labels(
     con: DuckDBPyConnection,
     unique_id_r: str | None = None,
     example_number: int = 1,
-    inspect_comparison_details: bool = True,
-    inspect_cleaned_data: bool = True,
-    show_waterfall_charts: bool = True,
 ):
     temp_tables = {
         "labels_in": labels,
@@ -64,7 +61,7 @@ def inspect_match_results_vs_labels(
             SELECT
                 d.unique_id_r,
                 d.unique_id_l as predicted_unique_id,
-                l.correct_unique_id::BIGINT as correct_unique_id
+                l.correct_unique_id::VARCHAR as correct_unique_id
             FROM df_predict_with_distinguishability_in as d
             INNER JOIN labels_in as l ON d.unique_id_r = l.unique_id
             QUALIFY ROW_NUMBER() OVER (PARTITION BY d.unique_id_r ORDER BY d.match_weight DESC) = 1
@@ -90,7 +87,7 @@ def inspect_match_results_vs_labels(
             return
 
     sql = f"""
-    SELECT d.*, l.correct_unique_id::BIGINT as correct_unique_id
+    SELECT d.*, l.correct_unique_id::VARCHAR as correct_unique_id
     FROM df_predict_improved_in as d
     LEFT JOIN labels_in as l ON d.unique_id_r = l.unique_id
     WHERE d.unique_id_r = '{target_unique_id_r}'
@@ -99,7 +96,7 @@ def inspect_match_results_vs_labels(
     con.register("df_improved_with_label", df_improved_with_label)
 
     sql = f"""
-    SELECT d.*, l.correct_unique_id::BIGINT as correct_unique_id
+    SELECT d.*, l.correct_unique_id::VARCHAR as correct_unique_id
     FROM df_predict_with_distinguishability_in as d
     LEFT JOIN labels_in as l ON d.unique_id_r = l.unique_id
     WHERE d.unique_id_r = '{target_unique_id_r}'
@@ -171,122 +168,119 @@ Distinguishability:           {distinguishability_value}
     )
     print(report)
 
-    if inspect_comparison_details:
-        sql = f"""
-        SELECT
-            original_address_concat_r,
-            CASE
-                WHEN unique_id_l = correct_unique_id THEN concat('✅ ', original_address_concat_l)
-                ELSE original_address_concat_l
-            END as address_concat_l,
-            printf('%.2f', match_weight) as final_score,
-            printf('%.2f', match_weight_original) as splink_score,
-            printf('%.2f', mw_adjustment) as adjustment_score,
-            overlapping_tokens_this_l_and_r AS matching_tokens,
-            tokens_elsewhere_in_block_but_not_this AS penalty_tokens,
-            missing_tokens,
-            overlapping_bigrams_this_l_and_r_filtered AS matching_bigrams,
-            bigrams_elsewhere_in_block_but_not_this_filtered AS penalty_bigrams,
-            unique_id_l as canonical_uprn
-        FROM df_improved_with_label
-        WHERE unique_id_r = '{target_unique_id_r}'
-        ORDER BY match_weight DESC
-        LIMIT 10
-        """
-        con.sql(sql).show(max_width=1000, max_col_width=60)
+    sql = f"""
+    SELECT
+        original_address_concat_r,
+        CASE
+            WHEN unique_id_l = correct_unique_id THEN concat('✅ ', original_address_concat_l)
+            ELSE original_address_concat_l
+        END as address_concat_l,
+        printf('%.2f', match_weight) as final_score,
+        printf('%.2f', match_weight_original) as splink_score,
+        printf('%.2f', mw_adjustment) as adjustment_score,
+        overlapping_tokens_this_l_and_r AS matching_tokens,
+        tokens_elsewhere_in_block_but_not_this AS penalty_tokens,
+        missing_tokens,
+        overlapping_bigrams_this_l_and_r_filtered AS matching_bigrams,
+        bigrams_elsewhere_in_block_but_not_this_filtered AS penalty_bigrams,
+        unique_id_l as canonical_uprn
+    FROM df_improved_with_label
+    WHERE unique_id_r = '{target_unique_id_r}'
+    ORDER BY match_weight DESC
+    LIMIT 10
+    """
+    con.sql(sql).show(max_width=1000, max_col_width=60)
 
-    if inspect_cleaned_data:
-        best_match_uprn = row_dict_best_match.get("unique_id_l")
-        correct_unique_id = row_dict_best_match.get("correct_unique_id")
+    best_match_uprn = row_dict_best_match.get("unique_id_l")
+    correct_unique_id = row_dict_best_match.get("correct_unique_id")
 
-        unions = [
-            f"""SELECT 'Messy' AS record_type, {CLEANED_COLS_TO_SELECT}
-                FROM df_messy_data_clean_in
-                WHERE unique_id = '{target_unique_id_r}'"""
-        ]
-        if best_match_uprn:
-            unions.append(
-                f"""SELECT 'Best Match' AS record_type, {CLEANED_COLS_TO_SELECT}
-                   FROM df_os_addresses_clean_in
-                   WHERE unique_id = '{best_match_uprn}'"""
-            )
-        if correct_unique_id:  # Always include true match for false positive inspection
-            unions.append(
-                f"""SELECT 'True Match' AS record_type, {CLEANED_COLS_TO_SELECT}
-                   FROM df_os_addresses_clean_in
-                   WHERE unique_id = '{correct_unique_id}'"""
-            )
+    unions = [
+        f"""SELECT 'Messy' AS record_type, {CLEANED_COLS_TO_SELECT}
+            FROM df_messy_data_clean_in
+            WHERE unique_id = '{target_unique_id_r}'"""
+    ]
+    if best_match_uprn:
+        unions.append(
+            f"""SELECT 'Best Match' AS record_type, {CLEANED_COLS_TO_SELECT}
+               FROM df_os_addresses_clean_in
+               WHERE unique_id = '{best_match_uprn}'"""
+        )
+    if correct_unique_id:  # Always include true match for false positive inspection
+        unions.append(
+            f"""SELECT 'True Match' AS record_type, {CLEANED_COLS_TO_SELECT}
+               FROM df_os_addresses_clean_in
+               WHERE unique_id = '{correct_unique_id}'"""
+        )
 
-        sql = "\n\nUNION ALL\n\n".join(unions)
-        con.sql(sql).show(max_width=1000, max_col_width=40)
+    sql = "\n\nUNION ALL\n\n".join(unions)
+    con.sql(sql).show(max_width=1000, max_col_width=40)
 
-    if show_waterfall_charts:
-        best_uprn = row_dict_best_match.get("unique_id_l")
-        correct_unique_id = row_dict_best_match.get("correct_unique_id")
+    best_uprn = row_dict_best_match.get("unique_id_l")
+    correct_unique_id = row_dict_best_match.get("correct_unique_id")
 
-        if best_uprn:
-            waterfall_header = """
+    if best_uprn:
+        waterfall_header = """
 Waterfall chart for messy address vs best match:
 {messy_address} {messy_postcode}
 {best_match_address} {best_match_postcode}
 """
-            print(
-                waterfall_header.format(
-                    messy_address=row_dict_best_match.get("address_concat_r", "N/A"),
-                    messy_postcode=row_dict_best_match.get("postcode_r", ""),
-                    best_match_address=row_dict_best_match.get(
-                        "original_address_concat_l", "N/A"
-                    ),
-                    best_match_postcode=row_dict_best_match.get("postcode_l", ""),
+        print(
+            waterfall_header.format(
+                messy_address=row_dict_best_match.get("address_concat_r", "N/A"),
+                messy_postcode=row_dict_best_match.get("postcode_r", ""),
+                best_match_address=row_dict_best_match.get(
+                    "original_address_concat_l", "N/A"
+                ),
+                best_match_postcode=row_dict_best_match.get("postcode_l", ""),
+            )
+        )
+
+        sql = f"""
+        SELECT *
+        FROM df_predict_original_in
+        WHERE unique_id_r = '{target_unique_id_r}' AND unique_id_l = '{best_uprn}'
+        ORDER BY match_weight DESC
+        LIMIT 1
+        """
+        res = con.sql(sql)
+        if res.shape[0] > 0:
+            display(
+                linker.visualisations.waterfall_chart(
+                    res.df().to_dict(orient="records"), filter_nulls=False
                 )
             )
 
-            sql = f"""
-            SELECT *
-            FROM df_predict_original_in
-            WHERE unique_id_r = '{target_unique_id_r}' AND unique_id_l = '{best_uprn}'
-            ORDER BY match_weight DESC
-            LIMIT 1
-            """
-            res = con.sql(sql)
-            if res.shape[0] > 0:
-                display(
-                    linker.visualisations.waterfall_chart(
-                        res.df().to_dict(orient="records"), filter_nulls=False
-                    )
-                )
-
-        if correct_unique_id:
-            waterfall_header = """
+    if correct_unique_id:
+        waterfall_header = """
 Waterfall chart for messy address vs true match:
 {messy_address} {messy_postcode}
 {true_match_address} {true_match_postcode}
 """
-            print(
-                waterfall_header.format(
-                    messy_address=row_dict_best_match.get("address_concat_r", "N/A"),
-                    messy_postcode=row_dict_best_match.get("postcode_r", ""),
-                    true_match_address=row_dict_best_match.get(
-                        "label_address_concat", "N/A"
-                    ),  # Get address from joined label info
-                    true_match_postcode=row_dict_best_match.get("label_postcode", ""),
+        print(
+            waterfall_header.format(
+                messy_address=row_dict_best_match.get("address_concat_r", "N/A"),
+                messy_postcode=row_dict_best_match.get("postcode_r", ""),
+                true_match_address=row_dict_best_match.get(
+                    "label_address_concat", "N/A"
+                ),  # Get address from joined label info
+                true_match_postcode=row_dict_best_match.get("label_postcode", ""),
+            )
+        )
+
+        sql = f"""
+        SELECT *
+        FROM df_predict_original_in
+        WHERE unique_id_r = '{target_unique_id_r}' AND unique_id_l = '{correct_unique_id}'
+        ORDER BY match_weight DESC
+        LIMIT 1
+        """
+        res = con.sql(sql)
+        if res.shape[0] > 0:
+            display(
+                linker.visualisations.waterfall_chart(
+                    res.df().to_dict(orient="records"), filter_nulls=False
                 )
             )
-
-            sql = f"""
-            SELECT *
-            FROM df_predict_original_in
-            WHERE unique_id_r = '{target_unique_id_r}' AND unique_id_l = '{correct_unique_id}'
-            ORDER BY match_weight DESC
-            LIMIT 1
-            """
-            res = con.sql(sql)
-            if res.shape[0] > 0:
-                display(
-                    linker.visualisations.waterfall_chart(
-                        res.df().to_dict(orient="records"), filter_nulls=False
-                    )
-                )
 
     con.unregister("df_improved_with_label")
     con.unregister("df_with_dist_and_label")
@@ -342,7 +336,7 @@ def evaluate_predictions_against_labels(
     comparison AS (
         SELECT
             CASE
-                WHEN tp.predicted_unique_id = l.correct_unique_id::BIGINT THEN 'Correctly Predicted'
+                WHEN tp.predicted_unique_id = l.correct_unique_id::VARCHAR THEN 'Correctly Predicted'
                 ELSE 'Incorrectly Predicted'
             END AS status
         FROM {labels_reg_name} AS l
