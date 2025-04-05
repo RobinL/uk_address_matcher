@@ -302,10 +302,10 @@ def evaluate_predictions_against_labels(
     labels: DuckDBPyRelation,
     df_predict_with_distinguishability: DuckDBPyRelation,
     con: DuckDBPyConnection,
-):
+) -> DuckDBPyRelation:
     """
-    Calculates and prints the accuracy of the best match predictions against
-    provided labels.
+    Calculates the accuracy of the best match predictions against provided labels
+    and returns the results as a DuckDB DataFrame.
 
     Accuracy is defined as the percentage of labeled messy records where the
     top predicted match (from df_predict_with_distinguishability) corresponds
@@ -319,76 +319,52 @@ def evaluate_predictions_against_labels(
             `best_matches_with_distinguishability`. Expected columns: `unique_id_r`
             (messy record ID), `unique_id_l` (predicted canonical ID), `match_weight`.
         con: Active DuckDB connection.
+
+    Returns:
+        DuckDBPyRelation: A DataFrame with columns (status, count, percentage, percentage_fmt)
+                          and rows ('Correctly Predicted', 'Incorrectly Predicted', 'Total').
+                          Returns an empty relation if evaluation cannot be performed.
     """
     labels_reg_name = "__labels_eval"
     preds_reg_name = "__preds_dist_eval"
 
-    try:
-        con.register(labels_reg_name, labels)
-        con.register(preds_reg_name, df_predict_with_distinguishability)
+    con.register(labels_reg_name, labels)
+    con.register(preds_reg_name, df_predict_with_distinguishability)
 
-        sql = f"""
-        WITH top_predictions AS (
-            SELECT
-                unique_id_r,
-                unique_id_l AS predicted_unique_id
-            FROM {preds_reg_name}
-            -- Ensure we only consider the single best prediction per messy record
-            QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
-        ),
-        comparison AS (
-            SELECT
-                l.unique_id AS unique_id_r_from_label,
-                tp.predicted_unique_id,
-                l.correct_unique_id::BIGINT as correct_unique_id,
-                -- Flag indicating if the top prediction matches the label
-                (tp.predicted_unique_id = l.correct_unique_id::BIGINT) AS is_correct
-            FROM {labels_reg_name} AS l
-            -- Use INNER JOIN: Only evaluate records that have both a label and a top prediction
-            INNER JOIN top_predictions AS tp ON l.unique_id = tp.unique_id_r
-        )
+    sql = f"""
+    WITH top_predictions AS (
         SELECT
-            COUNT(*) AS total_evaluated_labels,
-            SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS correctly_predicted_count
-        FROM comparison;
-        """
+            unique_id_r,
+            unique_id_l AS predicted_unique_id
+        FROM {preds_reg_name}
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
+    ),
+    comparison AS (
+        SELECT
+            CASE
+                WHEN tp.predicted_unique_id = l.correct_unique_id::BIGINT THEN 'Correctly Predicted'
+                ELSE 'Incorrectly Predicted'
+            END AS status
+        FROM {labels_reg_name} AS l
+        INNER JOIN top_predictions AS tp ON l.unique_id = tp.unique_id_r
+    ),
+    status_counts AS (
+        SELECT
+        status,
+        COUNT(*) AS count
+        FROM comparison
+        GROUP BY CUBE(status) -- Use CUBE to get individual statuses and the total (NULL)
+    ),
+    total_count_cte AS (
+        SELECT count FROM status_counts WHERE status IS NULL
+    )
+    SELECT
+        COALESCE(status, 'Total') AS status,
+        count,
+        100.0 * count / (SELECT count FROM total_count_cte) AS percentage,
+        FORMAT('{{:.2f}}%%', 100.0 * count / (SELECT count FROM total_count_cte)) AS percentage_fmt
+    FROM status_counts
+    ORDER BY status = 'Total', status; -- Sort Total last, then alphabetically
+    """
 
-        result = con.sql(sql).fetchone()
-
-        if result and result[0] is not None:
-            total_evaluated = result[0]
-            correctly_predicted = result[1]
-
-            if total_evaluated > 0:
-                accuracy_percent = (correctly_predicted / total_evaluated) * 100.0
-                print("\n--- Prediction Accuracy Summary ---")
-                print(f"Total Labeled Records Evaluated: {total_evaluated:,}")
-                print(f"Correctly Predicted Matches:     {correctly_predicted:,}")
-                print(f"Accuracy:                        {accuracy_percent:.2f}%")
-                print("-----------------------------------\n")
-            else:
-                print("\n--- Prediction Accuracy Summary ---")
-                print(
-                    "No labeled records found in common with predictions to evaluate."
-                )
-                print("-----------------------------------\n")
-        else:
-            print("\n--- Prediction Accuracy Summary ---")
-            print("Could not compute accuracy. Query returned no results.")
-            print("-----------------------------------\n")
-
-    except Exception as e:
-        print("\n--- Error calculating prediction accuracy ---")
-        print(f"An error occurred: {e}")
-        print(f"SQL attempted:\n{sql}")
-        print("-------------------------------------------\n")
-    finally:
-        # Ensure cleanup
-        try:
-            con.unregister(labels_reg_name)
-        except:
-            pass
-        try:
-            con.unregister(preds_reg_name)
-        except:
-            pass
+    return con.sql(sql)
