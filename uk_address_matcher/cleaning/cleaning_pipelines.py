@@ -25,6 +25,7 @@ from uk_address_matcher.cleaning.cleaning_steps import (
     remove_duplicate_end_tokens,
     separate_distinguishing_start_tokens_from_with_respect_to_adjacent_recrods,
     generalised_token_aliases,
+    canonicalise_postcode,
 )
 from uk_address_matcher.cleaning.run_pipeline import run_pipeline
 
@@ -36,6 +37,7 @@ def _generate_random_identifier(length=8):
 
 QUEUE_PRE_TF = [
     trim_whitespace_address_and_postcode,
+    canonicalise_postcode,
     upper_case_address_and_postcode,
     clean_address_string_first_pass,
     remove_duplicate_end_tokens,

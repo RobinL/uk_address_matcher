@@ -58,6 +58,38 @@ def trim_whitespace_address_and_postcode(
     return con.sql(sql)
 
 
+def canonicalise_postcode(
+    ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
+) -> DuckDBPyRelation:
+    """
+    Ensures that any postcode matching the UK format has a single space
+    separating the outward and inward codes. It assumes the postcode has
+    already been trimmed and converted to uppercase.
+
+    Args:
+        ddb_pyrel (DuckDBPyRelation): The input relation, expected to have an
+                                      uppercase 'postcode' column.
+        con (DuckDBPyConnection): The DuckDB connection.
+
+    Returns:
+        DuckDBPyRelation: Relation with the 'postcode' column canonicalised.
+    """
+
+    uk_postcode_regex = r"^([A-Z]{1,2}\d[A-Z\d]?|GIR)\s*(\d[A-Z]{2})$"
+
+    sql = f"""
+    SELECT
+        * EXCLUDE (postcode),
+        regexp_replace(
+            postcode,
+            '{uk_postcode_regex}',
+            '\\1 \\2'  -- Insert space between captured groups
+        ) AS postcode
+    FROM ddb_pyrel
+    """
+    return con.sql(sql)
+
+
 def clean_address_string_first_pass(
     ddb_pyrel: DuckDBPyRelation, con: DuckDBPyConnection
 ) -> DuckDBPyRelation:
