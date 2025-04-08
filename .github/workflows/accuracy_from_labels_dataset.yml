@@ -1,7 +1,15 @@
 name: Run address matcher with external labels
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'uk_address_matcher/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   run-address-matcher:
@@ -30,5 +38,26 @@ jobs:
       run: |
         git clone https://RobinL:${LABELS_PAT}@github.com/RobinL/address_matching_labels.git
 
-    - name: Run match_addresses.py
-      run: uv run address_matching_labels/match_addresses.py
+    - name: Run match_addresses.py and capture output
+      run: uv run address_matching_labels/match_addresses.py > github-comment.md || true
+
+    - name: Comment on PR with output
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          let commentContent;
+          try {
+            commentContent = fs.readFileSync('github-comment.md', 'utf8');
+          } catch (error) {
+            console.log('Error reading comment file:', error);
+            commentContent = '## ❌ Script failed to run.\nPlease check the logs for details.';
+          }
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: commentContent
+          });
