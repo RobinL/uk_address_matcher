@@ -42,7 +42,11 @@ jobs:
     - name: Run match_addresses.py and capture output
       run: |
         cd address_matching_labels
-        uv run match_addresses.py > ../github-comment.md || true
+        {
+        echo '```'
+        uv run match_addresses.py
+        echo '```'
+        } > ../github-comment.md || true
 
     - name: Comment on PR with output
       uses: actions/github-script@v6
