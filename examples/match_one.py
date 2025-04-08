@@ -11,18 +11,15 @@ from uk_address_matcher.post_linkage.identify_distinguishing_tokens import (
     improve_predictions_using_distinguishing_tokens,
 )
 
-
 con = duckdb.connect(":default:")
-
 
 sql = """
 create or replace table df_messy as
 select
     '1' as unique_id,
    '10 downing street westminster london' as address_concat,
-   'SW1A 2AA' as postcode
+   'SW1A 3BC' as postcode
 """
-
 
 con.execute(sql)
 df_messy = con.table("df_messy")
@@ -31,8 +28,8 @@ messy_count = df_messy.count("*").fetchall()[0][0]
 
 
 df_messy_clean = clean_data_using_precomputed_rel_tok_freq(df_messy, con=con)
+df_messy_clean.show(max_width=5000, max_rows=20)
 
-# The os.getenv can be ignored, is just so this script can be run in the test suite
 
 full_os_path = os.getenv(
     "OS_CLEAN_PATH",
@@ -40,15 +37,11 @@ full_os_path = os.getenv(
 )
 
 sql = f"""
-create or replace view os_clean as
 select *
 from {full_os_path}
-where postcode in (
-select distinct postcode from df_messy_clean
-)
 """
-con.execute(sql)
-df_os_clean = con.table("os_clean")
+df_os_clean = con.sql(sql)
+df_os_clean
 
 
 linker = get_linker(
@@ -56,15 +49,20 @@ linker = get_linker(
     df_addresses_to_search_within=df_os_clean,
     con=con,
     include_full_postcode_block=True,
-    include_outside_postcode_block=False,
+    include_outside_postcode_block=True,
+    retain_intermediate_calculation_columns=True,
 )
 
 
 df_predict = linker.inference.predict(
     threshold_match_weight=-100, experimental_optimisation=True
 )
+
 df_predict_ddb = df_predict.as_duckdbpyrelation()
 df_predict_ddb.show(max_width=5000, max_rows=20)
+
+res = df_predict_ddb.df().to_dict(orient="records")
+linker.visualisations.waterfall_chart(res)
 
 
 df_predict_improved = improve_predictions_using_distinguishing_tokens(

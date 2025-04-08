@@ -2,7 +2,10 @@
 # in subsequent runs
 import time
 import duckdb
-from uk_address_matcher import clean_data_on_the_fly
+from uk_address_matcher import (
+    clean_data_on_the_fly,
+    clean_data_using_precomputed_rel_tok_freq,
+)
 
 overall_start_time = time.time()
 con = duckdb.connect(":default:")
@@ -29,6 +32,7 @@ df_os
 
 
 df_os_clean = clean_data_on_the_fly(df_os, con=con)
+df_os_clean = clean_data_using_precomputed_rel_tok_freq(df_os, con=con)
 df_os_clean.write_parquet("secret_data/ord_surv/os_clean.parquet")
 df_os_clean_from_file = duckdb.read_parquet("secret_data/ord_surv/os_clean.parquet")
 df_os_clean_from_file.show(max_width=50000)
