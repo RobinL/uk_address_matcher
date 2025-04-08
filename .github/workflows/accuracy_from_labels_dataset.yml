@@ -38,8 +38,11 @@ jobs:
       run: |
         git clone https://RobinL:${LABELS_PAT}@github.com/RobinL/address_matching_labels.git
 
+
     - name: Run match_addresses.py and capture output
-      run: uv run address_matching_labels/match_addresses.py > github-comment.md || true
+      run: |
+        cd address_matching_labels
+        uv run match_addresses.py > ../github-comment.md || true
 
     - name: Comment on PR with output
       uses: actions/github-script@v6
