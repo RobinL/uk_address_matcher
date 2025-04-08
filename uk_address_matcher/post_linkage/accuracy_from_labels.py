@@ -331,7 +331,8 @@ def evaluate_predictions_against_labels(
             unique_id_r,
             unique_id_l AS predicted_unique_id
         FROM {preds_reg_name}
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC, unique_id_l) = 1
+        order by unique_id_r, unique_id_l
     ),
     comparison AS (
         SELECT

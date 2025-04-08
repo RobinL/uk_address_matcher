@@ -1,0 +1,70 @@
+name: Run address matcher with external labels
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'uk_address_matcher/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  run-address-matcher:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Install the project
+      run: uv sync --all-extras --dev
+
+    - name: Clone address_matching_labels repo
+      env:
+        LABELS_PAT: ${{ secrets.LABELS_PAT }}
+      run: |
+        git clone https://RobinL:${LABELS_PAT}@github.com/RobinL/address_matching_labels.git
+
+
+    - name: Run match_addresses.py and capture output
+      run: |
+        cd address_matching_labels
+        {
+        echo '```'
+        uv run match_addresses.py
+        echo '```'
+        } > ../github-comment.md || true
+
+    - name: Comment on PR with output
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          let commentContent;
+          try {
+            commentContent = fs.readFileSync('github-comment.md', 'utf8');
+          } catch (error) {
+            console.log('Error reading comment file:', error);
+            commentContent = '## ❌ Script failed to run.\nPlease check the logs for details.';
+          }
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: commentContent
+          });

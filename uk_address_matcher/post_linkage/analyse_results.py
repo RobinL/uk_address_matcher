@@ -61,7 +61,7 @@ def best_matches_with_distinguishability(
     next_label_value = f"{str(next_label_index).zfill(2)}."
 
     rn_filter = (
-        "QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC) = 1"
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY unique_id_r ORDER BY match_weight DESC, unique_id_l) = 1"
         if best_match_only
         else ""
     )
